@@ -30,13 +30,25 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. استعادة ملف مفتاح التوقيع (debug.keystore) من التشفير
-      - name: Restore Keystore
+      # 3. تجهيز مفتاح التوقيع (debug.keystore) لضمان اجتياز مهمة validateSigningDebug
+      - name: Prepare Debug Keystore
         run: |
           if [ -f "debug.keystore.base64" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-            echo "Keystore restored successfully."
+            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
           fi
+          if [ ! -f "debug.keystore" ] || [ ! -s "debug.keystore" ]; then
+            echo "Generating standard debug keystore for CI..."
+            keytool -genkey -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          echo "Debug keystore ready at $(pwd)/debug.keystore"
 
       # 4. إعداد وتفعيل Gradle مع التخزين المؤقت التلقائي (Cache)
       - name: Setup Gradle

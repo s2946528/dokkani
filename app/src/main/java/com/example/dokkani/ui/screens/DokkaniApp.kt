@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -141,7 +142,8 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                     "نقطة البيع (POS)" to Icons.Default.PointOfSale,
                     "المخطط وقاعدة البيانات" to Icons.Default.AccountBalance,
                     "حاسبة التكلفة (WAC/FIFO)" to Icons.Default.Calculate,
-                    "جرد خضار المشكل" to Icons.Default.Eco,
+                    "جرد خضار وفوضويات" to Icons.Default.Eco,
+                    "طابعة ملصقات الباركود" to Icons.Default.QrCode,
                     "الأصناف والوحدات" to Icons.Default.Inventory2,
                     "إعدادات النظام" to Icons.Default.Settings
                 )
@@ -204,6 +206,26 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         onAddSimulatedPurchaseBatch = { qty, cost -> viewModel.addSimulatedPurchaseBatch(qty, cost) }
                     )
                     3 -> ProduceQuickInventoryScreen(
+                        produceAuditSubTab = uiState.produceAuditSubTab,
+                        productsWithUnits = productsWithUnits,
+                        selectedProduceProductId = uiState.selectedProduceProductIdForAudit,
+                        auditBeginningQty = uiState.produceAuditBeginningQty,
+                        auditBeginningCost = uiState.produceAuditBeginningCost,
+                        auditPurchasesQty = uiState.produceAuditPurchasesQty,
+                        auditPurchasesCost = uiState.produceAuditPurchasesCost,
+                        auditEndingQty = uiState.produceAuditEndingQty,
+                        auditWasteQty = uiState.produceAuditWasteQty,
+                        auditPosSoldQty = uiState.produceAuditPosSoldQty,
+                        auditPosRevenue = uiState.produceAuditPosRevenue,
+                        auditResult = uiState.produceAuditResult,
+                        isSubmittingAudit = uiState.isSubmittingProduceAudit,
+                        onSelectSubTab = { viewModel.selectProduceAuditSubTab(it) },
+                        onSelectProduceProduct = { viewModel.selectProduceProductForAudit(it) },
+                        onAuditInputsChanged = { bq, bc, pq, pc, eq, wq, ps, pr ->
+                            viewModel.updateProduceAuditInputs(bq, bc, pq, pc, eq, wq, ps, pr)
+                        },
+                        onCommitSilentAdjustments = { viewModel.commitProduceAuditSilentAdjustments() },
+                        onNavigateToBarcodePrinter = { prodId -> viewModel.openLabelPrinterForProduct(prodId) },
                         grossWeightInput = uiState.produceGrossWeightInput,
                         costInput = uiState.produceCostInput,
                         expenseInput = uiState.produceExpenseInput,
@@ -211,15 +233,43 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         marginInput = uiState.produceMarginInput,
                         crateDescription = uiState.produceCrateDescription,
                         calcSummary = uiState.produceCalcSummary,
-                        isSaving = uiState.isSavingProduceBatch,
+                        isSavingBatch = uiState.isSavingProduceBatch,
                         historicalBatches = produceBatches,
-                        onInputsChanged = { g, c, e, w, m, d -> viewModel.updateProduceInputs(g, c, e, w, m, d) },
-                        onSaveBatch = { viewModel.saveProduceBatchToDatabase() }
+                        onCrateInputsChanged = { g, c, e, w, m, d -> viewModel.updateProduceInputs(g, c, e, w, m, d) },
+                        onSaveCrateBatch = { viewModel.saveProduceBatchToDatabase() }
                     )
-                    4 -> ProductsAndUnitsScreen(
-                        productsWithUnits = productsWithUnits
+                    4 -> com.example.dokkani.ui.screens.barcode.BarcodeLabelPrinterScreen(
+                        productsWithUnits = productsWithUnits,
+                        selectedProductId = uiState.labelSelectedProductId,
+                        selectedUnitId = uiState.labelSelectedUnitId,
+                        labelPaperSize = uiState.labelPaperSize,
+                        labelCopies = uiState.labelCopies,
+                        showStoreName = uiState.labelShowStoreName,
+                        showUnitName = uiState.labelShowUnitName,
+                        showPrice = uiState.labelShowPrice,
+                        showBarcodeText = uiState.labelShowBarcodeText,
+                        showTaxNote = uiState.labelShowTaxNote,
+                        customBarcode = uiState.labelCustomBarcode,
+                        isGeneratingBarcode = uiState.isGeneratingBarcode,
+                        isPrintingLabel = uiState.isPrintingLabel,
+                        lastPrintResult = uiState.lastLabelPrintResult,
+                        settings = settings,
+                        onSelectProduct = { viewModel.selectProductForLabel(it) },
+                        onSelectUnit = { viewModel.selectUnitForLabel(it) },
+                        onPaperSizeChanged = { viewModel.updateLabelPaperSize(it) },
+                        onCopiesChanged = { viewModel.updateLabelCopies(it) },
+                        onToggleOption = { sn, un, pr, bt, tn ->
+                            viewModel.toggleLabelOption(sn, un, pr, bt, tn)
+                        },
+                        onBarcodeChanged = { viewModel.updateCustomBarcode(it) },
+                        onGenerateUniqueBarcode = { viewModel.generateUniqueBarcodeForCurrentUnit() },
+                        onPrintLabel = { viewModel.printBarcodeLabel() }
                     )
-                    5 -> SystemSettingsScreen(
+                    5 -> ProductsAndUnitsScreen(
+                        productsWithUnits = productsWithUnits,
+                        onPrintLabel = { prodId, unitId -> viewModel.openLabelPrinterForProduct(prodId, unitId) }
+                    )
+                    6 -> SystemSettingsScreen(
                         settings = settings,
                         currencies = currencies,
                         parties = parties,

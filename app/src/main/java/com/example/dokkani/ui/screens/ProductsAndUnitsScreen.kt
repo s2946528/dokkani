@@ -37,12 +37,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material3.IconButton
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 
 @Composable
 fun ProductsAndUnitsScreen(
     productsWithUnits: List<ProductWithUnits>,
+    onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -162,7 +165,11 @@ fun ProductsAndUnitsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     for (unit in item.units) {
-                        UnitItemRow(unit = unit)
+                        UnitItemRow(
+                            productId = item.product.id,
+                            unit = unit,
+                            onPrintLabel = onPrintLabel
+                        )
                         Spacer(modifier = Modifier.height(4.dp))
                     }
                 }
@@ -172,7 +179,11 @@ fun ProductsAndUnitsScreen(
 }
 
 @Composable
-private fun UnitItemRow(unit: ProductUnitEntity) {
+private fun UnitItemRow(
+    productId: Long,
+    unit: ProductUnitEntity,
+    onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null
+) {
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = if (unit.isBaseUnit) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -223,18 +234,32 @@ private fun UnitItemRow(unit: ProductUnitEntity) {
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = unit.barcode,
+                    text = unit.barcode.ifBlank { "—" },
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.outline
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "شراء: ${unit.costPrice} | بيع: ${unit.sellingPrice} ر.س",
+                    text = "%.2f ر.س".format(unit.sellingPrice),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0F5132)
                 )
+                if (onPrintLabel != null) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(
+                        onClick = { onPrintLabel(productId, unit.id) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Print,
+                            contentDescription = "طباعة ملصق",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFF198754)
+                        )
+                    }
+                }
             }
         }
     }

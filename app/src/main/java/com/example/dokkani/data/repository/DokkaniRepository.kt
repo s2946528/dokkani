@@ -350,5 +350,65 @@ class DokkaniRepository(private val database: DokkaniDatabase) {
             message = "تم إصدار الفاتورة ($invoiceNumber) بنجاح!"
         )
     }
+
+    /**
+     * تطبيق وتسجيل قيود التسوية المخزنية الصامتة لإنهاء حركات يوم الخضار
+     */
+    suspend fun applySilentInventoryAdjustments(
+        adjustments: List<com.example.dokkani.domain.produce.SilentAdjustmentEntry>
+    ): Int {
+        val now = System.currentTimeMillis()
+        var appliedCount = 0
+        for (adj in adjustments) {
+            val movement = StockMovementEntity(
+                productId = adj.productId,
+                productUnitId = null,
+                invoiceId = null,
+                movementType = adj.movementType,
+                quantityBaseUnit = adj.quantityChange,
+                remainingQuantityForFifo = if (adj.quantityChange > 0) adj.quantityChange else 0.0,
+                unitCostPriceBase = adj.unitCost,
+                timestamp = now,
+                referenceNumber = adj.referenceNumber,
+                notes = adj.reasonArabic
+            )
+            stockMovementDao.insertMovement(movement)
+            appliedCount++
+        }
+        return appliedCount
+    }
+
+    /**
+     * توليد باركود فريد للوحدات الفردية (كالحبات/العبوات المستخرجة من الكراتين)
+     * والتحقق من عدم تكراره وتخزينه مباشرة في جدول product_units
+     */
+    suspend fun generateAndSaveUniqueBarcodeForUnit(productId: Long, unitId: Long): String {
+        val existingUnit = productDao.getUnitById(unitId)
+            ?: throw IllegalArgumentException("الوحدة رقم ($unitId) غير موجودة في قاعدة البيانات!")
+
+        // توليد باركود فريد والتأكد من عدم تكراره
+        var generatedBarcode = com.example.dokkani.domain.barcode.BarcodeGenerator.generateUniqueSingleUnitBarcode(productId, unitId)
+        var attempts = 0
+        while (productDao.findUnitByBarcode(generatedBarcode) != null && attempts < 10) {
+            attempts++
+            generatedBarcode = com.example.dokkani.domain.barcode.BarcodeGenerator.generateEan13Barcode(
+                uniqueNumber = System.currentTimeMillis() + attempts
+            )
+        }
+
+        // تحديث الوحدة بالباركود الجديد
+        val updatedUnit = existingUnit.copy(barcode = generatedBarcode)
+        productDao.updateUnit(updatedUnit)
+        return generatedBarcode
+    }
+
+    /**
+     * تحديث باركود وحدة محددة يدوياً
+     */
+    suspend fun updateUnitBarcode(unitId: Long, newBarcode: String) {
+        val existing = productDao.getUnitById(unitId) ?: return
+        productDao.updateUnit(existing.copy(barcode = newBarcode.trim()))
+    }
 }
+
 

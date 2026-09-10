@@ -14,11 +14,15 @@ import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.repository.DokkaniRepository
+import com.example.dokkani.domain.barcode.BarcodeGenerator
 import com.example.dokkani.domain.barcode.ScaleBarcodeMode
 import com.example.dokkani.domain.barcode.ScaleBarcodeParser
 import com.example.dokkani.domain.barcode.ScaleBarcodeResult
 import com.example.dokkani.domain.costing.CostCalculationResult
+import com.example.dokkani.domain.hardware.BarcodeLabelData
 import com.example.dokkani.domain.hardware.BluetoothPrinterManager
+import com.example.dokkani.domain.hardware.LabelPaperSize
+import com.example.dokkani.domain.hardware.LabelPrintResult
 import com.example.dokkani.domain.hardware.PrinterPaperWidth
 import com.example.dokkani.domain.hardware.ReceiptPrintData
 import com.example.dokkani.domain.pos.CartSummary
@@ -26,6 +30,9 @@ import com.example.dokkani.domain.pos.PosCartItem
 import com.example.dokkani.domain.pos.PosCheckoutResult
 import com.example.dokkani.domain.pos.QuickTileIconType
 import com.example.dokkani.domain.pos.QuickTileItem
+import com.example.dokkani.domain.produce.ProduceAuditEngine
+import com.example.dokkani.domain.produce.ProduceAuditInput
+import com.example.dokkani.domain.produce.ProduceAuditResult
 import com.example.dokkani.domain.produce.ProduceQuickCalcSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -56,6 +63,36 @@ data class DokkaniUiState(
     val produceCrateDescription: String = "سحارة خضار مشكل طماطم وخيار وفلفل",
     val produceCalcSummary: ProduceQuickCalcSummary? = null,
     val isSavingProduceBatch: Boolean = false,
+
+    // شاشة الجرد الدوري السريع للخضار والفوضويات (Produce Audit & COGS)
+    val produceAuditSubTab: Int = 0, // 0 = الجرد الدوري السريع و COGS، 1 = حاسبة سحارة الخضار المشكل
+    val selectedProduceProductIdForAudit: Long? = null,
+    val produceAuditBeginningQty: String = "15.0",
+    val produceAuditBeginningCost: String = "60.0",
+    val produceAuditPurchasesQty: String = "40.0",
+    val produceAuditPurchasesCost: String = "160.0",
+    val produceAuditEndingQty: String = "12.0",
+    val produceAuditWasteQty: String = "4.0",
+    val produceAuditPosSoldQty: String = "38.0",
+    val produceAuditPosRevenue: String = "228.0",
+    val produceAuditResult: ProduceAuditResult? = null,
+    val isSubmittingProduceAudit: Boolean = false,
+
+    // موديول تصميم وطباعة ملصقات الباركود للوحدات المتعددة
+    val labelSelectedProductId: Long? = null,
+    val labelSelectedUnitId: Long? = null,
+    val labelPaperSize: LabelPaperSize = LabelPaperSize.SIZE_38X25,
+    val labelCopies: Int = 1,
+    val labelShowStoreName: Boolean = true,
+    val labelShowUnitName: Boolean = true,
+    val labelShowPrice: Boolean = true,
+    val labelShowBarcodeText: Boolean = true,
+    val labelShowTaxNote: Boolean = true,
+    val labelCustomBarcode: String = "",
+    val lastLabelPrintResult: LabelPrintResult? = null,
+    val isPrintingLabel: Boolean = false,
+    val isGeneratingBarcode: Boolean = false,
+    val showLabelConfigDialog: Boolean = false,
 
     // حالة شاشة نقطة البيع السريعة (POS)
     val cartItems: List<PosCartItem> = emptyList(),
@@ -224,15 +261,26 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     )
 
     init {
-        // حساب أولي لحاسبة خضار المشكل
+        // حساب أولي لحاسبة خضار المشكل والجرد اليومي
         recalculateProduceQuickInventory()
+        recalculateProduceAudit()
 
-        // مراقبة الأصناف لاختيار أول صنف افتراضياً لحاسبة التكلفة
+        // مراقبة الأصناف لاختيار أول صنف افتراضياً لحاسبة التكلفة والجرد والملصقات
         viewModelScope.launch {
             productsWithUnits.collect { list ->
-                if (list.isNotEmpty() && _uiState.value.selectedProductIdForCosting == null) {
-                    val firstProd = list.first()
-                    selectProductForCosting(firstProd.product.id)
+                if (list.isNotEmpty()) {
+                    if (_uiState.value.selectedProductIdForCosting == null) {
+                        val firstProd = list.first()
+                        selectProductForCosting(firstProd.product.id)
+                    }
+                    if (_uiState.value.selectedProduceProductIdForAudit == null) {
+                        val weighted = list.firstOrNull { it.product.isWeighted } ?: list.first()
+                        selectProduceProductForAudit(weighted.product.id)
+                    }
+                    if (_uiState.value.labelSelectedProductId == null) {
+                        val firstProd = list.first()
+                        selectProductForLabel(firstProd.product.id)
+                    }
                 }
             }
         }
@@ -897,5 +945,224 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             produceCrateDescription = desc ?: _uiState.value.produceCrateDescription
         )
         recalculateProduceQuickInventory()
+    }
+
+    // ==========================================
+    // الجرد الدوري السريع للخضار وحساب COGS والتسوية الصامتة
+    // ==========================================
+
+    fun selectProduceAuditSubTab(index: Int) {
+        _uiState.value = _uiState.value.copy(produceAuditSubTab = index)
+    }
+
+    fun selectProduceProductForAudit(productId: Long) {
+        _uiState.value = _uiState.value.copy(selectedProduceProductIdForAudit = productId)
+        recalculateProduceAudit()
+    }
+
+    fun updateProduceAuditInputs(
+        begQty: String? = null,
+        begCost: String? = null,
+        purQty: String? = null,
+        purCost: String? = null,
+        endingQty: String? = null,
+        wasteQty: String? = null,
+        posSoldQty: String? = null,
+        posRev: String? = null
+    ) {
+        _uiState.value = _uiState.value.copy(
+            produceAuditBeginningQty = begQty ?: _uiState.value.produceAuditBeginningQty,
+            produceAuditBeginningCost = begCost ?: _uiState.value.produceAuditBeginningCost,
+            produceAuditPurchasesQty = purQty ?: _uiState.value.produceAuditPurchasesQty,
+            produceAuditPurchasesCost = purCost ?: _uiState.value.produceAuditPurchasesCost,
+            produceAuditEndingQty = endingQty ?: _uiState.value.produceAuditEndingQty,
+            produceAuditWasteQty = wasteQty ?: _uiState.value.produceAuditWasteQty,
+            produceAuditPosSoldQty = posSoldQty ?: _uiState.value.produceAuditPosSoldQty,
+            produceAuditPosRevenue = posRev ?: _uiState.value.produceAuditPosRevenue
+        )
+        recalculateProduceAudit()
+    }
+
+    fun recalculateProduceAudit() {
+        val state = _uiState.value
+        val prodId = state.selectedProduceProductIdForAudit ?: 1L
+        val prod = productsWithUnits.value.firstOrNull { it.product.id == prodId }
+        val prodName = prod?.product?.name ?: "طماطم بلدي"
+
+        val input = ProduceAuditInput(
+            productId = prodId,
+            productName = prodName,
+            beginningInventoryQty = state.produceAuditBeginningQty.toDoubleOrNull() ?: 15.0,
+            beginningInventoryCost = state.produceAuditBeginningCost.toDoubleOrNull() ?: 60.0,
+            purchasesQty = state.produceAuditPurchasesQty.toDoubleOrNull() ?: 40.0,
+            purchasesCost = state.produceAuditPurchasesCost.toDoubleOrNull() ?: 160.0,
+            estimatedEndingInventoryQty = state.produceAuditEndingQty.toDoubleOrNull() ?: 12.0,
+            wasteQty = state.produceAuditWasteQty.toDoubleOrNull() ?: 4.0,
+            posRecordedSoldQty = state.produceAuditPosSoldQty.toDoubleOrNull() ?: 38.0,
+            posRecordedRevenue = state.produceAuditPosRevenue.toDoubleOrNull() ?: 228.0
+        )
+
+        val result = ProduceAuditEngine.computeProduceAudit(input)
+        _uiState.value = _uiState.value.copy(produceAuditResult = result)
+    }
+
+    /**
+     * ترحيل وتسجيل قيود التسوية المخزنية الصامتة لإغلاق اليوم في قاعدة البيانات
+     */
+    fun commitProduceAuditSilentAdjustments() {
+        val result = _uiState.value.produceAuditResult ?: return
+        if (result.generatedAdjustments.isEmpty()) {
+            _uiState.value = _uiState.value.copy(userNotification = "لا توجد فروقات أو توالف تتطلب قيود تسوية صامتة.")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSubmittingProduceAudit = true)
+            try {
+                val count = repository.applySilentInventoryAdjustments(result.generatedAdjustments)
+                _uiState.value = _uiState.value.copy(
+                    isSubmittingProduceAudit = false,
+                    userNotification = "تم ترحيل وتسجيل ($count) قيود تسوية صامتة للصنف [${result.productName}] وتحديث رصيد الرف بنجاح!"
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isSubmittingProduceAudit = false,
+                    userNotification = "تعذر تسجيل التسوية الصامتة: ${e.message}"
+                )
+            }
+        }
+    }
+
+    // ==========================================
+    // موديول تصميم وطباعة ملصقات الباركود (Barcode Label Printer)
+    // ==========================================
+
+    fun selectProductForLabel(productId: Long) {
+        val prod = productsWithUnits.value.firstOrNull { it.product.id == productId }
+        val firstUnit = prod?.units?.firstOrNull()
+        _uiState.value = _uiState.value.copy(
+            labelSelectedProductId = productId,
+            labelSelectedUnitId = firstUnit?.id,
+            labelCustomBarcode = firstUnit?.barcode ?: ""
+        )
+    }
+
+    fun selectUnitForLabel(unitId: Long) {
+        val prodId = _uiState.value.labelSelectedProductId ?: return
+        val prod = productsWithUnits.value.firstOrNull { it.product.id == prodId }
+        val unit = prod?.units?.firstOrNull { it.id == unitId }
+        _uiState.value = _uiState.value.copy(
+            labelSelectedUnitId = unitId,
+            labelCustomBarcode = unit?.barcode ?: ""
+        )
+    }
+
+    fun updateLabelPaperSize(size: LabelPaperSize) {
+        _uiState.value = _uiState.value.copy(labelPaperSize = size)
+    }
+
+    fun updateLabelCopies(copies: Int) {
+        _uiState.value = _uiState.value.copy(labelCopies = copies.coerceIn(1, 100))
+    }
+
+    fun updateCustomBarcode(barcode: String) {
+        _uiState.value = _uiState.value.copy(labelCustomBarcode = barcode)
+    }
+
+    fun toggleLabelOption(
+        showStoreName: Boolean? = null,
+        showUnitName: Boolean? = null,
+        showPrice: Boolean? = null,
+        showBarcodeText: Boolean? = null,
+        showTaxNote: Boolean? = null
+    ) {
+        _uiState.value = _uiState.value.copy(
+            labelShowStoreName = showStoreName ?: _uiState.value.labelShowStoreName,
+            labelShowUnitName = showUnitName ?: _uiState.value.labelShowUnitName,
+            labelShowPrice = showPrice ?: _uiState.value.labelShowPrice,
+            labelShowBarcodeText = showBarcodeText ?: _uiState.value.labelShowBarcodeText,
+            labelShowTaxNote = showTaxNote ?: _uiState.value.labelShowTaxNote
+        )
+    }
+
+    /**
+     * توليد باركود فريد للوحدة المحددة وتخزينه في جدول product_units
+     */
+    fun generateUniqueBarcodeForCurrentUnit() {
+        val prodId = _uiState.value.labelSelectedProductId ?: return
+        val unitId = _uiState.value.labelSelectedUnitId ?: return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isGeneratingBarcode = true)
+            try {
+                val newBarcode = repository.generateAndSaveUniqueBarcodeForUnit(prodId, unitId)
+                _uiState.value = _uiState.value.copy(
+                    isGeneratingBarcode = false,
+                    labelCustomBarcode = newBarcode,
+                    userNotification = "تم توليد وتخزين باركود فريد قياسي ($newBarcode) في جدول الوحدات بنجاح!"
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isGeneratingBarcode = false,
+                    userNotification = "خطأ في توليد الباركود: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * إرسال أمر طباعة الملصق لطابعة البلوتوث عبر لغة TSPL
+     */
+    fun printBarcodeLabel() {
+        val prodId = _uiState.value.labelSelectedProductId ?: return
+        val unitId = _uiState.value.labelSelectedUnitId ?: return
+        val prod = productsWithUnits.value.firstOrNull { it.product.id == prodId } ?: return
+        val unit = prod.units.firstOrNull { it.id == unitId } ?: return
+        val settings = systemSettings.value ?: SystemSettingsEntity()
+
+        val barcodeToPrint = _uiState.value.labelCustomBarcode.ifBlank {
+            unit.barcode.ifBlank {
+                BarcodeGenerator.generateUniqueSingleUnitBarcode(prodId, unitId)
+            }
+        }
+
+        val labelData = BarcodeLabelData(
+            storeName = settings.storeName,
+            productName = prod.product.name,
+            unitName = unit.unitName,
+            barcode = barcodeToPrint,
+            price = unit.sellingPrice,
+            currencySymbol = "ر.س",
+            isPriceInclusiveTax = true,
+            taxRatePercent = settings.defaultTaxRate * 100.0,
+            size = _uiState.value.labelPaperSize,
+            copies = _uiState.value.labelCopies,
+            showStoreName = _uiState.value.labelShowStoreName,
+            showUnitName = _uiState.value.labelShowUnitName,
+            showPrice = _uiState.value.labelShowPrice,
+            showBarcodeText = _uiState.value.labelShowBarcodeText,
+            showTaxNote = _uiState.value.labelShowTaxNote
+        )
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isPrintingLabel = true)
+            val result = printerManager.printBarcodeLabel(labelData)
+            _uiState.value = _uiState.value.copy(
+                isPrintingLabel = false,
+                lastLabelPrintResult = result,
+                userNotification = result.message
+            )
+        }
+    }
+
+    /**
+     * فتح شاشة طباعة الملصق مباشرة لصنف ووحدة معينة من أي شاشة
+     */
+    fun openLabelPrinterForProduct(productId: Long, unitId: Long? = null) {
+        selectProductForLabel(productId)
+        if (unitId != null) {
+            selectUnitForLabel(unitId)
+        }
+        selectTab(4) // التبويب المخصص للملصقات والباركود
     }
 }

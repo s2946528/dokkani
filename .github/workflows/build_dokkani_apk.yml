@@ -50,9 +50,13 @@ jobs:
           fi
           chmod +x gradlew
 
-      # 6. بناء ملف الـ APK الجاهز للتثبيت الفوري على الهواتف
+      # 6. بناء ملف الـ APK الجاهز للتثبيت الفوري مع تفادي تعارض خيوط KSP / AWT
       - name: Build Android APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        env:
+          JAVA_OPTS: "-Djava.awt.headless=true -Dfile.encoding=UTF-8"
+          _JAVA_OPTIONS: "-Djava.awt.headless=true"
+        run: |
+          ./gradlew :app:assembleDebug --no-daemon --no-parallel -Djava.awt.headless=true -Dorg.gradle.parallel=false -Dksp.incremental=false --stacktrace
 
       # 7. رفع وتخزين ملف الـ APK الناتج كأصل متاح للتحميل الفوري (Artifacts)
       - name: Upload Dokkani APK

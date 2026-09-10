@@ -8,11 +8,24 @@ import com.example.dokkani.data.local.entities.BatchStatus
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.MixedProduceBatchEntity
 import com.example.dokkani.data.local.entities.MixedProduceYieldItemEntity
+import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.repository.DokkaniRepository
+import com.example.dokkani.domain.barcode.ScaleBarcodeMode
+import com.example.dokkani.domain.barcode.ScaleBarcodeParser
+import com.example.dokkani.domain.barcode.ScaleBarcodeResult
 import com.example.dokkani.domain.costing.CostCalculationResult
+import com.example.dokkani.domain.hardware.BluetoothPrinterManager
+import com.example.dokkani.domain.hardware.PrinterPaperWidth
+import com.example.dokkani.domain.hardware.ReceiptPrintData
+import com.example.dokkani.domain.pos.CartSummary
+import com.example.dokkani.domain.pos.PosCartItem
+import com.example.dokkani.domain.pos.PosCheckoutResult
+import com.example.dokkani.domain.pos.QuickTileIconType
+import com.example.dokkani.domain.pos.QuickTileItem
 import com.example.dokkani.domain.produce.ProduceQuickCalcSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -33,6 +46,7 @@ data class DokkaniUiState(
     val fifoComparisonResult: CostCalculationResult? = null,
     val lastPurchaseComparisonResult: CostCalculationResult? = null,
     val activeLotsForProduct: List<StockMovementEntity> = emptyList(),
+
     // حاسبة جرد خضار المشكل
     val produceGrossWeightInput: String = "25.0",
     val produceCostInput: String = "90.0",
@@ -42,12 +56,56 @@ data class DokkaniUiState(
     val produceCrateDescription: String = "سحارة خضار مشكل طماطم وخيار وفلفل",
     val produceCalcSummary: ProduceQuickCalcSummary? = null,
     val isSavingProduceBatch: Boolean = false,
+
+    // حالة شاشة نقطة البيع السريعة (POS)
+    val cartItems: List<PosCartItem> = emptyList(),
+    val posSearchQuery: String = "",
+    val selectedPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val selectedCustomerPartyId: Long? = null,
+    val paidAmountInput: String = "",
+    val discountInput: String = "0.0",
+    val isProcessingCheckout: Boolean = false,
+    val lastCheckoutResult: PosCheckoutResult? = null,
+
+    // نوافذ الحوار والملحقات
+    val showCheckoutDialog: Boolean = false,
+    val showReceiptDialog: Boolean = false,
+    val showScaleBarcodeDialog: Boolean = false,
+    val detectedScaleBarcode: ScaleBarcodeResult? = null,
+    val showOpenPriceDialog: Boolean = false,
+    val showHardwareDialog: Boolean = false,
+    val showCameraScannerDialog: Boolean = false,
+    val openDrawerAutomaticallyOnCash: Boolean = true,
+
     val userNotification: String? = null
-)
+) {
+    val cartSummary: CartSummary
+        get() {
+            val totalQty = cartItems.sumOf { it.quantity }
+            val subtotal = cartItems.sumOf { it.totalPrice }
+            val discount = discountInput.toDoubleOrNull() ?: 0.0
+            val taxable = (subtotal - discount).coerceAtLeast(0.0)
+            val taxRate = 0.15 // 15%
+            val taxAmount = taxable * taxRate
+            val finalTotal = taxable + taxAmount
+
+            return CartSummary(
+                itemsCount = cartItems.size,
+                totalQuantity = totalQty,
+                subtotal = subtotal,
+                discount = discount,
+                taxableAmount = taxable,
+                taxRatePercent = taxRate * 100,
+                taxAmount = taxAmount,
+                finalTotal = finalTotal
+            )
+        }
+}
 
 class DokkaniViewModel(application: Application) : AndroidViewModel(application) {
 
     val repository: DokkaniRepository
+    val printerManager: BluetoothPrinterManager = BluetoothPrinterManager(application)
 
     init {
         val database = DokkaniDatabase.getDatabase(application, viewModelScope)
@@ -75,6 +133,96 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState = MutableStateFlow(DokkaniUiState())
     val uiState: StateFlow<DokkaniUiState> = _uiState.asStateFlow()
 
+    // قائمة الأصناف السريعة بدون باركود (Quick Tiles)
+    val defaultQuickTiles = listOf(
+        QuickTileItem(
+            id = "tile_bread",
+            titleArabic = "خبز صامولي",
+            subtitle = "كيس 5 حبات",
+            price = 1.50,
+            category = "مخبوزات",
+            iconType = QuickTileIconType.BREAD,
+            linkedProductCode = "0005"
+        ),
+        QuickTileItem(
+            id = "tile_tamees",
+            titleArabic = "تميس طازج",
+            subtitle = "قرص ساخن",
+            price = 1.00,
+            category = "مخبوزات",
+            iconType = QuickTileIconType.TAMEES,
+            linkedProductCode = "0006"
+        ),
+        QuickTileItem(
+            id = "tile_mixed_veg",
+            titleArabic = "خضار مشكل",
+            subtitle = "سحارة مفرزة بالوزن",
+            price = 5.50,
+            category = "خضار وفواكه",
+            iconType = QuickTileIconType.PRODUCE,
+            isWeighted = true,
+            defaultWeightKg = 1.0,
+            linkedProductCode = "PROD-TOMATO"
+        ),
+        QuickTileItem(
+            id = "tile_tomato",
+            titleArabic = "طماطم بلدي",
+            subtitle = "سعر الكيلو",
+            price = 5.50,
+            category = "خضار وفواكه",
+            iconType = QuickTileIconType.TOMATO,
+            isWeighted = true,
+            defaultWeightKg = 1.0,
+            linkedProductCode = "PROD-TOMATO"
+        ),
+        QuickTileItem(
+            id = "tile_cucumber",
+            titleArabic = "خيار محلي",
+            subtitle = "سعر الكيلو",
+            price = 4.50,
+            category = "خضار وفواكه",
+            iconType = QuickTileIconType.CUCUMBER,
+            isWeighted = true,
+            defaultWeightKg = 1.0,
+            linkedProductCode = "PROD-CUCUMB"
+        ),
+        QuickTileItem(
+            id = "tile_herbs",
+            titleArabic = "حزمة ورقيات",
+            subtitle = "بقدونس / كزبرة",
+            price = 1.00,
+            category = "خضار وفواكه",
+            iconType = QuickTileIconType.HERBS,
+            linkedProductCode = "0007"
+        ),
+        QuickTileItem(
+            id = "tile_water",
+            titleArabic = "ماء ميني",
+            subtitle = "330 مل بارد",
+            price = 1.00,
+            category = "مشروبات",
+            iconType = QuickTileIconType.WATER,
+            linkedProductCode = "0008"
+        ),
+        QuickTileItem(
+            id = "tile_ice",
+            titleArabic = "كيس ثلج",
+            subtitle = "مكعبات كبير",
+            price = 5.00,
+            category = "مثلجات",
+            iconType = QuickTileIconType.ICE
+        ),
+        QuickTileItem(
+            id = "tile_open_price",
+            titleArabic = "سعر مفتوح",
+            subtitle = "تحديد حر من الكاشير",
+            price = 0.0,
+            category = "متنوع",
+            iconType = QuickTileIconType.OPEN_PRICE,
+            isOpenPrice = true
+        )
+    )
+
     init {
         // حساب أولي لحاسبة خضار المشكل
         recalculateProduceQuickInventory()
@@ -98,9 +246,449 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(userNotification = null)
     }
 
-    /**
-     * اختيار صنف واحتساب تكاليفه بالطرق الثلاث (WAC / FIFO / Last Purchase) للمقارنة المباشرة
-     */
+    // ==========================================
+    // إدارة سلة المبيعات لنقطة البيع (POS Cart)
+    // ==========================================
+
+    fun setPosSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(posSearchQuery = query)
+    }
+
+    fun addProductToCart(
+        productWithUnits: ProductWithUnits,
+        selectedUnit: ProductUnitEntity? = null,
+        quantity: Double = 1.0,
+        overridePrice: Double? = null,
+        scaleBarcode: String? = null
+    ) {
+        val unit = selectedUnit
+            ?: productWithUnits.units.firstOrNull { it.isBaseUnit }
+            ?: productWithUnits.units.firstOrNull()
+            ?: return
+
+        val price = overridePrice ?: unit.sellingPrice
+        val currentCart = _uiState.value.cartItems.toMutableList()
+
+        // إذا كان الصنف غير موزون وليس باركود ميزان مخصص وموجود مسبقاً، نزيده بمقدار الكمية
+        val existingIndex = currentCart.indexOfFirst {
+            it.productId == productWithUnits.product.id &&
+                    it.unitId == unit.id &&
+                    !productWithUnits.product.isWeighted &&
+                    it.scaleBarcodeRaw == null
+        }
+
+        if (existingIndex >= 0 && !productWithUnits.product.isWeighted) {
+            val existing = currentCart[existingIndex]
+            val updated = existing.copy(quantity = existing.quantity + quantity)
+            currentCart[existingIndex] = updated
+        } else {
+            currentCart.add(
+                PosCartItem(
+                    productId = productWithUnits.product.id,
+                    productName = productWithUnits.product.name,
+                    productCode = productWithUnits.product.code,
+                    unitId = unit.id,
+                    unitName = unit.unitName,
+                    conversionFactor = unit.conversionFactor,
+                    unitPrice = price,
+                    costPrice = unit.costPrice,
+                    quantity = quantity,
+                    isWeighted = productWithUnits.product.isWeighted,
+                    scaleBarcodeRaw = scaleBarcode
+                )
+            )
+        }
+
+        _uiState.value = _uiState.value.copy(
+            cartItems = currentCart,
+            posSearchQuery = "",
+            userNotification = "تمت إضافة (${productWithUnits.product.name}) إلى السلة"
+        )
+    }
+
+    fun addQuickTileToCart(tile: QuickTileItem) {
+        if (tile.isOpenPrice) {
+            _uiState.value = _uiState.value.copy(showOpenPriceDialog = true)
+            return
+        }
+
+        // محاولة ربط التايل بصنف موجود في قاعدة البيانات
+        val matchedProduct = if (tile.linkedProductCode != null) {
+            productsWithUnits.value.firstOrNull {
+                it.product.code.equals(tile.linkedProductCode, ignoreCase = true) ||
+                        it.product.code.endsWith(tile.linkedProductCode)
+            }
+        } else {
+            productsWithUnits.value.firstOrNull {
+                it.product.name.contains(tile.titleArabic, ignoreCase = true)
+            }
+        }
+
+        if (matchedProduct != null) {
+            addProductToCart(
+                productWithUnits = matchedProduct,
+                quantity = if (tile.isWeighted) tile.defaultWeightKg else 1.0,
+                overridePrice = if (tile.price > 0.0) tile.price else null
+            )
+        } else {
+            // إضافة بند مباشر
+            val currentCart = _uiState.value.cartItems.toMutableList()
+            currentCart.add(
+                PosCartItem(
+                    productId = 0L,
+                    productName = tile.titleArabic,
+                    productCode = tile.linkedProductCode ?: "QUICK-TILE",
+                    unitId = 0L,
+                    unitName = if (tile.isWeighted) "كجم" else "حبة",
+                    conversionFactor = 1.0,
+                    unitPrice = tile.price,
+                    costPrice = tile.price * 0.7,
+                    quantity = if (tile.isWeighted) tile.defaultWeightKg else 1.0,
+                    isWeighted = tile.isWeighted
+                )
+            )
+            _uiState.value = _uiState.value.copy(
+                cartItems = currentCart,
+                userNotification = "تمت إضافة (${tile.titleArabic}) سريعا إلى السلة"
+            )
+        }
+    }
+
+    fun addCustomOpenPriceItem(name: String, price: Double, quantity: Double = 1.0, isWeighted: Boolean = false) {
+        val cleanName = name.ifBlank { "صنف بسعر حر" }
+        val currentCart = _uiState.value.cartItems.toMutableList()
+        currentCart.add(
+            PosCartItem(
+                productId = 0L,
+                productName = cleanName,
+                productCode = "OPEN-PRICE",
+                unitId = 0L,
+                unitName = if (isWeighted) "كجم" else "طلب",
+                conversionFactor = 1.0,
+                unitPrice = price,
+                costPrice = price * 0.75,
+                quantity = quantity,
+                isWeighted = isWeighted,
+                isCustomOpenPrice = true
+            )
+        )
+        _uiState.value = _uiState.value.copy(
+            cartItems = currentCart,
+            showOpenPriceDialog = false,
+            userNotification = "تمت إضافة ($cleanName) بمبلغ (%.2f ر.س) إلى السلة".format(price)
+        )
+    }
+
+    fun updateCartItemQuantity(cartItemId: String, newQty: Double) {
+        if (newQty <= 0.0001) {
+            removeCartItem(cartItemId)
+            return
+        }
+        val currentCart = _uiState.value.cartItems.map { item ->
+            if (item.cartItemId == cartItemId) item.copy(quantity = newQty) else item
+        }
+        _uiState.value = _uiState.value.copy(cartItems = currentCart)
+    }
+
+    fun removeCartItem(cartItemId: String) {
+        val currentCart = _uiState.value.cartItems.filterNot { it.cartItemId == cartItemId }
+        _uiState.value = _uiState.value.copy(cartItems = currentCart)
+    }
+
+    fun clearCart() {
+        _uiState.value = _uiState.value.copy(
+            cartItems = emptyList(),
+            paidAmountInput = "",
+            discountInput = "0.0",
+            selectedCustomerPartyId = null,
+            userNotification = "تم تفريغ سلة المبيعات"
+        )
+    }
+
+    // ==========================================
+    // معالجة الباركود وميزان الباركود الإلكتروني (Scale Barcode)
+    // ==========================================
+
+    fun handleBarcodeScannedOrEntered(input: String) {
+        val clean = input.trim()
+        if (clean.isBlank()) return
+
+        // 1. فحص هل هو باركود ميزان إلكتروني (يبدأ بـ 21 أو 20 وطوله 12-13 رقم)
+        if (ScaleBarcodeParser.isScaleBarcode(clean)) {
+            val scaleResult = ScaleBarcodeParser.parse(clean, assumeWeightBased = true)
+            if (scaleResult.isValidScaleBarcode) {
+                // البحث عن الصنف المقابل لكود الميزان (مثلاً: 0001 طماطم، 0002 خيار)
+                val code = scaleResult.productCode
+                val matched = findProductByScaleCode(code)
+
+                if (matched != null) {
+                    val weight = scaleResult.weightKg ?: 1.0
+                    addProductToCart(
+                        productWithUnits = matched,
+                        quantity = weight,
+                        scaleBarcode = clean
+                    )
+                    _uiState.value = _uiState.value.copy(
+                        posSearchQuery = "",
+                        userNotification = "تم مسح باركود الميزان ($clean): ${matched.product.name} بوزن ($weight كجم) بنجاح!"
+                    )
+                } else {
+                    // لم يتم العثور على الصنف مباشرة بكوده، عرض نافذة فك التشفير والتأكيد للكاشير
+                    _uiState.value = _uiState.value.copy(
+                        detectedScaleBarcode = scaleResult,
+                        showScaleBarcodeDialog = true
+                    )
+                }
+                return
+            }
+        }
+
+        // 2. فحص هل هو باركود وحدة عادي في قاعدة البيانات
+        val allProducts = productsWithUnits.value
+        val matchedUnitProduct = allProducts.firstOrNull { prod ->
+            prod.units.any { it.barcode.equals(clean, ignoreCase = true) }
+        }
+
+        if (matchedUnitProduct != null) {
+            val unit = matchedUnitProduct.units.first { it.barcode.equals(clean, ignoreCase = true) }
+            addProductToCart(matchedUnitProduct, selectedUnit = unit, quantity = 1.0)
+            return
+        }
+
+        // 3. فحص هل هو كود صنف (SKU)
+        val matchedByCode = allProducts.firstOrNull {
+            it.product.code.equals(clean, ignoreCase = true) || it.product.code.endsWith(clean)
+        }
+
+        if (matchedByCode != null) {
+            addProductToCart(matchedByCode, quantity = 1.0)
+            return
+        }
+
+        // لم نجد مطابقة دقيقة بالباركود، نجعل البحث نصي في القائمة
+        _uiState.value = _uiState.value.copy(
+            posSearchQuery = clean,
+            userNotification = "لا يوجد باركود مطابق لـ ($clean)، جاري تصفية البحث بالاسم"
+        )
+    }
+
+    private fun findProductByScaleCode(scaleCode: String): ProductWithUnits? {
+        val prods = productsWithUnits.value
+        val num = scaleCode.toIntOrNull()
+
+        return prods.firstOrNull { p ->
+            p.product.code.equals(scaleCode, ignoreCase = true) ||
+                    p.product.code.endsWith(scaleCode) ||
+                    (num != null && p.product.id == num.toLong()) ||
+                    (num == 1 && p.product.code.contains("TOMATO", ignoreCase = true)) ||
+                    (num == 2 && p.product.code.contains("CUCUMB", ignoreCase = true)) ||
+                    (num == 4 && p.product.name.contains("طماطم", ignoreCase = true)) ||
+                    (num == 5 && p.product.code.contains("0005"))
+        }
+    }
+
+    fun applyDetectedScaleBarcodeToProduct(productWithUnits: ProductWithUnits) {
+        val detected = _uiState.value.detectedScaleBarcode ?: return
+        val weight = detected.weightKg ?: 1.0
+        val price = detected.embeddedPrice
+
+        addProductToCart(
+            productWithUnits = productWithUnits,
+            quantity = weight,
+            overridePrice = price,
+            scaleBarcode = detected.rawBarcode
+        )
+
+        _uiState.value = _uiState.value.copy(
+            showScaleBarcodeDialog = false,
+            detectedScaleBarcode = null,
+            posSearchQuery = ""
+        )
+    }
+
+    fun dismissScaleBarcodeDialog() {
+        _uiState.value = _uiState.value.copy(
+            showScaleBarcodeDialog = false,
+            detectedScaleBarcode = null
+        )
+    }
+
+    // ==========================================
+    // إتمام الفاتورة (Checkout) وطرق الدفع
+    // ==========================================
+
+    fun openCheckoutDialog() {
+        if (_uiState.value.cartItems.isEmpty()) {
+            _uiState.value = _uiState.value.copy(userNotification = "السلة فارغة! أضف أصنافاً أولاً.")
+            return
+        }
+        val total = _uiState.value.cartSummary.finalTotal
+        _uiState.value = _uiState.value.copy(
+            showCheckoutDialog = true,
+            paidAmountInput = "%.2f".format(total)
+        )
+    }
+
+    fun dismissCheckoutDialog() {
+        _uiState.value = _uiState.value.copy(showCheckoutDialog = false)
+    }
+
+    fun selectPaymentMethod(method: PaymentMethod) {
+        val total = _uiState.value.cartSummary.finalTotal
+        val defaultPaid = when (method) {
+            PaymentMethod.CASH -> "%.2f".format(total)
+            PaymentMethod.MADA -> "%.2f".format(total)
+            PaymentMethod.CREDIT -> "0.00"
+            else -> "%.2f".format(total)
+        }
+        _uiState.value = _uiState.value.copy(
+            selectedPaymentMethod = method,
+            paidAmountInput = defaultPaid
+        )
+    }
+
+    fun selectCustomerParty(partyId: Long?) {
+        _uiState.value = _uiState.value.copy(selectedCustomerPartyId = partyId)
+    }
+
+    fun setPaidAmountInput(amount: String) {
+        _uiState.value = _uiState.value.copy(paidAmountInput = amount)
+    }
+
+    fun setDiscountInput(discount: String) {
+        _uiState.value = _uiState.value.copy(discountInput = discount)
+    }
+
+    fun setOpenDrawerAutomatically(enable: Boolean) {
+        _uiState.value = _uiState.value.copy(openDrawerAutomaticallyOnCash = enable)
+    }
+
+    fun processCheckout() {
+        val state = _uiState.value
+        val items = state.cartItems
+        if (items.isEmpty()) return
+
+        val method = state.selectedPaymentMethod
+        val partyId = state.selectedCustomerPartyId
+        val discount = state.discountInput.toDoubleOrNull() ?: 0.0
+        val paid = state.paidAmountInput.toDoubleOrNull() ?: state.cartSummary.finalTotal
+
+        if (method == PaymentMethod.CREDIT && partyId == null) {
+            _uiState.value = _uiState.value.copy(
+                userNotification = "تنبيه: يجب اختيار العميل (صاحب دفتر الحساب) لإتمام البيع الآجل (الشكك)!"
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isProcessingCheckout = true)
+            try {
+                val checkoutResult = repository.processPosSale(
+                    cartItems = items,
+                    paymentMethod = method,
+                    partyId = partyId,
+                    paidAmount = paid,
+                    discount = discount,
+                    notes = "فاتورة بيع نقطة بيع POS"
+                )
+
+                // في حال الدفع نقداً وطُلب فتح الدرج تلقائياً
+                if (method == PaymentMethod.CASH && state.openDrawerAutomaticallyOnCash) {
+                    printerManager.openCashDrawer("دفع نقدي لفاتورة ${checkoutResult.invoiceNumber}")
+                }
+
+                // تجهيز الفاتورة للطباعة الحرارية
+                printerManager.printReceipt(
+                    receiptData = checkoutResult.receiptData,
+                    openDrawerIfCash = false // تم فتحه مسبقاً إذا لزم
+                )
+
+                _uiState.value = _uiState.value.copy(
+                    isProcessingCheckout = false,
+                    showCheckoutDialog = false,
+                    showReceiptDialog = true,
+                    lastCheckoutResult = checkoutResult,
+                    cartItems = emptyList(),
+                    posSearchQuery = "",
+                    paidAmountInput = "",
+                    discountInput = "0.0",
+                    selectedCustomerPartyId = null,
+                    userNotification = "تم إتمام الفاتورة (${checkoutResult.invoiceNumber}) بنجاح!"
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isProcessingCheckout = false,
+                    userNotification = "خطأ في إتمام الفاتورة: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun dismissReceiptDialog() {
+        _uiState.value = _uiState.value.copy(
+            showReceiptDialog = false,
+            lastCheckoutResult = null
+        )
+    }
+
+    // ==========================================
+    // التكامل مع الأجهزة المرفقة (Hardware / Printer / Cash Drawer)
+    // ==========================================
+
+    fun openHardwareDialog() {
+        _uiState.value = _uiState.value.copy(showHardwareDialog = true)
+    }
+
+    fun dismissHardwareDialog() {
+        _uiState.value = _uiState.value.copy(showHardwareDialog = false)
+    }
+
+    fun openCashDrawerManual() {
+        viewModelScope.launch {
+            val res = printerManager.openCashDrawer("فتح يدوي من لوحة الكاشير")
+            _uiState.value = _uiState.value.copy(
+                userNotification = res.message
+            )
+        }
+    }
+
+    fun printCurrentReceiptAgain() {
+        val result = _uiState.value.lastCheckoutResult ?: return
+        viewModelScope.launch {
+            val res = printerManager.printReceipt(result.receiptData, openDrawerIfCash = false)
+            _uiState.value = _uiState.value.copy(userNotification = res.message)
+        }
+    }
+
+    fun setPaperWidth(width: PrinterPaperWidth) {
+        printerManager.setPaperWidth(width)
+    }
+
+    fun connectPrinter(address: String) {
+        viewModelScope.launch {
+            val ok = printerManager.connectToPrinter(address)
+            _uiState.value = _uiState.value.copy(
+                userNotification = if (ok) "تم الاتصال بالطابعة بنجاح!" else "تعذر الاتصال بالطابعة"
+            )
+        }
+    }
+
+    fun disconnectPrinter() {
+        printerManager.disconnect()
+    }
+
+    fun setShowCameraScannerDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showCameraScannerDialog = show)
+    }
+
+    fun setShowOpenPriceDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showOpenPriceDialog = show)
+    }
+
+    // ==========================================
+    // محرك احتساب التكلفة (Costing Engine)
+    // ==========================================
+
     fun selectProductForCosting(productId: Long) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(selectedProductIdForCosting = productId)
@@ -139,61 +727,59 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 lastPurchaseComparisonResult = lpp
             )
         } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(userNotification = "خطأ في حساب التكلفة: ${e.message}")
-        }
-    }
-
-    /**
-     * تحديث طريقة التقييم المحاسبي المعتمدة في إعدادات نظام دكاني
-     */
-    fun updateSystemCostingMethod(method: CostValuationMethod) {
-        viewModelScope.launch {
-            repository.updateCostValuationMethod(method)
             _uiState.value = _uiState.value.copy(
-                selectedMethodForCosting = method,
-                userNotification = "تم حفظ طريقة التقييم المحاسبي [${method.labelArabic}] كإعداد معتمد لبرنامج دكاني"
+                userNotification = "خطأ في احتساب التكلفة: ${e.message}"
             )
-            recalculateCostingForSelectedProduct()
         }
     }
 
-    /**
-     * إضافة دفعة شراء تجريبية جديدة لإظهار التأثير الفوري على WAC و FIFO و Last Purchase Price
-     */
-    fun addSimulatedPurchaseBatch(quantity: Double, unitCost: Double) {
+    fun simulateNewPurchaseLot(
+        unitId: Long,
+        quantity: Double,
+        unitCost: Double,
+        invoiceRef: String
+    ) {
         val prodId = _uiState.value.selectedProductIdForCosting ?: return
         viewModelScope.launch {
-            val prodWithUnits = productsWithUnits.value.firstOrNull { it.product.id == prodId }
-            val baseUnitId = prodWithUnits?.units?.firstOrNull { it.isBaseUnit }?.id
-                ?: prodWithUnits?.units?.firstOrNull()?.id ?: 1L
-
-            val ref = "PUR-TEST-${System.currentTimeMillis().toString().takeLast(4)}"
-            repository.addPurchaseLotMovement(prodId, baseUnitId, quantity, unitCost, ref)
-            _uiState.value = _uiState.value.copy(
-                userNotification = "تمت إضافة دفعة توريد جديدة: $quantity كجم بسعر $unitCost ر.س"
-            )
+            repository.addPurchaseLotMovement(prodId, unitId, quantity, unitCost, invoiceRef)
             recalculateCostingForSelectedProduct()
+            _uiState.value = _uiState.value.copy(
+                userNotification = "تمت إضافة دفعة شراء تجريبية (كمية: $quantity بسعر: $unitCost) وتحديث تكلفة المخزون فورياً!"
+            )
         }
     }
 
-    // إدارة مدخلات حاسبة خضار المشكل
-    fun updateProduceInputs(
-        gross: String? = null,
-        cost: String? = null,
-        expense: String? = null,
-        waste: String? = null,
-        margin: String? = null,
-        description: String? = null
-    ) {
-        _uiState.value = _uiState.value.copy(
-            produceGrossWeightInput = gross ?: _uiState.value.produceGrossWeightInput,
-            produceCostInput = cost ?: _uiState.value.produceCostInput,
-            produceExpenseInput = expense ?: _uiState.value.produceExpenseInput,
-            produceWasteInput = waste ?: _uiState.value.produceWasteInput,
-            produceMarginInput = margin ?: _uiState.value.produceMarginInput,
-            produceCrateDescription = description ?: _uiState.value.produceCrateDescription
-        )
+    // ==========================================
+    // حاسبة جرد خضار المشكل (Produce Quick Inventory)
+    // ==========================================
+
+    fun updateProduceGrossWeight(weight: String) {
+        _uiState.value = _uiState.value.copy(produceGrossWeightInput = weight)
         recalculateProduceQuickInventory()
+    }
+
+    fun updateProduceCost(cost: String) {
+        _uiState.value = _uiState.value.copy(produceCostInput = cost)
+        recalculateProduceQuickInventory()
+    }
+
+    fun updateProduceExpense(expense: String) {
+        _uiState.value = _uiState.value.copy(produceExpenseInput = expense)
+        recalculateProduceQuickInventory()
+    }
+
+    fun updateProduceWaste(waste: String) {
+        _uiState.value = _uiState.value.copy(produceWasteInput = waste)
+        recalculateProduceQuickInventory()
+    }
+
+    fun updateProduceMargin(margin: String) {
+        _uiState.value = _uiState.value.copy(produceMarginInput = margin)
+        recalculateProduceQuickInventory()
+    }
+
+    fun updateProduceCrateDescription(desc: String) {
+        _uiState.value = _uiState.value.copy(produceCrateDescription = desc)
     }
 
     private fun recalculateProduceQuickInventory() {
@@ -208,9 +794,6 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(produceCalcSummary = summary)
     }
 
-    /**
-     * حفظ دفعة الجرد السريع للخضار المشكل في قاعدة البيانات
-     */
     fun saveProduceBatchToDatabase() {
         val summary = _uiState.value.produceCalcSummary ?: return
         viewModelScope.launch {
@@ -233,7 +816,6 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 notes = "تم إجراء الجرد السريع بنجاح واحتساب تكلفة الصافي بعد استبعاد التالف"
             )
 
-            // إنشاء أصناف فرز أولية مرتبطة بالخضار المتوفر في النظام
             val products = productsWithUnits.value.filter { it.product.isWeighted }
             val yieldItems = mutableListOf<MixedProduceYieldItemEntity>()
 
@@ -274,5 +856,46 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 userNotification = "تم حفظ دفعة الخضار المشكل رقم ($batchNumber) وتوثيق التكلفة الصافية في قاعدة البيانات بنجاح!"
             )
         }
+    }
+
+    fun updateSystemCostingMethod(method: CostValuationMethod) {
+        viewModelScope.launch {
+            repository.updateCostValuationMethod(method)
+            selectCostingMethod(method)
+            _uiState.value = _uiState.value.copy(
+                userNotification = "تم تحديث معيار تقييم المخزون في النظام إلى: ${method.name}"
+            )
+        }
+    }
+
+    fun addSimulatedPurchaseBatch(quantity: Double, unitCost: Double) {
+        val prodId = _uiState.value.selectedProductIdForCosting ?: return
+        val currentProd = productsWithUnits.value.firstOrNull { it.product.id == prodId }
+        val unitId = currentProd?.units?.firstOrNull()?.id ?: 1L
+        simulateNewPurchaseLot(
+            unitId = unitId,
+            quantity = quantity,
+            unitCost = unitCost,
+            invoiceRef = "SIM-${System.currentTimeMillis().toString().takeLast(4)}"
+        )
+    }
+
+    fun updateProduceInputs(
+        gross: String?,
+        cost: String?,
+        expense: String?,
+        waste: String?,
+        margin: String?,
+        desc: String?
+    ) {
+        _uiState.value = _uiState.value.copy(
+            produceGrossWeightInput = gross ?: _uiState.value.produceGrossWeightInput,
+            produceCostInput = cost ?: _uiState.value.produceCostInput,
+            produceExpenseInput = expense ?: _uiState.value.produceExpenseInput,
+            produceWasteInput = waste ?: _uiState.value.produceWasteInput,
+            produceMarginInput = margin ?: _uiState.value.produceMarginInput,
+            produceCrateDescription = desc ?: _uiState.value.produceCrateDescription
+        )
+        recalculateProduceQuickInventory()
     }
 }

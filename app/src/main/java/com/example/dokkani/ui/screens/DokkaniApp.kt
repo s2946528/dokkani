@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -137,6 +138,7 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
             ) {
                 // شريط التبويبات الرئيسي
                 val tabs = listOf(
+                    "نقطة البيع (POS)" to Icons.Default.PointOfSale,
                     "المخطط وقاعدة البيانات" to Icons.Default.AccountBalance,
                     "حاسبة التكلفة (WAC/FIFO)" to Icons.Default.Calculate,
                     "جرد خضار المشكل" to Icons.Default.Eco,
@@ -176,7 +178,10 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
 
                 // محتوى التبويب المختار
                 when (uiState.selectedTab) {
-                    0 -> SchemaOverviewScreen(
+                    0 -> com.example.dokkani.ui.screens.pos.PosScreen(
+                        viewModel = viewModel
+                    )
+                    1 -> SchemaOverviewScreen(
                         productsWithUnits = productsWithUnits,
                         settings = settings,
                         currenciesCount = currencies.size,
@@ -184,7 +189,7 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         invoicesCount = recentInvoices.size,
                         produceBatchesCount = produceBatches.size
                     )
-                    1 -> CostingEngineScreen(
+                    2 -> CostingEngineScreen(
                         productsWithUnits = productsWithUnits,
                         selectedProductId = uiState.selectedProductIdForCosting,
                         selectedMethod = uiState.selectedMethodForCosting,
@@ -198,7 +203,7 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         onSaveMethodToSettings = { viewModel.updateSystemCostingMethod(it) },
                         onAddSimulatedPurchaseBatch = { qty, cost -> viewModel.addSimulatedPurchaseBatch(qty, cost) }
                     )
-                    2 -> ProduceQuickInventoryScreen(
+                    3 -> ProduceQuickInventoryScreen(
                         grossWeightInput = uiState.produceGrossWeightInput,
                         costInput = uiState.produceCostInput,
                         expenseInput = uiState.produceExpenseInput,
@@ -211,10 +216,10 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         onInputsChanged = { g, c, e, w, m, d -> viewModel.updateProduceInputs(g, c, e, w, m, d) },
                         onSaveBatch = { viewModel.saveProduceBatchToDatabase() }
                     )
-                    3 -> ProductsAndUnitsScreen(
+                    4 -> ProductsAndUnitsScreen(
                         productsWithUnits = productsWithUnits
                     )
-                    4 -> SystemSettingsScreen(
+                    5 -> SystemSettingsScreen(
                         settings = settings,
                         currencies = currencies,
                         parties = parties,

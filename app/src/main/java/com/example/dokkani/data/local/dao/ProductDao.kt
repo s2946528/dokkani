@@ -44,6 +44,10 @@ interface ProductDao {
     @Query("SELECT pu.* FROM product_units pu WHERE pu.barcode = :barcode LIMIT 1")
     suspend fun findUnitByBarcode(barcode: String): ProductUnitEntity?
 
+    @Transaction
+    @Query("SELECT * FROM products WHERE code = :code LIMIT 1")
+    suspend fun findProductByCode(code: String): ProductWithUnits?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProduct(product: ProductEntity): Long
 

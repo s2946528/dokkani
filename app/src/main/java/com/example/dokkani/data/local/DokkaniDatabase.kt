@@ -321,6 +321,98 @@ abstract class DokkaniDatabase : RoomDatabase() {
                 )
             )
 
+            // صنف 5: خبز صامولي طازج (مخبوزات - سريع بدون باركود)
+            val breadId = productDao.insertProduct(
+                ProductEntity(
+                    code = "0005",
+                    name = "خبز صامولي (كيس 5 حبات)",
+                    englishName = "Fresh Samoli Bread",
+                    category = "مخبوزات",
+                    isWeighted = false,
+                    minStockAlert = 20.0
+                )
+            )
+            productDao.insertUnit(
+                ProductUnitEntity(
+                    productId = breadId,
+                    unitName = "كيس",
+                    conversionFactor = 1.0,
+                    barcode = "10005",
+                    costPrice = 1.00,
+                    sellingPrice = 1.50,
+                    isBaseUnit = true
+                )
+            )
+
+            // صنف 6: تميس عادي طازج (مخبوزات - سريع بدون باركود)
+            val tameesId = productDao.insertProduct(
+                ProductEntity(
+                    code = "0006",
+                    name = "تميس عادي طازج",
+                    englishName = "Fresh Tamees Bread",
+                    category = "مخبوزات",
+                    isWeighted = false,
+                    minStockAlert = 15.0
+                )
+            )
+            productDao.insertUnit(
+                ProductUnitEntity(
+                    productId = tameesId,
+                    unitName = "قرص",
+                    conversionFactor = 1.0,
+                    barcode = "10006",
+                    costPrice = 0.60,
+                    sellingPrice = 1.00,
+                    isBaseUnit = true
+                )
+            )
+
+            // صنف 7: حزمة بقدونس / كزبرة طازجة (خضار ورقيات - سريع)
+            val herbsId = productDao.insertProduct(
+                ProductEntity(
+                    code = "0007",
+                    name = "حزمة ورقيات (بقدونس/كزبرة)",
+                    englishName = "Fresh Herbs Bunch",
+                    category = "خضار وفواكه",
+                    isWeighted = false,
+                    minStockAlert = 10.0
+                )
+            )
+            productDao.insertUnit(
+                ProductUnitEntity(
+                    productId = herbsId,
+                    unitName = "حزمة",
+                    conversionFactor = 1.0,
+                    barcode = "10007",
+                    costPrice = 0.50,
+                    sellingPrice = 1.00,
+                    isBaseUnit = true
+                )
+            )
+
+            // صنف 8: ماء صحة 330 مل (مشروبات - سريع)
+            val waterId = productDao.insertProduct(
+                ProductEntity(
+                    code = "0008",
+                    name = "ماء صحة ميني 330 مل",
+                    englishName = "Bottled Water 330ml",
+                    category = "مشروبات",
+                    isWeighted = false,
+                    minStockAlert = 24.0
+                )
+            )
+            productDao.insertUnit(
+                ProductUnitEntity(
+                    productId = waterId,
+                    unitName = "قارورة",
+                    conversionFactor = 1.0,
+                    barcode = "10008",
+                    costPrice = 0.60,
+                    sellingPrice = 1.00,
+                    isBaseUnit = true
+                )
+            )
+
             // 5. حركات مخزون سابقة بأسعار مختلفة لاختبار WAC و FIFO و Last Purchase Price عملياً
             val stockMovementDao = db.stockMovementDao()
             val now = System.currentTimeMillis()

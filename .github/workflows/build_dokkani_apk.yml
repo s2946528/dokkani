@@ -10,70 +10,55 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch: # يتيح تشغيل البناء يدوياً من واجهة GitHub Actions
+  workflow_dispatch: # يتيح تشغيل البناء يدوياً من واجهة GitHub Actions في أي وقت
 
 jobs:
   build:
-    name: Build Release APK and App Bundle
+    name: Build Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
       # 1. استنساخ الكود المصدري للمستودع
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. إعداد بيئة جافا (Java Development Kit - OpenJDK 17) المتوافقة مع أحدث حزم أندرويد
+      # 2. إعداد بيئة جافا (JDK 17) المتوافقة مع أحدث حزم أندرويد
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
-      # 3. إعداد وتثبيت حزمة Flutter SDK (نسخة مستقرة Stable)
-      - name: Set up Flutter SDK
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
-          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+      # 3. استعادة ملف مفتاح التوقيع (debug.keystore) من التشفير
+      - name: Restore Keystore
+        run: |
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+            echo "Keystore restored successfully."
+          fi
 
-      # 4. التحقق من جاهزية بيئة التطوير وملحقات أندرويد
-      - name: Check Flutter and Android Environment
-        run: flutter doctor -v
+      # 4. إعداد وتفعيل Gradle مع التخزين المؤقت التلقائي (Cache)
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      # 5. تنزيل وفحص التبعيات والمكتبات
-      - name: Install Project Dependencies (flutter pub get)
-        run: flutter pub get
+      # 5. التأكد من وجود أداة gradlew ومنحها صلاحيات التنفيذ
+      - name: Ensure Gradle Wrapper
+        run: |
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper
+          fi
+          chmod +x gradlew
 
-      # 6. التحقق من سلامة وجودة الكود وتنسيقه البرمجي
-      - name: Run Static Code Analysis (flutter analyze)
-        run: flutter analyze
+      # 6. بناء ملف الـ APK الجاهز للتثبيت الفوري على الهواتف
+      - name: Build Android APK
+        run: ./gradlew :app:assembleDebug --no-daemon
 
-      # 7. بناء نسخة أندرويد القابلة للتثبيت المباشر (Release APK)
-      # يتم بناء نسخة مجمعة شاملة fat-apk أو تقسيمها حسب المعالجات (arm64-v8a / armeabi-v7a)
-      - name: Build Android Release APK
-        run: flutter build apk --release
-
-      # 8. بناء حزمة تطبيق جوجل بلاي (Android App Bundle - .aab)
-      - name: Build Android App Bundle (.aab)
-        run: flutter build appbundle --release
-
-      # 9. رفع وتخزين ملفات الـ APK في مستودع GitHub كأصول جاهزة للتحميل المباشر
-      - name: Upload Release APK Artifact
+      # 7. رفع وتخزين ملف الـ APK الناتج كأصل متاح للتحميل الفوري (Artifacts)
+      - name: Upload Dokkani APK
         uses: actions/upload-artifact@v4
         with:
-          name: dokkani-pos-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 30
-          if-no-files-found: error
-
-      # 10. رفع وتخزين ملف الـ App Bundle (.aab) لرفعه على متجر Google Play
-      - name: Upload Android App Bundle (.aab) Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dokkani-pos-release-bundle
-          path: build/app/outputs/bundle/release/app-release.aab
+          name: dokkani-pos-app
+          path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
           if-no-files-found: error

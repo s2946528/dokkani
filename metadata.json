@@ -1,0 +1,7 @@
+{
+  "name": "Dokkani POS",
+  "description": "نظام محاسبة ونقطة بيع ذكي ومبسط للبقالات والمتاجر الصغيرة مع إدارة الأصناف والوحدات والعملات والجرد السريع وحساب التكلفة",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

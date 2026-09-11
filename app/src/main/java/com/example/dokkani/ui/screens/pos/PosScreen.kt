@@ -16,30 +16,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,21 +41,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.domain.hardware.PrinterConnectionState
@@ -72,12 +60,6 @@ import com.example.dokkani.ui.DokkaniViewModel
 
 /**
  * الشاشة الرئيسية لنقطة البيع السريعة (POS Screen) لتطبيق دكاني
- * تجمع بين:
- * 1. شريط البحث والباركود (مع دعم باركود الميزان الإلكتروني بادئة 21)
- * 2. أزرار التحكم بالملحقات وفتح درج النقدية ESC p 0 25 250
- * 3. شبكة الأصناف السريعة (Quick Tiles) للخضار والمخبوزات والأسعار المفتوحة
- * 4. سلة المبيعات وحساب الضرائب والإجماليات
- * 5. نوافذ الدفع (كاش / مدى / آجل) وطباعة الفاتورة الحرارية
  */
 @Composable
 fun PosScreen(
@@ -122,19 +104,72 @@ fun PosScreen(
         BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
             val isWideScreen = maxWidth > 650.dp
 
-        if (isWideScreen) {
-            // شاشات عريضة / أجهزة لوحية (Landscape / Tablet) - تقسيم عمودين
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // القسم الأيمن: شريط البحث وشبكة الأصناف السريعة والكاتالوج
+            if (isWideScreen) {
+                // شاشات عريضة / أجهزة لوحية (Landscape / Tablet) - تقسيم عمودين
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // القسم الأيمن: شريط البحث وشبكة الأصناف السريعة والكاتالوج
+                    Column(
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .fillMaxSize()
+                    ) {
+                        PosTopBar(
+                            searchQuery = uiState.posSearchQuery,
+                            printerState = printerState,
+                            onSearchChange = { viewModel.setPosSearchQuery(it) },
+                            onScanOrEnter = { viewModel.handleBarcodeScannedOrEntered(it) },
+                            onCameraClick = { viewModel.setShowCameraScannerDialog(true) },
+                            onOpenDrawerClick = { viewModel.openCashDrawerManual() },
+                            onHardwareClick = { viewModel.openHardwareDialog() }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (uiState.posSearchQuery.isNotBlank()) {
+                            SearchResultsList(
+                                products = filteredProducts,
+                                onProductUnitClick = { product, unit ->
+                                    viewModel.addProductToCart(product, selectedUnit = unit)
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            PosQuickTilesGrid(
+                                tiles = viewModel.defaultQuickTiles,
+                                onTileClick = { viewModel.addQuickTileToCart(it) },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    // القسم الأيسر: سلة المبيعات والإجماليات
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                    ) {
+                        PosCartComponent(
+                            cartItems = uiState.cartItems,
+                            cartSummary = uiState.cartSummary,
+                            onQuantityChange = { id, qty -> viewModel.updateCartItemQuantity(id, qty) },
+                            onRemoveItem = { id -> viewModel.removeCartItem(id) },
+                            onClearCart = { viewModel.clearCart() },
+                            onCheckoutClick = { viewModel.openCheckoutDialog() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            } else {
+                // شاشات الهواتف العمودية (Portrait) - تقسيم المساحة بأوزان متوازنة
                 Column(
                     modifier = Modifier
-                        .weight(1.3f)
                         .fillMaxSize()
+                        .padding(8.dp)
                 ) {
                     PosTopBar(
                         searchQuery = uiState.posSearchQuery,
@@ -146,105 +181,58 @@ fun PosScreen(
                         onHardwareClick = { viewModel.openHardwareDialog() }
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                    if (uiState.posSearchQuery.isNotBlank()) {
-                        SearchResultsList(
-                            products = filteredProducts,
-                            onProductUnitClick = { product, unit ->
-                                viewModel.addProductToCart(product, selectedUnit = unit)
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        PosQuickTilesGrid(
-                            tiles = viewModel.defaultQuickTiles,
-                            onTileClick = { viewModel.addQuickTileToCart(it) },
+                    // 1. منطقة الأصناف (سريعة أو بحث)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1.2f)
+                    ) {
+                        if (uiState.posSearchQuery.isNotBlank()) {
+                            SearchResultsList(
+                                products = filteredProducts,
+                                onProductUnitClick = { product, unit ->
+                                    viewModel.addProductToCart(product, selectedUnit = unit)
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            PosQuickTilesGrid(
+                                tiles = viewModel.defaultQuickTiles,
+                                onTileClick = { viewModel.addQuickTileToCart(it) },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // 2. سلة المبيعات السفلية متناسقة المساحة
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        PosCartComponent(
+                            cartItems = uiState.cartItems,
+                            cartSummary = uiState.cartSummary,
+                            onQuantityChange = { id, qty -> viewModel.updateCartItemQuantity(id, qty) },
+                            onRemoveItem = { id -> viewModel.removeCartItem(id) },
+                            onClearCart = { viewModel.clearCart() },
+                            onCheckoutClick = { viewModel.openCheckoutDialog() },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
-
-                // القسم الأيسر: سلة المبيعات والإجماليات
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxSize()
-                ) {
-                    PosCartComponent(
-                        cartItems = uiState.cartItems,
-                        cartSummary = uiState.cartSummary,
-                        onQuantityChange = { id, qty -> viewModel.updateCartItemQuantity(id, qty) },
-                        onRemoveItem = { id -> viewModel.removeCartItem(id) },
-                        onClearCart = { viewModel.clearCart() },
-                        onCheckoutClick = { viewModel.openCheckoutDialog() },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-        } else {
-            // شاشات الهواتف العمودية (Portrait)
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp)
-            ) {
-                PosTopBar(
-                    searchQuery = uiState.posSearchQuery,
-                    printerState = printerState,
-                    onSearchChange = { viewModel.setPosSearchQuery(it) },
-                    onScanOrEnter = { viewModel.handleBarcodeScannedOrEntered(it) },
-                    onCameraClick = { viewModel.setShowCameraScannerDialog(true) },
-                    onOpenDrawerClick = { viewModel.openCashDrawerManual() },
-                    onHardwareClick = { viewModel.openHardwareDialog() }
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // منطقة الأصناف (سريعة أو بحث)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    if (uiState.posSearchQuery.isNotBlank()) {
-                        SearchResultsList(
-                            products = filteredProducts,
-                            onProductUnitClick = { product, unit ->
-                                viewModel.addProductToCart(product, selectedUnit = unit)
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        PosQuickTilesGrid(
-                            tiles = viewModel.defaultQuickTiles,
-                            onTileClick = { viewModel.addQuickTileToCart(it) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // سلة المبيعات السفلية
-                PosCartComponent(
-                    cartItems = uiState.cartItems,
-                    cartSummary = uiState.cartSummary,
-                    onQuantityChange = { id, qty -> viewModel.updateCartItemQuantity(id, qty) },
-                    onRemoveItem = { id -> viewModel.removeCartItem(id) },
-                    onClearCart = { viewModel.clearCart() },
-                    onCheckoutClick = { viewModel.openCheckoutDialog() }
-                )
             }
         }
     }
-}
 
     // ==========================================
     // نوافذ الحوار الخاصة بنقطة البيع والملحقات
     // ==========================================
 
-    // 1. نافذة إتمام الدفع (كاش / مدى / آجل)
     if (uiState.showCheckoutDialog) {
         PosCheckoutDialog(
             cartSummary = uiState.cartSummary,
@@ -265,7 +253,6 @@ fun PosScreen(
         )
     }
 
-    // 2. نافذة إيصال الفاتورة الحرارية بعد البيع
     if (uiState.showReceiptDialog && uiState.lastCheckoutResult != null) {
         PosReceiptDialog(
             checkoutResult = uiState.lastCheckoutResult!!,
@@ -275,7 +262,6 @@ fun PosScreen(
         )
     }
 
-    // 3. نافذة باركود الميزان الإلكتروني
     if (uiState.showScaleBarcodeDialog && uiState.detectedScaleBarcode != null) {
         PosScaleBarcodeDialog(
             detectedBarcode = uiState.detectedScaleBarcode!!,
@@ -285,7 +271,6 @@ fun PosScreen(
         )
     }
 
-    // 4. نافذة إعدادات الملحقات والطابعة ودرج النقدية
     if (uiState.showHardwareDialog) {
         PosHardwareDialog(
             printerManager = viewModel.printerManager,
@@ -294,7 +279,6 @@ fun PosScreen(
         )
     }
 
-    // 5. نافذة السعر المفتوح
     if (uiState.showOpenPriceDialog) {
         PosOpenPriceDialog(
             onConfirm = { name, price, qty, isWeighted ->
@@ -304,7 +288,6 @@ fun PosScreen(
         )
     }
 
-    // 6. نافذة محاكي الكاميرا وقارئ الباركود
     if (uiState.showCameraScannerDialog) {
         PosCameraScannerDialog(
             onBarcodeScanned = { viewModel.handleBarcodeScannedOrEntered(it) },
@@ -313,10 +296,6 @@ fun PosScreen(
     }
 }
 
-/**
- * الشريط العلوي لشاشة نقطة البيع:
- * حقل البحث والباركود + أزرار تشغيل درج النقدية وطابعة البلوتوث والكاميرا
- */
 @Composable
 private fun PosTopBar(
     searchQuery: String,
@@ -335,7 +314,6 @@ private fun PosTopBar(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            // شريط إدخال الباركود والبحث
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -367,7 +345,6 @@ private fun PosTopBar(
                         .testTag("pos_barcode_search_input")
                 )
 
-                // زر قراءة الباركود عبر الكاميرا
                 IconButton(
                     onClick = onCameraClick,
                     modifier = Modifier
@@ -385,13 +362,11 @@ private fun PosTopBar(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // شريط حالة الملحقات وأوامر العتاد (درج النقدية وطابعة البلوتوث)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // زر فتح درج النقدية المباشر ESC p 0 25 250
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
@@ -419,7 +394,6 @@ private fun PosTopBar(
                     }
                 }
 
-                // زر إعدادات طابعة البلوتوث
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = when (printerState) {
@@ -463,9 +437,6 @@ private fun PosTopBar(
     }
 }
 
-/**
- * قائمة نتائج البحث عن الأصناف مع عرض الوحدات المتعددة والأسعار
- */
 @Composable
 private fun SearchResultsList(
     products: List<ProductWithUnits>,
@@ -543,7 +514,6 @@ private fun ProductSearchResultCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // أزرار الوحدات المتعددة لهذا الصنف
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -565,9 +535,6 @@ private fun ProductSearchResultCard(
     }
 }
 
-/**
- * شريط تحذيري ذكي في شاشة البيع عند اقتراب انتهاء الترخيص أو قفل النظام
- */
 @Composable
 fun PosLicenseWarningBanner(
     eval: com.example.dokkani.domain.security.LicenseEvaluationResult,

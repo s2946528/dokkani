@@ -2,8 +2,10 @@ package com.example.dokkani.data.repository
 
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.entities.BatchWithYields
+import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.ExpenseEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceWithDetails
@@ -11,15 +13,25 @@ import com.example.dokkani.data.local.entities.MixedProduceBatchEntity
 import com.example.dokkani.data.local.entities.MixedProduceYieldItemEntity
 import com.example.dokkani.data.local.entities.MovementType
 import com.example.dokkani.data.local.entities.PartyEntity
+import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.data.local.entities.PaymentVoucherEntity
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
+import com.example.dokkani.domain.cash.CashDrawerEngine
+import com.example.dokkani.domain.cash.CashReconciliationResult
 import com.example.dokkani.domain.costing.CostCalculationEngine
 import com.example.dokkani.domain.costing.CostCalculationResult
+import com.example.dokkani.domain.credit.CreditNotebookEngine
+import com.example.dokkani.domain.credit.CustomerStatementSummary
 import com.example.dokkani.domain.produce.ProduceQuickCalcSummary
 import com.example.dokkani.domain.produce.ProduceQuickInventoryEngine
+import com.example.dokkani.domain.reports.FinancialReportsEngine
+import com.example.dokkani.domain.reports.InventoryHealthReport
+import com.example.dokkani.domain.reports.ProfitAndLossReport
+import com.example.dokkani.domain.reports.TopProductsReport
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -35,6 +47,10 @@ class DokkaniRepository(private val database: DokkaniDatabase) {
     private val stockMovementDao = database.stockMovementDao()
     private val produceBatchDao = database.mixedProduceBatchDao()
     private val settingsDao = database.systemSettingsDao()
+    private val paymentVoucherDao = database.paymentVoucherDao()
+    private val expenseDao = database.expenseDao()
+    private val cashShiftDao = database.cashShiftDao()
+    private val licenseDao = database.licenseDao()
 
     val costingEngine = CostCalculationEngine(productDao, stockMovementDao, settingsDao)
 
@@ -45,6 +61,11 @@ class DokkaniRepository(private val database: DokkaniDatabase) {
     val recentInvoices: Flow<List<InvoiceWithDetails>> = invoiceDao.getRecentInvoicesWithDetails()
     val produceBatchesWithYields: Flow<List<BatchWithYields>> = produceBatchDao.getBatchesWithYields()
     val systemSettings: Flow<SystemSettingsEntity?> = settingsDao.getSettings()
+    val allPaymentVouchers: Flow<List<PaymentVoucherEntity>> = paymentVoucherDao.getAllVouchers()
+    val allExpenses: Flow<List<ExpenseEntity>> = expenseDao.getAllExpenses()
+    val allCashShifts: Flow<List<CashShiftEntity>> = cashShiftDao.getAllShifts()
+    val licenseFlow: Flow<com.example.dokkani.data.local.entities.LicenseEntity?> = licenseDao.getLicenseFlow()
+    val totalInvoicesCountFlow: Flow<Int> = invoiceDao.getTotalInvoicesCountFlow()
 
     // Costing calculations
     suspend fun calculateCost(
@@ -408,6 +429,274 @@ class DokkaniRepository(private val database: DokkaniDatabase) {
     suspend fun updateUnitBarcode(unitId: Long, newBarcode: String) {
         val existing = productDao.getUnitById(unitId) ?: return
         productDao.updateUnit(existing.copy(barcode = newBarcode.trim()))
+    }
+
+    // =========================================================================
+    // موديول الديون ودفتر الشكك وسندات القبض (Credit & Customer Notebook)
+    // =========================================================================
+
+    /**
+     * تسجيل سند قبض وتسديد دفعة لعميل أو مورد مع تحديث الرصيد آلياً
+     */
+    suspend fun recordPaymentVoucher(
+        partyId: Long,
+        amount: Double,
+        paymentMethod: PaymentMethod = PaymentMethod.CASH,
+        notes: String = "",
+        receivedBy: String = "كاشير 1"
+    ): PaymentVoucherEntity {
+        if (amount <= 0.0) {
+            throw IllegalArgumentException("مبلغ السداد يجب أن يكون أكبر من الصفر!")
+        }
+
+        val party = partyDao.getPartyById(partyId)
+            ?: throw IllegalArgumentException("العميل غير موجود!")
+
+        val count = paymentVoucherDao.countVouchers()
+        val voucherNumber = "RCV-2026-%04d".format(count + 1)
+        val now = System.currentTimeMillis()
+
+        val voucher = PaymentVoucherEntity(
+            voucherNumber = voucherNumber,
+            partyId = partyId,
+            amount = amount,
+            paymentMethod = paymentMethod,
+            date = now,
+            receivedBy = receivedBy,
+            notes = notes.ifBlank { "سند قبض وسداد دفعة حساب" }
+        )
+
+        paymentVoucherDao.insertVoucher(voucher)
+
+        // تحديث رصيد العميل آلياً في جدول parties (تقليل الدين بمقدار المبلغ المسدد)
+        partyDao.updateBalance(partyId, -amount)
+
+        return voucher
+    }
+
+    /**
+     * جلب كشف حساب زمني تفصيلي لعميل محدد
+     */
+    suspend fun getCustomerStatement(partyId: Long): CustomerStatementSummary? {
+        val party = partyDao.getPartyById(partyId) ?: return null
+        val invoices = invoiceDao.getInvoicesForPartySync(partyId)
+        val vouchers = paymentVoucherDao.getVouchersForPartySync(partyId)
+        val settings = settingsDao.getSettingsSync() ?: SystemSettingsEntity()
+
+        return CreditNotebookEngine.buildCustomerStatement(
+            party = party,
+            invoices = invoices,
+            vouchers = vouchers,
+            storeName = settings.storeName
+        )
+    }
+
+    // =========================================================================
+    // موديول المصروفات وحركة الصندوق وإغلاق الشفت (Cash Drawer & Expenses)
+    // =========================================================================
+
+    /**
+     * تسجيل مصروف تشغيلي ونثريات
+     */
+    suspend fun recordExpense(
+        category: String,
+        amount: Double,
+        paymentMethod: PaymentMethod = PaymentMethod.CASH,
+        paidTo: String = "",
+        notes: String = "",
+        recordedBy: String = "كاشير 1"
+    ): ExpenseEntity {
+        if (amount <= 0.0) {
+            throw IllegalArgumentException("قيمة المصروف يجب أن تكون أكبر من الصفر!")
+        }
+
+        val count = expenseDao.countExpenses()
+        val expenseNumber = "EXP-2026-%04d".format(count + 1)
+        val now = System.currentTimeMillis()
+
+        val expense = ExpenseEntity(
+            expenseNumber = expenseNumber,
+            category = category,
+            amount = amount,
+            paymentMethod = paymentMethod,
+            date = now,
+            paidTo = paidTo,
+            notes = notes,
+            recordedBy = recordedBy
+        )
+
+        expenseDao.insertExpense(expense)
+        return expense
+    }
+
+    /**
+     * حساب مطابقة النقدية اللحظية في الدرج
+     */
+    suspend fun calculateCashReconciliation(
+        openingCash: Double,
+        actualPhysicalCash: Double,
+        startTime: Long = 0L,
+        endTime: Long = System.currentTimeMillis()
+    ): CashReconciliationResult {
+        val invoices = invoiceDao.getInvoicesByDateRangeSync(startTime, endTime)
+        val vouchers = paymentVoucherDao.getVouchersByDateRangeSync(startTime, endTime)
+        val expenses = expenseDao.getExpensesByDateRangeSync(startTime, endTime)
+
+        val cashSales = invoices
+            .filter { it.type == com.example.dokkani.data.local.entities.InvoiceType.SALE && it.paymentMethod == PaymentMethod.CASH }
+            .map { it.paidAmount }
+
+        val cashCollections = vouchers
+            .filter { it.paymentMethod == PaymentMethod.CASH }
+            .map { it.amount }
+
+        val cashExpenses = expenses
+            .filter { it.paymentMethod == PaymentMethod.CASH }
+            .map { it.amount }
+
+        return CashDrawerEngine.calculateReconciliation(
+            openingCash = openingCash,
+            cashSales = cashSales,
+            cashCollections = cashCollections,
+            cashExpenses = cashExpenses,
+            actualPhysicalCash = actualPhysicalCash
+        )
+    }
+
+    /**
+     * إغلاق الشفت وحفظ سجل المطابقة رسمياً في جدول cash_shifts
+     */
+    suspend fun closeShiftAndSave(
+        openingCash: Double,
+        actualPhysicalCash: Double,
+        cashierName: String = "كاشير 1",
+        notes: String = ""
+    ): CashShiftEntity {
+        val now = System.currentTimeMillis()
+        val startOfToday = now - (12 * 3600000L) // فترة الشفت الحالي
+        val recon = calculateCashReconciliation(openingCash, actualPhysicalCash, startOfToday, now)
+
+        val count = cashShiftDao.countShifts()
+        val shiftNumber = "SHF-2026-%04d".format(count + 1)
+
+        val shift = CashShiftEntity(
+            shiftNumber = shiftNumber,
+            cashierName = cashierName,
+            startTime = startOfToday,
+            endTime = now,
+            openingCash = recon.openingCash,
+            totalCashSales = recon.totalCashSales,
+            totalCashCollections = recon.totalCashCollections,
+            totalCashExpenses = recon.totalCashExpenses,
+            expectedCashInDrawer = recon.expectedCashInDrawer,
+            actualPhysicalCash = recon.actualPhysicalCash,
+            cashDiscrepancy = recon.discrepancy,
+            status = "CLOSED",
+            notes = notes.ifBlank { "إغلاق شفت ومطابقة النقدية: ${recon.discrepancyType.labelArabic}" }
+        )
+
+        cashShiftDao.insertShift(shift)
+        return shift
+    }
+
+    // =========================================================================
+    // موديول لوحة التحكم والتقارير المالية والمخزنية (Dashboard & Reports)
+    // =========================================================================
+
+    /**
+     * توليد تقرير الأرباح والخسائر الشامل (P&L) المتوافق مع طريقة تقييم المخزون المحددة
+     */
+    suspend fun generateProfitAndLossReport(
+        methodOverride: CostValuationMethod? = null
+    ): ProfitAndLossReport {
+        val settings = settingsDao.getSettingsSync() ?: SystemSettingsEntity()
+        val method = methodOverride ?: settings.costValuationMethod
+
+        val invoices = invoiceDao.getAllInvoicesWithDetailsSync().map { it.invoice }
+        val invoiceItems = invoiceDao.getAllInvoiceItemsSync()
+        val expenses = expenseDao.getExpensesByDateRangeSync(0, Long.MAX_VALUE)
+
+        // حساب تكاليف الأصناف وفقاً لطريقة التقييم المحددة (WAC / FIFO / Last Purchase)
+        val products = productDao.getProductsSync()
+        val productUnitCosts = mutableMapOf<Long, Double>()
+        for (prod in products) {
+            val costResult = costingEngine.calculateProductCost(prod.id, method)
+            productUnitCosts[prod.id] = costResult.unitCostBase
+        }
+
+        return FinancialReportsEngine.generateProfitAndLossReport(
+            invoices = invoices,
+            invoiceItems = invoiceItems,
+            expenses = expenses,
+            productUnitCosts = productUnitCosts,
+            valuationMethod = method
+        )
+    }
+
+    /**
+     * توليد تقرير الأصناف الأكثر حركة وربحية
+     */
+    suspend fun generateTopProductsReport(
+        methodOverride: CostValuationMethod? = null
+    ): TopProductsReport {
+        val settings = settingsDao.getSettingsSync() ?: SystemSettingsEntity()
+        val method = methodOverride ?: settings.costValuationMethod
+
+        val productsWithUnits = productDao.getProductsWithUnitsSync()
+        val invoiceItems = invoiceDao.getAllInvoiceItemsSync()
+
+        val productUnitCosts = mutableMapOf<Long, Double>()
+        for (pwu in productsWithUnits) {
+            val costResult = costingEngine.calculateProductCost(pwu.product.id, method)
+            productUnitCosts[pwu.product.id] = costResult.unitCostBase
+        }
+
+        return FinancialReportsEngine.generateTopProductsReport(
+            productsWithUnits = productsWithUnits,
+            invoiceItems = invoiceItems,
+            productUnitCosts = productUnitCosts
+        )
+    }
+
+    /**
+     * توليد تقرير نواقص المخزون وتواريخ الصلاحية
+     */
+    suspend fun generateInventoryHealthReport(): InventoryHealthReport {
+        val productsWithUnits = productDao.getProductsWithUnitsSync()
+        val stockMovements = stockMovementDao.getAllMovementsSync()
+
+        return FinancialReportsEngine.generateInventoryHealthReport(
+            productsWithUnits = productsWithUnits,
+            stockMovements = stockMovements
+        )
+    }
+
+    // ==========================================
+    // إدارة الترخيص والحماية بدون إنترنت
+    // ==========================================
+
+    suspend fun getLicenseSync(): com.example.dokkani.data.local.entities.LicenseEntity? {
+        return licenseDao.getLicenseSync()
+    }
+
+    suspend fun saveLicense(license: com.example.dokkani.data.local.entities.LicenseEntity) {
+        licenseDao.insertOrUpdate(license)
+    }
+
+    suspend fun updateLastKnownTime(time: Long) {
+        licenseDao.updateLastKnownTime(time)
+    }
+
+    suspend fun updateTamperState(isTampered: Boolean, reason: String?) {
+        licenseDao.updateTamperState(isTampered, reason)
+    }
+
+    suspend fun getTotalInvoicesCountSync(): Int {
+        return invoiceDao.getTotalInvoicesCountSync()
+    }
+
+    suspend fun getLatestInvoiceTimestampSync(): Long? {
+        return invoiceDao.getLatestInvoiceTimestampSync()
     }
 }
 

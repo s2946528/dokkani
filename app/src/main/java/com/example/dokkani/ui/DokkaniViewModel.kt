@@ -1,6 +1,9 @@
 package com.example.dokkani.ui
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.dokkani.data.local.DokkaniDatabase
@@ -25,6 +28,27 @@ import com.example.dokkani.domain.hardware.LabelPaperSize
 import com.example.dokkani.domain.hardware.LabelPrintResult
 import com.example.dokkani.domain.hardware.PrinterPaperWidth
 import com.example.dokkani.domain.hardware.ReceiptPrintData
+import com.example.dokkani.data.local.entities.CashShiftEntity
+import com.example.dokkani.data.local.entities.ExpenseEntity
+import com.example.dokkani.data.local.entities.PaymentVoucherEntity
+import com.example.dokkani.domain.cash.CashReconciliationResult
+import com.example.dokkani.domain.cash.ExpenseCategories
+import com.example.dokkani.domain.credit.CreditNotebookEngine
+import com.example.dokkani.domain.credit.CustomerStatementSummary
+import com.example.dokkani.domain.reports.FinancialReportsEngine
+import com.example.dokkani.domain.reports.InventoryHealthReport
+import com.example.dokkani.domain.reports.ProfitAndLossReport
+import com.example.dokkani.domain.reports.TopProductsReport
+import com.example.dokkani.data.local.entities.LicenseEntity
+import com.example.dokkani.domain.security.ActivationPlan
+import com.example.dokkani.domain.security.ActivationVerificationResult
+import com.example.dokkani.domain.security.AntiTamperGuard
+import com.example.dokkani.domain.security.DeviceFingerprintManager
+import com.example.dokkani.domain.security.DokkaniKeyGenerator
+import com.example.dokkani.domain.security.KeyGeneratorResult
+import com.example.dokkani.domain.security.LicenseEvaluationResult
+import com.example.dokkani.domain.security.LicenseStatus
+import com.example.dokkani.domain.security.OfflineLicenseManager
 import com.example.dokkani.domain.pos.CartSummary
 import com.example.dokkani.domain.pos.PosCartItem
 import com.example.dokkani.domain.pos.PosCheckoutResult
@@ -114,6 +138,66 @@ data class DokkaniUiState(
     val showCameraScannerDialog: Boolean = false,
     val openDrawerAutomaticallyOnCash: Boolean = true,
 
+    // =========================================================================
+    // حالة شاشة دفتر الشكك والديون والعملاء (Customer & Credit Ledger)
+    // =========================================================================
+    val creditSearchQuery: String = "",
+    val selectedPartyForStatement: Long? = null,
+    val customerStatementSummary: CustomerStatementSummary? = null,
+    val isLoadingStatement: Boolean = false,
+    val showPaymentVoucherDialog: Boolean = false,
+    val voucherPartyId: Long? = null,
+    val voucherAmountInput: String = "",
+    val voucherNotesInput: String = "",
+    val voucherPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val isSubmittingVoucher: Boolean = false,
+
+    // =========================================================================
+    // حالة شاشة حركة الخزينة والمصروفات ومطابقة الدرج (Cash & Expenses)
+    // =========================================================================
+    val cashSubTab: Int = 0, // 0 = المصروفات والنثريات، 1 = مطابقة الصندوق وإغلاق الشفت
+    val showAddExpenseDialog: Boolean = false,
+    val expenseCategoryInput: String = "كهرباء ومياه",
+    val expenseAmountInput: String = "",
+    val expensePaidToInput: String = "",
+    val expenseNotesInput: String = "",
+    val expensePaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val isSubmittingExpense: Boolean = false,
+    val drawerOpeningCashInput: String = "200.0",
+    val drawerPhysicalCashInput: String = "",
+    val drawerShiftNotesInput: String = "",
+    val reconciliationResult: CashReconciliationResult? = null,
+    val isClosingShift: Boolean = false,
+    val lastClosedShift: CashShiftEntity? = null,
+
+    // =========================================================================
+    // حالة شاشة لوحة التحكم والتقارير المالية والمخزنية (Dashboard & Reports)
+    // =========================================================================
+    val reportSubTab: Int = 0, // 0 = الأرباح والخسائر P&L، 1 = حركة الأصناف والربحية، 2 = النواقص وتواريخ الصلاحية
+    val selectedReportValuationMethod: CostValuationMethod = CostValuationMethod.WAC,
+    val pnlReport: ProfitAndLossReport? = null,
+    val topProductsReport: TopProductsReport? = null,
+    val inventoryHealthReport: InventoryHealthReport? = null,
+    val isLoadingReports: Boolean = false,
+
+    // =========================================================================
+    // نظام الحماية، الترخيص والتفعيل بدون إنترنت (Security, Licensing & Anti-Tampering)
+    // =========================================================================
+    val deviceFingerprint: String = "",
+    val licenseEvaluation: LicenseEvaluationResult? = null,
+    val selectedPlanForRequest: ActivationPlan = ActivationPlan.MONTHLY_1,
+    val generatedChallengeCode: String = "",
+    val activationCodeInput: String = "",
+    val activationFeedbackMessage: String? = null,
+    val isActivating: Boolean = false,
+    val showLicenseLockDialog: Boolean = false,
+    val licenseLockDialogMessage: String = "",
+    val isDeveloperKeyGenExpanded: Boolean = false,
+    val keyGenRequestCodeInput: String = "",
+    val keyGenSelectedPlan: ActivationPlan = ActivationPlan.LIFETIME,
+    val keyGenCustomDaysInput: String = "30",
+    val keyGenGeneratedResult: KeyGeneratorResult? = null,
+
     val userNotification: String? = null
 ) {
     val cartSummary: CartSummary
@@ -167,8 +251,28 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     val systemSettings: StateFlow<SystemSettingsEntity?> = repository.systemSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val paymentVouchers: StateFlow<List<PaymentVoucherEntity>> = repository.allPaymentVouchers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val expenses: StateFlow<List<ExpenseEntity>> = repository.allExpenses
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val cashShifts: StateFlow<List<CashShiftEntity>> = repository.allCashShifts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _uiState = MutableStateFlow(DokkaniUiState())
     val uiState: StateFlow<DokkaniUiState> = _uiState.asStateFlow()
+
+    init {
+        val fp = DeviceFingerprintManager.getDeviceFingerprint(application)
+        val initialChallenge = OfflineLicenseManager.generateChallengeCode(fp, ActivationPlan.MONTHLY_1)
+        _uiState.value = _uiState.value.copy(
+            deviceFingerprint = fp,
+            generatedChallengeCode = initialChallenge,
+            keyGenRequestCodeInput = initialChallenge
+        )
+        observeAndEvaluateLicense()
+    }
 
     // قائمة الأصناف السريعة بدون باركود (Quick Tiles)
     val defaultQuickTiles = listOf(
@@ -570,6 +674,17 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             _uiState.value = _uiState.value.copy(userNotification = "السلة فارغة! أضف أصنافاً أولاً.")
             return
         }
+
+        // فحص حالة الترخيص وقفل النظام
+        val evaluation = _uiState.value.licenseEvaluation
+        if (evaluation?.canCreateInvoice == false) {
+            _uiState.value = _uiState.value.copy(
+                showLicenseLockDialog = true,
+                licenseLockDialogMessage = evaluation.warningMessageArabic ?: "النظام مقفل حالياً! يرجى تفعيل أو تجديد الترخيص لمتابعة البيع."
+            )
+            return
+        }
+
         val total = _uiState.value.cartSummary.finalTotal
         _uiState.value = _uiState.value.copy(
             showCheckoutDialog = true,
@@ -616,6 +731,17 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         val items = state.cartItems
         if (items.isEmpty()) return
 
+        // فحص حالة الترخيص وقفل النظام
+        val evaluation = state.licenseEvaluation
+        if (evaluation?.canCreateInvoice == false) {
+            _uiState.value = _uiState.value.copy(
+                showCheckoutDialog = false,
+                showLicenseLockDialog = true,
+                licenseLockDialogMessage = evaluation.warningMessageArabic ?: "النظام مقفل حالياً! يرجى تفعيل أو تجديد الترخيص."
+            )
+            return
+        }
+
         val method = state.selectedPaymentMethod
         val partyId = state.selectedCustomerPartyId
         val discount = state.discountInput.toDoubleOrNull() ?: 0.0
@@ -639,6 +765,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     discount = discount,
                     notes = "فاتورة بيع نقطة بيع POS"
                 )
+
+                // تحديث وقت النظام المعتمد لمكافحة التلاعب بالساعة
+                repository.updateLastKnownTime(System.currentTimeMillis())
 
                 // في حال الدفع نقداً وطُلب فتح الدرج تلقائياً
                 if (method == PaymentMethod.CASH && state.openDrawerAutomaticallyOnCash) {
@@ -1163,6 +1292,559 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         if (unitId != null) {
             selectUnitForLabel(unitId)
         }
-        selectTab(4) // التبويب المخصص للملصقات والباركود
+        selectTab(6) // التبويب المخصص للملصقات والباركود
+    }
+
+    // =========================================================================
+    // إدارة الديون ودفتر الشكك وسندات القبض (Credit & Customer Ledger)
+    // =========================================================================
+
+    fun updateCreditSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(creditSearchQuery = query)
+    }
+
+    fun selectPartyForStatement(partyId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            selectedPartyForStatement = partyId,
+            customerStatementSummary = null
+        )
+        if (partyId != null) {
+            loadCustomerStatement(partyId)
+        }
+    }
+
+    fun loadCustomerStatement(partyId: Long) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingStatement = true)
+            try {
+                val statement = repository.getCustomerStatement(partyId)
+                _uiState.value = _uiState.value.copy(
+                    customerStatementSummary = statement,
+                    isLoadingStatement = false
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingStatement = false,
+                    userNotification = "خطأ أثناء تحميل كشف الحساب: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun openPaymentVoucherDialog(partyId: Long) {
+        val party = parties.value.firstOrNull { it.id == partyId }
+        val remaining = party?.currentBalance ?: 0.0
+        _uiState.value = _uiState.value.copy(
+            showPaymentVoucherDialog = true,
+            voucherPartyId = partyId,
+            voucherAmountInput = if (remaining > 0) remaining.toString() else "",
+            voucherNotesInput = "سداد دفعة على الحساب من ${party?.name ?: "العميل"}",
+            voucherPaymentMethod = PaymentMethod.CASH
+        )
+    }
+
+    fun dismissPaymentVoucherDialog() {
+        _uiState.value = _uiState.value.copy(
+            showPaymentVoucherDialog = false,
+            voucherPartyId = null,
+            voucherAmountInput = "",
+            voucherNotesInput = ""
+        )
+    }
+
+    fun updateVoucherInputs(amount: String, notes: String, method: PaymentMethod) {
+        _uiState.value = _uiState.value.copy(
+            voucherAmountInput = amount,
+            voucherNotesInput = notes,
+            voucherPaymentMethod = method
+        )
+    }
+
+    fun submitPaymentVoucher() {
+        val partyId = _uiState.value.voucherPartyId ?: return
+        val amount = _uiState.value.voucherAmountInput.toDoubleOrNull()
+        if (amount == null || amount <= 0) {
+            _uiState.value = _uiState.value.copy(userNotification = "يرجى إدخال مبلغ سداد صحيح أكبر من 0")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSubmittingVoucher = true)
+            try {
+                val voucher = repository.recordPaymentVoucher(
+                    partyId = partyId,
+                    amount = amount,
+                    paymentMethod = _uiState.value.voucherPaymentMethod,
+                    notes = _uiState.value.voucherNotesInput,
+                    receivedBy = "كاشير 1"
+                )
+
+                _uiState.value = _uiState.value.copy(
+                    isSubmittingVoucher = false,
+                    showPaymentVoucherDialog = false,
+                    userNotification = "تم تسجيل سند القبض ${voucher.voucherNumber} بمبلغ ${"%.2f".format(amount)} ر.س وتحديث رصيد العميل بنجاح"
+                )
+
+                // تحديث كشف الحساب إذا كان معروضاً حالياً
+                if (_uiState.value.selectedPartyForStatement == partyId) {
+                    loadCustomerStatement(partyId)
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isSubmittingVoucher = false,
+                    userNotification = "فشل تسجيل سند القبض: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun sendWhatsAppDebtReminder(context: Context, phone: String, messageText: String) {
+        try {
+            // تنظيف رقم الهاتف وإضافة مفتاح الدولة 966 إن لزم
+            var cleanPhone = phone.trim().replace("+", "").replace(" ", "")
+            if (cleanPhone.startsWith("05")) {
+                cleanPhone = "966" + cleanPhone.substring(1)
+            } else if (!cleanPhone.startsWith("966") && cleanPhone.startsWith("5")) {
+                cleanPhone = "966$cleanPhone"
+            }
+
+            val url = "https://api.whatsapp.com/send?phone=$cleanPhone&text=${Uri.encode(messageText)}"
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse(url)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            // إذا لم يكن واتساب مثبتاً نفتح مشاركة عامة للنص
+            try {
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, messageText)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "إرسال تذكير السداد"))
+            } catch (ex: Exception) {
+                _uiState.value = _uiState.value.copy(userNotification = "تعذر إرسال التذكير: ${ex.message}")
+            }
+        }
+    }
+
+    // =========================================================================
+    // إدارة حركة الخزينة والمصروفات ومطابقة الشفت (Cash & Expenses)
+    // =========================================================================
+
+    fun selectCashSubTab(tab: Int) {
+        _uiState.value = _uiState.value.copy(cashSubTab = tab)
+        if (tab == 1) {
+            // تحديث مطابقة النقدية فورياً عند فتح تبويب مطابقة الشفت
+            calculateDrawerReconciliation()
+        }
+    }
+
+    fun openAddExpenseDialog() {
+        _uiState.value = _uiState.value.copy(
+            showAddExpenseDialog = true,
+            expenseCategoryInput = "نظافة ومستلزمات وأكياس",
+            expenseAmountInput = "",
+            expensePaidToInput = "",
+            expenseNotesInput = "",
+            expensePaymentMethod = PaymentMethod.CASH
+        )
+    }
+
+    fun dismissAddExpenseDialog() {
+        _uiState.value = _uiState.value.copy(showAddExpenseDialog = false)
+    }
+
+    fun updateExpenseInputs(
+        category: String,
+        amount: String,
+        paidTo: String,
+        notes: String,
+        method: PaymentMethod
+    ) {
+        _uiState.value = _uiState.value.copy(
+            expenseCategoryInput = category,
+            expenseAmountInput = amount,
+            expensePaidToInput = paidTo,
+            expenseNotesInput = notes,
+            expensePaymentMethod = method
+        )
+    }
+
+    fun submitExpense() {
+        val amount = _uiState.value.expenseAmountInput.toDoubleOrNull()
+        if (amount == null || amount <= 0) {
+            _uiState.value = _uiState.value.copy(userNotification = "يرجى إدخال مبلغ مصروف صحيح أكبر من 0")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSubmittingExpense = true)
+            try {
+                val exp = repository.recordExpense(
+                    category = _uiState.value.expenseCategoryInput,
+                    amount = amount,
+                    paymentMethod = _uiState.value.expensePaymentMethod,
+                    paidTo = _uiState.value.expensePaidToInput,
+                    notes = _uiState.value.expenseNotesInput,
+                    recordedBy = "كاشير 1"
+                )
+
+                _uiState.value = _uiState.value.copy(
+                    isSubmittingExpense = false,
+                    showAddExpenseDialog = false,
+                    userNotification = "تم تسجيل المصروف ${exp.expenseNumber} بقيمة ${"%.2f".format(amount)} ر.س بنجاح"
+                )
+
+                // تحديث المطابقة إذا كانت شاشة المطابقة مفتوحة
+                calculateDrawerReconciliation()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isSubmittingExpense = false,
+                    userNotification = "فشل تسجيل المصروف: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun updateDrawerInputs(openingCash: String, physicalCash: String, notes: String) {
+        _uiState.value = _uiState.value.copy(
+            drawerOpeningCashInput = openingCash,
+            drawerPhysicalCashInput = physicalCash,
+            drawerShiftNotesInput = notes
+        )
+    }
+
+    fun calculateDrawerReconciliation() {
+        viewModelScope.launch {
+            val opening = _uiState.value.drawerOpeningCashInput.toDoubleOrNull() ?: 200.0
+            val physical = _uiState.value.drawerPhysicalCashInput.toDoubleOrNull() ?: 0.0
+            val result = repository.calculateCashReconciliation(
+                openingCash = opening,
+                actualPhysicalCash = physical
+            )
+            _uiState.value = _uiState.value.copy(reconciliationResult = result)
+        }
+    }
+
+    fun closeShiftAndSave() {
+        val opening = _uiState.value.drawerOpeningCashInput.toDoubleOrNull() ?: 200.0
+        val physical = _uiState.value.drawerPhysicalCashInput.toDoubleOrNull()
+        if (physical == null) {
+            _uiState.value = _uiState.value.copy(userNotification = "يرجى إدخال النقدية الفعلية المجرودة في الدرج أولاً!")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isClosingShift = true)
+            try {
+                val shift = repository.closeShiftAndSave(
+                    openingCash = opening,
+                    actualPhysicalCash = physical,
+                    cashierName = "كاشير 1",
+                    notes = _uiState.value.drawerShiftNotesInput
+                )
+                _uiState.value = _uiState.value.copy(
+                    isClosingShift = false,
+                    lastClosedShift = shift,
+                    userNotification = "تم إغلاق الشفت ${shift.shiftNumber} وحفظ مطابقة النقدية بنجاح"
+                )
+                calculateDrawerReconciliation()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isClosingShift = false,
+                    userNotification = "فشل إغلاق الشفت: ${e.message}"
+                )
+            }
+        }
+    }
+
+    // =========================================================================
+    // إدارة لوحة التحكم والتقارير المالية والمخزنية (Dashboard & Reports)
+    // =========================================================================
+
+    fun selectReportSubTab(tab: Int) {
+        _uiState.value = _uiState.value.copy(reportSubTab = tab)
+        loadAllReports()
+    }
+
+    fun selectReportValuationMethod(method: CostValuationMethod) {
+        _uiState.value = _uiState.value.copy(selectedReportValuationMethod = method)
+        loadAllReports(method)
+    }
+
+    fun loadAllReports(methodOverride: CostValuationMethod? = null) {
+        val method = methodOverride ?: _uiState.value.selectedReportValuationMethod
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingReports = true)
+            try {
+                val pnl = repository.generateProfitAndLossReport(method)
+                val topProds = repository.generateTopProductsReport(method)
+                val invHealth = repository.generateInventoryHealthReport()
+
+                _uiState.value = _uiState.value.copy(
+                    isLoadingReports = false,
+                    pnlReport = pnl,
+                    topProductsReport = topProds,
+                    inventoryHealthReport = invHealth
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingReports = false,
+                    userNotification = "خطأ أثناء توليد التقارير: ${e.message}"
+                )
+            }
+        }
+    }
+
+    // =========================================================================
+    // إدارة الترخيص والحماية بدون إنترنت (Security, Licensing & Anti-Tampering)
+    // =========================================================================
+
+    private fun observeAndEvaluateLicense() {
+        viewModelScope.launch {
+            val fp = DeviceFingerprintManager.getDeviceFingerprint(getApplication())
+            var currentLicense = repository.getLicenseSync()
+            if (currentLicense == null) {
+                currentLicense = LicenseEntity(
+                    id = 1,
+                    status = LicenseStatus.TRIAL,
+                    isLifetime = false,
+                    maxAllowedInvoices = 500,
+                    deviceFingerprint = fp,
+                    lastKnownSystemTimestamp = System.currentTimeMillis()
+                )
+                repository.saveLicense(currentLicense)
+            }
+
+            kotlinx.coroutines.flow.combine(
+                repository.licenseFlow,
+                repository.totalInvoicesCountFlow
+            ) { license, invoiceCount ->
+                val lic = license ?: currentLicense!!
+                val latestInvTime = repository.getLatestInvoiceTimestampSync() ?: 0L
+
+                // 1. فحص مكافحة التلاعب بالوقت
+                val tamperCheck = AntiTamperGuard.verifyTimeIntegrity(
+                    currentSystemTime = System.currentTimeMillis(),
+                    latestInvoiceTime = latestInvTime,
+                    lastKnownSystemTime = lic.lastKnownSystemTimestamp
+                )
+
+                if (tamperCheck.isTampered && !lic.isTimeTampered) {
+                    repository.updateTamperState(true, tamperCheck.reasonArabic)
+                }
+
+                val effectiveTampered = lic.isTimeTampered || tamperCheck.isTampered
+
+                // 2. تقييم الترخيص
+                val evaluation = OfflineLicenseManager.evaluateLicense(
+                    status = if (effectiveTampered) LicenseStatus.TAMPERED else lic.status,
+                    isLifetime = lic.isLifetime,
+                    expiryTimestamp = lic.expiryTimestamp,
+                    maxAllowedInvoices = lic.maxAllowedInvoices,
+                    totalInvoicesIssued = invoiceCount,
+                    deviceFingerprint = fp,
+                    isTimeTampered = effectiveTampered
+                )
+
+                evaluation
+            }.collect { evaluation ->
+                _uiState.value = _uiState.value.copy(
+                    licenseEvaluation = evaluation
+                )
+            }
+        }
+    }
+
+    fun selectPlanForRequest(plan: ActivationPlan) {
+        val fp = _uiState.value.deviceFingerprint
+        val newCode = OfflineLicenseManager.generateChallengeCode(fp, plan)
+        _uiState.value = _uiState.value.copy(
+            selectedPlanForRequest = plan,
+            generatedChallengeCode = newCode,
+            keyGenRequestCodeInput = newCode
+        )
+    }
+
+    fun refreshChallengeCode() {
+        selectPlanForRequest(_uiState.value.selectedPlanForRequest)
+    }
+
+    fun updateActivationCodeInput(code: String) {
+        _uiState.value = _uiState.value.copy(
+            activationCodeInput = code,
+            activationFeedbackMessage = null
+        )
+    }
+
+    fun applyActivationCode() {
+        val code = _uiState.value.activationCodeInput.trim()
+        if (code.isBlank()) {
+            _uiState.value = _uiState.value.copy(activationFeedbackMessage = "يرجى إدخال كود التفعيل أولاً")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isActivating = true)
+            try {
+                val fp = _uiState.value.deviceFingerprint
+                val invCount = repository.getTotalInvoicesCountSync()
+                val result = OfflineLicenseManager.verifyAndApplyActivationCode(code, fp, invCount)
+
+                if (result.isSuccess) {
+                    val currentLicense = repository.getLicenseSync() ?: LicenseEntity(deviceFingerprint = fp)
+                    val updated = currentLicense.copy(
+                        status = result.newStatus,
+                        isLifetime = result.isLifetime,
+                        expiryTimestamp = result.expiryTimestamp,
+                        maxAllowedInvoices = result.maxAllowedInvoices,
+                        activatedAt = System.currentTimeMillis(),
+                        lastKnownSystemTimestamp = System.currentTimeMillis(),
+                        isTimeTampered = false,
+                        tamperReason = null,
+                        appliedActivationCode = code,
+                        activePlanCode = result.plan.code
+                    )
+                    repository.saveLicense(updated)
+
+                    _uiState.value = _uiState.value.copy(
+                        isActivating = false,
+                        activationCodeInput = "",
+                        activationFeedbackMessage = result.messageArabic,
+                        userNotification = result.messageArabic,
+                        showLicenseLockDialog = false
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isActivating = false,
+                        activationFeedbackMessage = result.messageArabic,
+                        userNotification = result.messageArabic
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isActivating = false,
+                    activationFeedbackMessage = "خطأ أثناء معالجة كود التفعيل: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun dismissLicenseLockDialog() {
+        _uiState.value = _uiState.value.copy(showLicenseLockDialog = false)
+    }
+
+    fun toggleDeveloperKeyGen() {
+        _uiState.value = _uiState.value.copy(isDeveloperKeyGenExpanded = !_uiState.value.isDeveloperKeyGenExpanded)
+    }
+
+    fun updateKeyGenRequestInput(input: String) {
+        _uiState.value = _uiState.value.copy(keyGenRequestCodeInput = input)
+    }
+
+    fun updateKeyGenSelectedPlan(plan: ActivationPlan) {
+        _uiState.value = _uiState.value.copy(keyGenSelectedPlan = plan)
+    }
+
+    fun updateKeyGenCustomDays(days: String) {
+        _uiState.value = _uiState.value.copy(keyGenCustomDaysInput = days)
+    }
+
+    fun generateKeyGenCode() {
+        val req = _uiState.value.keyGenRequestCodeInput.ifBlank { _uiState.value.generatedChallengeCode }
+        val plan = _uiState.value.keyGenSelectedPlan
+        val customDays = _uiState.value.keyGenCustomDaysInput.toIntOrNull()
+
+        val genResult = DokkaniKeyGenerator.generateActivationCodeFromRequest(req, plan, customDays)
+        _uiState.value = _uiState.value.copy(
+            keyGenGeneratedResult = genResult,
+            activationCodeInput = if (genResult.isSuccess) genResult.activationCode else _uiState.value.activationCodeInput,
+            userNotification = if (genResult.isSuccess) "تم توليد كود التفعيل: ${genResult.activationCode}" else genResult.messageArabic
+        )
+    }
+
+    fun applyGeneratedKeyGenCodeDirectly() {
+        val genResult = _uiState.value.keyGenGeneratedResult ?: return
+        if (genResult.isSuccess && genResult.activationCode.isNotBlank()) {
+            _uiState.value = _uiState.value.copy(activationCodeInput = genResult.activationCode)
+            applyActivationCode()
+        }
+    }
+
+    fun resetTrialForTesting() {
+        viewModelScope.launch {
+            val fp = _uiState.value.deviceFingerprint
+            val trialLicense = LicenseEntity(
+                id = 1,
+                status = LicenseStatus.TRIAL,
+                isLifetime = false,
+                expiryTimestamp = null,
+                maxAllowedInvoices = 500,
+                activatedAt = null,
+                lastKnownSystemTimestamp = System.currentTimeMillis(),
+                isTimeTampered = false,
+                tamperReason = null,
+                deviceFingerprint = fp,
+                appliedActivationCode = null,
+                activePlanCode = "TRL"
+            )
+            repository.saveLicense(trialLicense)
+            _uiState.value = _uiState.value.copy(
+                userNotification = "تمت إعادة ضبط الترخيص إلى النسخة التجريبية (500 عملية) للاختبار",
+                activationFeedbackMessage = null
+            )
+        }
+    }
+
+    fun simulateTimeTamperForTesting() {
+        viewModelScope.launch {
+            repository.updateTamperState(true, "محاكاة تلاعب تجريبية: تم اكتشاف تأخير ساعة الجهاز للوراء!")
+            _uiState.value = _uiState.value.copy(userNotification = "تم تفعيل محاكاة التلاعب بالوقت وقفل النظام للاختبار!")
+        }
+    }
+
+    fun clearTimeTamper() {
+        viewModelScope.launch {
+            repository.updateTamperState(false, null)
+            repository.updateLastKnownTime(System.currentTimeMillis())
+            _uiState.value = _uiState.value.copy(userNotification = "تم إلغاء قفل التلاعب وتحديث ساعة النظام بنجاح")
+        }
+    }
+
+    fun copyToClipboard(context: Context, text: String, label: String = "كود دكاني") {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText(label, text)
+            clipboard.setPrimaryClip(clip)
+            _uiState.value = _uiState.value.copy(userNotification = "تم نسخ $label إلى الحافظة بنجاح!")
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(userNotification = "فشل النسخ: ${e.message}")
+        }
+    }
+
+    fun shareViaWhatsApp(context: Context, text: String) {
+        val cleanMsg = "طلب تفعيل ترخيص دكاني (Dokkani POS):\n\n$text\n\nيرجى تزويدي بكود التفعيل المعتمد."
+        try {
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                setPackage("com.whatsapp")
+                putExtra(Intent.EXTRA_TEXT, cleanMsg)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(sendIntent)
+        } catch (e: Exception) {
+            try {
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, cleanMsg)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "مشاركة كود الطلب"))
+            } catch (ex: Exception) {
+                _uiState.value = _uiState.value.copy(userNotification = "تعذر فتح المشاركة: ${ex.message}")
+            }
+        }
     }
 }

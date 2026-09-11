@@ -17,6 +17,9 @@ interface StockMovementDao {
     @Query("SELECT * FROM stock_movements WHERE productId = :productId ORDER BY timestamp DESC")
     suspend fun getMovementsForProductSync(productId: Long): List<StockMovementEntity>
 
+    @Query("SELECT * FROM stock_movements ORDER BY timestamp DESC")
+    suspend fun getAllMovementsSync(): List<StockMovementEntity>
+
     /**
      * استعلام طبقات الشراء المتوفرة المتبقية لطريقة FIFO
      * مرتبة من الأقدم إلى الأحدث (الوارد أولاً يستهلك أولاً)

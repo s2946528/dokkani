@@ -6,16 +6,22 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.dao.CurrencyDao
+import com.example.dokkani.data.local.dao.ExpenseDao
 import com.example.dokkani.data.local.dao.InvoiceDao
+import com.example.dokkani.data.local.dao.LicenseDao
 import com.example.dokkani.data.local.dao.MixedProduceBatchDao
 import com.example.dokkani.data.local.dao.PartyDao
+import com.example.dokkani.data.local.dao.PaymentVoucherDao
 import com.example.dokkani.data.local.dao.ProductDao
 import com.example.dokkani.data.local.dao.StockMovementDao
 import com.example.dokkani.data.local.dao.SystemSettingsDao
 import com.example.dokkani.data.local.entities.BatchStatus
+import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.ExpenseEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceStatus
@@ -26,6 +32,7 @@ import com.example.dokkani.data.local.entities.MovementType
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.data.local.entities.PaymentVoucherEntity
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.StockMovementEntity
@@ -49,9 +56,13 @@ import kotlinx.coroutines.launch
         StockMovementEntity::class,
         MixedProduceBatchEntity::class,
         MixedProduceYieldItemEntity::class,
-        SystemSettingsEntity::class
+        SystemSettingsEntity::class,
+        PaymentVoucherEntity::class,
+        ExpenseEntity::class,
+        CashShiftEntity::class,
+        com.example.dokkani.data.local.entities.LicenseEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -64,6 +75,10 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun stockMovementDao(): StockMovementDao
     abstract fun mixedProduceBatchDao(): MixedProduceBatchDao
     abstract fun systemSettingsDao(): SystemSettingsDao
+    abstract fun paymentVoucherDao(): PaymentVoucherDao
+    abstract fun expenseDao(): ExpenseDao
+    abstract fun cashShiftDao(): CashShiftDao
+    abstract fun licenseDao(): LicenseDao
 
     companion object {
         @Volatile
@@ -572,6 +587,79 @@ abstract class DokkaniDatabase : RoomDatabase() {
                         unitSellingPrice = 5.50,
                         totalPrice = 16.50
                     )
+                )
+            )
+
+            // 8. سندات قبض سابقة (دفتر الشكك)
+            val voucherDao = db.paymentVoucherDao()
+            voucherDao.insertVoucher(
+                PaymentVoucherEntity(
+                    voucherNumber = "RCV-2026-0001",
+                    partyId = custAbuAhmedId,
+                    amount = 100.0,
+                    paymentMethod = PaymentMethod.CASH,
+                    date = now - (1 * oneDay),
+                    receivedBy = "كاشير 1",
+                    notes = "سداد دفعة نقدية على الحساب من أبو أحمد"
+                )
+            )
+
+            // 9. مصروفات تشغيلية ونثريات أولية
+            val expenseDao = db.expenseDao()
+            expenseDao.insertExpense(
+                ExpenseEntity(
+                    expenseNumber = "EXP-2026-0001",
+                    category = "كهرباء ومياه",
+                    amount = 280.0,
+                    paymentMethod = PaymentMethod.MADA,
+                    date = now - (2 * oneDay),
+                    paidTo = "الشركة السعودية للكهرباء",
+                    notes = "فاتورة استهلاك كهرباء ثلاجات المتجر لشهر مارس",
+                    recordedBy = "المدير العام"
+                )
+            )
+            expenseDao.insertExpense(
+                ExpenseEntity(
+                    expenseNumber = "EXP-2026-0002",
+                    category = "نظافة ومستلزمات",
+                    amount = 45.0,
+                    paymentMethod = PaymentMethod.CASH,
+                    date = now - (4 * 3600000L),
+                    paidTo = "مؤسسة المستلزمات البلاستيكية",
+                    notes = "شراء رولات أكياس بقالة ومطهرات أرضيات",
+                    recordedBy = "كاشير 1"
+                )
+            )
+            expenseDao.insertExpense(
+                ExpenseEntity(
+                    expenseNumber = "EXP-2026-0003",
+                    category = "بوفية وضيافة",
+                    amount = 18.0,
+                    paymentMethod = PaymentMethod.CASH,
+                    date = now - (2 * 3600000L),
+                    paidTo = "بوفية الحي",
+                    notes = "شاي وقهوة ضيافة للكاشير والعملاء",
+                    recordedBy = "كاشير 1"
+                )
+            )
+
+            // 10. شفت صندوق سابق تم إغلاقه ومطابقته
+            val cashShiftDao = db.cashShiftDao()
+            cashShiftDao.insertShift(
+                CashShiftEntity(
+                    shiftNumber = "SHF-2026-0001",
+                    cashierName = "كاشير 1",
+                    startTime = now - (24 * 3600000L),
+                    endTime = now - (12 * 3600000L),
+                    openingCash = 200.0,
+                    totalCashSales = 540.0,
+                    totalCashCollections = 100.0,
+                    totalCashExpenses = 63.0,
+                    expectedCashInDrawer = 777.0,
+                    actualPhysicalCash = 777.0,
+                    cashDiscrepancy = 0.0,
+                    status = "CLOSED",
+                    notes = "تم تسليم الشفت الصباحي بنجاح، ومطابقة النقدية تامة بدون عجز أو زيادة."
                 )
             )
         }

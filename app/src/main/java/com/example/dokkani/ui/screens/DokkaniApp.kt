@@ -14,12 +14,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Settings
+import com.example.dokkani.ui.screens.cash.CashAndExpensesScreen
+import com.example.dokkani.ui.screens.credit.CreditLedgerScreen
+import com.example.dokkani.ui.screens.license.LicenseScreen
+import com.example.dokkani.ui.screens.reports.ReportsDashboardScreen
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +72,8 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
     val recentInvoices by viewModel.recentInvoices.collectAsStateWithLifecycle()
     val produceBatches by viewModel.produceBatches.collectAsStateWithLifecycle()
     val settings by viewModel.systemSettings.collectAsStateWithLifecycle()
+    val expenses by viewModel.expenses.collectAsStateWithLifecycle()
+    val cashShifts by viewModel.cashShifts.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -108,6 +121,50 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         }
                     },
                     actions = {
+                        // شارة حالة الترخيص والحماية
+                        val eval = uiState.licenseEvaluation
+                        val badgeColor = when {
+                            eval?.isLocked == true -> Color(0xFFDC3545)
+                            eval?.isLifetime == true -> Color(0xFF198754)
+                            eval?.isNearExpiryWarning == true -> Color(0xFFFD7E14)
+                            else -> Color(0xFF0D6EFD)
+                        }
+                        val badgeText = when {
+                            eval?.isTimeTampered == true -> "تلاعب في الوقت ✕"
+                            eval?.isLocked == true -> "الترخيص مقفل ✕"
+                            eval?.isLifetime == true -> "مرخص دائم ✓"
+                            eval?.status == com.example.dokkani.domain.security.LicenseStatus.SUBSCRIPTION -> "${eval.daysRemaining} يوم متبقي"
+                            else -> "تجربة (${eval?.invoicesRemaining ?: 0})"
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = badgeColor,
+                            onClick = { viewModel.selectTab(8) },
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .testTag("top_license_badge")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (eval?.isLocked == true) Icons.Default.Lock else Icons.Default.VpnKey,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = badgeText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
                         // شارة طريقة التقييم المحاسبي الحالية
                         Surface(
                             shape = RoundedCornerShape(20.dp),
@@ -140,11 +197,15 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                 // شريط التبويبات الرئيسي
                 val tabs = listOf(
                     "نقطة البيع (POS)" to Icons.Default.PointOfSale,
-                    "المخطط وقاعدة البيانات" to Icons.Default.AccountBalance,
+                    "دفتر الشكك والديون" to Icons.Default.MenuBook,
+                    "الخزينة والمصروفات" to Icons.Default.Payments,
+                    "التقارير ولوحة التحكم" to Icons.Default.BarChart,
                     "حاسبة التكلفة (WAC/FIFO)" to Icons.Default.Calculate,
                     "جرد خضار وفوضويات" to Icons.Default.Eco,
                     "طابعة ملصقات الباركود" to Icons.Default.QrCode,
                     "الأصناف والوحدات" to Icons.Default.Inventory2,
+                    "الترخيص وحماية النظام" to Icons.Default.VpnKey,
+                    "المخطط وقاعدة البيانات" to Icons.Default.AccountBalance,
                     "إعدادات النظام" to Icons.Default.Settings
                 )
 
@@ -183,15 +244,45 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                     0 -> com.example.dokkani.ui.screens.pos.PosScreen(
                         viewModel = viewModel
                     )
-                    1 -> SchemaOverviewScreen(
-                        productsWithUnits = productsWithUnits,
-                        settings = settings,
-                        currenciesCount = currencies.size,
-                        partiesCount = parties.size,
-                        invoicesCount = recentInvoices.size,
-                        produceBatchesCount = produceBatches.size
+                    1 -> CreditLedgerScreen(
+                        parties = parties,
+                        uiState = uiState,
+                        onSearchChanged = { viewModel.updateCreditSearchQuery(it) },
+                        onSelectParty = { viewModel.selectPartyForStatement(it) },
+                        onOpenPaymentVoucherDialog = { viewModel.openPaymentVoucherDialog(it) },
+                        onDismissPaymentVoucherDialog = { viewModel.dismissPaymentVoucherDialog() },
+                        onVoucherInputsChanged = { amt, notes, method ->
+                            viewModel.updateVoucherInputs(amt, notes, method)
+                        },
+                        onSubmitPaymentVoucher = { viewModel.submitPaymentVoucher() },
+                        onSendWhatsAppReminder = { ctx, phone, text ->
+                            viewModel.sendWhatsAppDebtReminder(ctx, phone, text)
+                        }
                     )
-                    2 -> CostingEngineScreen(
+                    2 -> CashAndExpensesScreen(
+                        expenses = expenses,
+                        cashShifts = cashShifts,
+                        uiState = uiState,
+                        onSelectSubTab = { viewModel.selectCashSubTab(it) },
+                        onOpenAddExpenseDialog = { viewModel.openAddExpenseDialog() },
+                        onDismissAddExpenseDialog = { viewModel.dismissAddExpenseDialog() },
+                        onExpenseInputsChanged = { cat, amt, to, notes, method ->
+                            viewModel.updateExpenseInputs(cat, amt, to, notes, method)
+                        },
+                        onSubmitExpense = { viewModel.submitExpense() },
+                        onDrawerInputsChanged = { open, phys, notes ->
+                            viewModel.updateDrawerInputs(open, phys, notes)
+                        },
+                        onCalculateDrawerReconciliation = { viewModel.calculateDrawerReconciliation() },
+                        onCloseShiftAndSave = { viewModel.closeShiftAndSave() }
+                    )
+                    3 -> ReportsDashboardScreen(
+                        uiState = uiState,
+                        onSelectSubTab = { viewModel.selectReportSubTab(it) },
+                        onSelectValuationMethod = { viewModel.selectReportValuationMethod(it) },
+                        onRefreshReports = { viewModel.loadAllReports() }
+                    )
+                    4 -> CostingEngineScreen(
                         productsWithUnits = productsWithUnits,
                         selectedProductId = uiState.selectedProductIdForCosting,
                         selectedMethod = uiState.selectedMethodForCosting,
@@ -205,7 +296,7 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         onSaveMethodToSettings = { viewModel.updateSystemCostingMethod(it) },
                         onAddSimulatedPurchaseBatch = { qty, cost -> viewModel.addSimulatedPurchaseBatch(qty, cost) }
                     )
-                    3 -> ProduceQuickInventoryScreen(
+                    5 -> ProduceQuickInventoryScreen(
                         produceAuditSubTab = uiState.produceAuditSubTab,
                         productsWithUnits = productsWithUnits,
                         selectedProduceProductId = uiState.selectedProduceProductIdForAudit,
@@ -238,7 +329,7 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         onCrateInputsChanged = { g, c, e, w, m, d -> viewModel.updateProduceInputs(g, c, e, w, m, d) },
                         onSaveCrateBatch = { viewModel.saveProduceBatchToDatabase() }
                     )
-                    4 -> com.example.dokkani.ui.screens.barcode.BarcodeLabelPrinterScreen(
+                    6 -> com.example.dokkani.ui.screens.barcode.BarcodeLabelPrinterScreen(
                         productsWithUnits = productsWithUnits,
                         selectedProductId = uiState.labelSelectedProductId,
                         selectedUnitId = uiState.labelSelectedUnitId,
@@ -265,11 +356,37 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         onGenerateUniqueBarcode = { viewModel.generateUniqueBarcodeForCurrentUnit() },
                         onPrintLabel = { viewModel.printBarcodeLabel() }
                     )
-                    5 -> ProductsAndUnitsScreen(
+                    7 -> ProductsAndUnitsScreen(
                         productsWithUnits = productsWithUnits,
                         onPrintLabel = { prodId, unitId -> viewModel.openLabelPrinterForProduct(prodId, unitId) }
                     )
-                    6 -> SystemSettingsScreen(
+                    8 -> LicenseScreen(
+                        uiState = uiState,
+                        onSelectPlanForRequest = { viewModel.selectPlanForRequest(it) },
+                        onRefreshChallengeCode = { viewModel.refreshChallengeCode() },
+                        onActivationCodeChanged = { viewModel.updateActivationCodeInput(it) },
+                        onApplyActivationCode = { viewModel.applyActivationCode() },
+                        onToggleDeveloperKeyGen = { viewModel.toggleDeveloperKeyGen() },
+                        onKeyGenRequestInputChanged = { viewModel.updateKeyGenRequestInput(it) },
+                        onKeyGenPlanChanged = { viewModel.updateKeyGenSelectedPlan(it) },
+                        onKeyGenCustomDaysChanged = { viewModel.updateKeyGenCustomDays(it) },
+                        onGenerateKeyGenCode = { viewModel.generateKeyGenCode() },
+                        onApplyGeneratedKeyGenCodeDirectly = { viewModel.applyGeneratedKeyGenCodeDirectly() },
+                        onResetTrialForTesting = { viewModel.resetTrialForTesting() },
+                        onSimulateTimeTamperForTesting = { viewModel.simulateTimeTamperForTesting() },
+                        onClearTimeTamper = { viewModel.clearTimeTamper() },
+                        onCopyToClipboard = { ctx, text, label -> viewModel.copyToClipboard(ctx, text, label) },
+                        onShareViaWhatsApp = { ctx, text -> viewModel.shareViaWhatsApp(ctx, text) }
+                    )
+                    9 -> SchemaOverviewScreen(
+                        productsWithUnits = productsWithUnits,
+                        settings = settings,
+                        currenciesCount = currencies.size,
+                        partiesCount = parties.size,
+                        invoicesCount = recentInvoices.size,
+                        produceBatchesCount = produceBatches.size
+                    )
+                    10 -> SystemSettingsScreen(
                         settings = settings,
                         currencies = currencies,
                         parties = parties,
@@ -278,6 +395,49 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                     )
                 }
             }
+        }
+
+        // نافذة قفل التطبيق الأمني في حال انتهاء الصلاحية أو التلاعب
+        if (uiState.showLicenseLockDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissLicenseLockDialog() },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(32.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "تنبيه: قفل ترخيص دكاني",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        text = uiState.licenseLockDialogMessage.ifBlank {
+                            "النظام مقفل حالياً. يرجى تفعيل أو تجديد الاشتراك لمتابعة إصدار الفواتير."
+                        }
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            viewModel.dismissLicenseLockDialog()
+                            viewModel.selectTab(8)
+                        }
+                    ) {
+                        Text("الذهاب لشاشة الترخيص والتفعيل")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissLicenseLockDialog() }) {
+                        Text("إغلاق")
+                    }
+                }
+            )
         }
     }
 }

@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Search
@@ -107,8 +109,18 @@ fun PosScreen(
         allParties.filter { it.type != com.example.dokkani.data.local.entities.PartyType.SUPPLIER }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val isWideScreen = maxWidth > 650.dp
+    Column(modifier = modifier.fillMaxSize()) {
+        val eval = uiState.licenseEvaluation
+        if (eval != null && (eval.isLocked || eval.isNearExpiryWarning)) {
+            PosLicenseWarningBanner(
+                eval = eval,
+                onNavigateToLicense = { viewModel.selectTab(8) },
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
+
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            val isWideScreen = maxWidth > 650.dp
 
         if (isWideScreen) {
             // شاشات عريضة / أجهزة لوحية (Landscape / Tablet) - تقسيم عمودين
@@ -226,6 +238,7 @@ fun PosScreen(
             }
         }
     }
+}
 
     // ==========================================
     // نوافذ الحوار الخاصة بنقطة البيع والملحقات
@@ -547,6 +560,73 @@ private fun ProductSearchResultCard(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * شريط تحذيري ذكي في شاشة البيع عند اقتراب انتهاء الترخيص أو قفل النظام
+ */
+@Composable
+fun PosLicenseWarningBanner(
+    eval: com.example.dokkani.domain.security.LicenseEvaluationResult,
+    onNavigateToLicense: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isLocked = eval.isLocked
+    val bgColor = if (isLocked) MaterialTheme.colorScheme.errorContainer else Color(0xFFFFF3CD)
+    val contentColor = if (isLocked) MaterialTheme.colorScheme.onErrorContainer else Color(0xFF856404)
+    val icon = if (isLocked) Icons.Default.Lock else Icons.Default.Warning
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onNavigateToLicense() }
+            .testTag("pos_license_warning_banner")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = eval.warningMessageArabic ?: if (isLocked) "النظام مقفل! يلزم التفعيل لمتابعة البيع" else "تنبيه اقتراب موعد تجديد الترخيص",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = contentColor,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Text(
+                    text = "تفعيل الآن",
+                    color = if (isLocked) MaterialTheme.colorScheme.onError else Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
             }
         }
     }

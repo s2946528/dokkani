@@ -37,6 +37,31 @@ interface InvoiceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInvoiceItems(items: List<InvoiceItemEntity>): List<Long>
 
+    @Query("SELECT * FROM invoices WHERE partyId = :partyId ORDER BY date DESC")
+    fun getInvoicesForParty(partyId: Long): Flow<List<InvoiceEntity>>
+
+    @Query("SELECT * FROM invoices WHERE partyId = :partyId ORDER BY date DESC")
+    suspend fun getInvoicesForPartySync(partyId: Long): List<InvoiceEntity>
+
+    @Query("SELECT * FROM invoices WHERE date >= :startTime AND date <= :endTime ORDER BY date DESC")
+    suspend fun getInvoicesByDateRangeSync(startTime: Long, endTime: Long): List<InvoiceEntity>
+
+    @Transaction
+    @Query("SELECT * FROM invoices ORDER BY date DESC")
+    suspend fun getAllInvoicesWithDetailsSync(): List<InvoiceWithDetails>
+
+    @Query("SELECT * FROM invoice_items")
+    suspend fun getAllInvoiceItemsSync(): List<InvoiceItemEntity>
+
     @Query("SELECT COUNT(*) FROM invoices WHERE type = :type")
     suspend fun countInvoicesByType(type: InvoiceType): Int
+
+    @Query("SELECT COUNT(*) FROM invoices")
+    fun getTotalInvoicesCountFlow(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM invoices")
+    suspend fun getTotalInvoicesCountSync(): Int
+
+    @Query("SELECT MAX(date) FROM invoices")
+    suspend fun getLatestInvoiceTimestampSync(): Long?
 }

@@ -26,6 +26,7 @@ enum class PaymentMethod(val labelArabic: String) {
     CASH("نقداً"),
     CREDIT("آجل (على الحساب)"),
     MADA("شبكة / بطاقة"),
+    BANK_TRANSFER("حوالة بنكية"),
     MULTI("متعدد")
 }
 

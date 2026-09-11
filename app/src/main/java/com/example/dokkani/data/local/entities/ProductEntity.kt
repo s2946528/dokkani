@@ -12,7 +12,8 @@ import androidx.room.PrimaryKey
     tableName = "products",
     indices = [
         Index(value = ["code"], unique = true),
-        Index(value = ["category"])
+        Index(value = ["category"]),
+        Index(value = ["expiryDate"])
     ]
 )
 data class ProductEntity(
@@ -24,6 +25,7 @@ data class ProductEntity(
     val category: String,                 // القسم (خضار وفواكه، ألبان، معلبات، مشروبات...)
     val isWeighted: Boolean = false,      // هل يباع بالوزن/الميزان (خضار/فواكه/لحوم) أم بالقطعة
     val minStockAlert: Double = 5.0,      // حد إعادة الطلب للتنبيه بنواقص الرفوف
+    val expiryDate: Long? = null,         // تاريخ انتهاء الصلاحية
     val isActive: Boolean = true,         // حالة نشاط الصنف
     val createdAt: Long = System.currentTimeMillis()
 )

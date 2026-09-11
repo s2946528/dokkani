@@ -83,4 +83,14 @@ class Converters {
     } catch (e: Exception) {
         BatchStatus.DRAFT
     }
+
+    @TypeConverter
+    fun fromLicenseStatus(value: com.example.dokkani.domain.security.LicenseStatus): String = value.name
+
+    @TypeConverter
+    fun toLicenseStatus(value: String): com.example.dokkani.domain.security.LicenseStatus = try {
+        com.example.dokkani.domain.security.LicenseStatus.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.domain.security.LicenseStatus.TRIAL
+    }
 }

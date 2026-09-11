@@ -1,4 +1,6 @@
 package com.example.dokkani.ui.screens
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Person
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -64,7 +66,7 @@ import com.example.dokkani.ui.DokkaniViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DokkaniApp(viewModel: DokkaniViewModel) {
+fun DokkaniApp(viewModel: DokkaniViewModel, currentUserRole: com.example.dokkani.data.local.entities.UserRole = com.example.dokkani.data.local.entities.UserRole.ADMIN, onLogout: () -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val productsWithUnits by viewModel.productsWithUnits.collectAsStateWithLifecycle()
     val currencies by viewModel.currencies.collectAsStateWithLifecycle()
@@ -121,6 +123,9 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         }
                     },
                     actions = {
+                        androidx.compose.material3.IconButton(onClick = onLogout) {
+                            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "تسجيل الخروج", tint = Color.White)
+                        }
                         // شارة حالة الترخيص والحماية
                         val eval = uiState.licenseEvaluation
                         val badgeColor = when {
@@ -206,7 +211,8 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                     "الأصناف والوحدات" to Icons.Default.Inventory2,
                     "الترخيص وحماية النظام" to Icons.Default.VpnKey,
                     "المخطط وقاعدة البيانات" to Icons.Default.AccountBalance,
-                    "إعدادات النظام" to Icons.Default.Settings
+                    "إعدادات النظام" to Icons.Default.Settings,
+                    "إدارة المستخدمين" to Icons.Default.Person
                 )
 
                 ScrollableTabRow(
@@ -240,7 +246,23 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                 }
 
                 // محتوى التبويب المختار
-                when (uiState.selectedTab) {
+                
+                val isCashier = currentUserRole == com.example.dokkani.data.local.entities.UserRole.CASHIER
+                val isInventory = currentUserRole == com.example.dokkani.data.local.entities.UserRole.INVENTORY
+                val isAdmin = currentUserRole == com.example.dokkani.data.local.entities.UserRole.ADMIN
+                
+                val hasAccess = when (uiState.selectedTab) {
+                    0, 1, 2 -> isAdmin || isCashier
+                    4, 5, 6, 7 -> isAdmin || isInventory
+                    else -> isAdmin
+                }
+
+                if (!hasAccess) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        androidx.compose.material3.Text("عذراً، ليس لديك صلاحية للوصول إلى هذه الشاشة.")
+                    }
+                } else when (uiState.selectedTab) {
+
                     0 -> com.example.dokkani.ui.screens.pos.PosScreen(
                         viewModel = viewModel
                     )
@@ -393,6 +415,16 @@ fun DokkaniApp(viewModel: DokkaniViewModel) {
                         invoices = recentInvoices,
                         onUpdateValuationMethod = { viewModel.updateSystemCostingMethod(it) }
                     )
+                    11 -> {
+                        if (currentUserRole == com.example.dokkani.data.local.entities.UserRole.ADMIN) {
+                            val userManagementViewModel: com.example.dokkani.ui.screens.users.UserManagementViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                            com.example.dokkani.ui.screens.users.UserManagementScreen(viewModel = userManagementViewModel)
+                        } else {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                                androidx.compose.material3.Text("عذراً، ليس لديك صلاحية للوصول إلى هذه الشاشة.")
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,6 +1,8 @@
 package com.example.dokkani.data.local
 
 import android.content.Context
+import com.example.dokkani.data.local.entities.UserEntity
+import com.example.dokkani.data.local.dao.UserDao
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -46,6 +48,7 @@ import kotlinx.coroutines.launch
  */
 @Database(
     entities = [
+        UserEntity::class,
         ProductEntity::class,
         ProductUnitEntity::class,
         CurrencyEntity::class,
@@ -78,6 +81,7 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun expenseDao(): ExpenseDao
     abstract fun cashShiftDao(): CashShiftDao
     abstract fun licenseDao(): LicenseDao
+    abstract fun userDao(): UserDao
 
     companion object {
         @Volatile
@@ -117,6 +121,19 @@ abstract class DokkaniDatabase : RoomDatabase() {
         }
 
         private suspend fun populateInitialGroceryData(db: DokkaniDatabase) {
+
+            // 0. Seed Default Admin
+            val userDao = db.userDao()
+            userDao.insertUser(
+                UserEntity(
+                    username = "admin",
+                    fullName = "مدير النظام",
+                    pinCode = "1234",
+                    role = com.example.dokkani.data.local.entities.UserRole.ADMIN,
+                    isActive = true
+                )
+            )
+
             // 1. إعدادات النظام الافتراضية
             val settingsDao = db.systemSettingsDao()
             settingsDao.insertOrUpdateSettings(

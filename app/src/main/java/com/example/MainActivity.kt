@@ -9,12 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.example.dokkani.ui.AppNavigation
 import com.example.dokkani.ui.DokkaniViewModel
-import com.example.dokkani.ui.screens.DokkaniApp
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
-
     private val viewModel: DokkaniViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,14 +25,9 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    DokkaniApp(viewModel = viewModel)
+                    AppNavigation(dokkaniViewModel = viewModel)
                 }
             }
         }
     }
-}
-
-@androidx.compose.runtime.Composable
-fun Greeting(name: String, modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier) {
-    androidx.compose.material3.Text(text = "Hello $name!", modifier = modifier)
 }

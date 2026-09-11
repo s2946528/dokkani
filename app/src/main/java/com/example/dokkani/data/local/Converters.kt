@@ -12,7 +12,19 @@ import com.example.dokkani.data.local.entities.PaymentMethod
 /**
  * محولات الأنواع الخاصة بـ Room لتخزين الـ Enums في جداول SQLite كنصوص
  */
+import com.example.dokkani.data.local.entities.UserRole
+
 class Converters {
+    @TypeConverter
+    fun fromUserRole(value: UserRole): String = value.name
+
+    @TypeConverter
+    fun toUserRole(value: String): UserRole = try {
+        UserRole.valueOf(value)
+    } catch (e: Exception) {
+        UserRole.CASHIER
+    }
+
 
     @TypeConverter
     fun fromPartyType(value: PartyType): String = value.name

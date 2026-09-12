@@ -15,6 +15,9 @@ interface PaymentVoucherDao {
     @Query("SELECT * FROM payment_vouchers ORDER BY date DESC")
     fun getAllVouchers(): Flow<List<PaymentVoucherEntity>>
 
+    @Query("SELECT * FROM payment_vouchers ORDER BY date DESC")
+    suspend fun getAllVouchersSync(): List<PaymentVoucherEntity>
+
     @Query("SELECT * FROM payment_vouchers WHERE partyId = :partyId ORDER BY date DESC")
     fun getVouchersForParty(partyId: Long): Flow<List<PaymentVoucherEntity>>
 

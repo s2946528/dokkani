@@ -20,6 +20,7 @@ import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
+import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.domain.hardware.ReceiptItemData
 import com.example.dokkani.domain.hardware.ReceiptPrintData
 import com.example.dokkani.domain.pos.CartSummary
@@ -55,6 +56,10 @@ data class PosUiState(
     val searchQuery: String = "",
     val selectedCategory: String = "الكل",
 
+    // فحص المخزون والضبط
+    val systemSettings: SystemSettingsEntity? = null,
+    val productStockMap: Map<Long, Double> = emptyMap(),
+
     // الصندوق والشفت الحالي
     val shiftTotalSales: Double = 0.0,
     val cashInDrawer: Double = 0.0,
@@ -69,6 +74,25 @@ data class PosUiState(
     val voucherNotesInput: String = "",
     val isVoucherSubmitting: Boolean = false,
 
+    // ربط المردودات بالفاتورة الأصلية
+    val originalInvoiceForReturn: InvoiceEntity? = null,
+    val returnOriginalInvoiceItems: List<InvoiceItemEntity> = emptyList(),
+    val showSelectInvoiceForReturnDialog: Boolean = false,
+    val invoiceSearchQueryForReturn: String = "",
+    val matchingInvoicesForReturn: List<InvoiceEntity> = emptyList(),
+
+    // تعديل وحذف العمليات لمدير النظام
+    val showEditInvoiceDialog: Boolean = false,
+    val editingInvoice: InvoiceEntity? = null,
+    val editInvoiceNotes: String = "",
+    val editInvoicePaymentMethod: PaymentMethod = PaymentMethod.CASH,
+
+    val showEditVoucherDialog: Boolean = false,
+    val editingVoucherRecord: PosTransactionRecord? = null,
+    val editVoucherAmount: String = "",
+    val editVoucherNotes: String = "",
+    val editVoucherPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+
     // النوافذ والملاحظات
     val isProcessingCheckout: Boolean = false,
     val lastCheckoutResult: PosCheckoutResult? = null,
@@ -79,8 +103,11 @@ data class PosUiState(
     val userFeedbackMessage: String? = null,
     val isError: Boolean = false,
 
-    // سجل العمليات
-    val transactionRecords: List<PosTransactionRecord> = emptyList()
+    // استعراض وتصفية السجل أسفل الشاشة
+    val transactionRecords: List<PosTransactionRecord> = emptyList(),
+    val historySearchQuery: String = "",
+    val historyFilter: String = "ALL",
+    val isBottomHistoryExpanded: Boolean = true
 )
 
 class PosViewModel(application: Application) : AndroidViewModel(application) {
@@ -144,30 +171,34 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // 4. تحديث سجل المعاملات الحديثة
+        // 4. مراقبة إعدادات النظام وسياسة المخزون
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsDao.getSettings().collectLatest { settings ->
+                _uiState.update { it.copy(systemSettings = settings) }
+            }
+        }
+
+        // 5. تحديث سجل المعاملات والكميات المتوفرة بالمخزون
         loadTransactionHistory()
+        refreshStockQuantities()
+    }
+
+    fun refreshStockQuantities() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val products = productDao.getAllProductsSync()
+            val stockMap = mutableMapOf<Long, Double>()
+            products.forEach { p ->
+                stockMap[p.id] = stockMovementDao.getTotalStockQuantity(p.id)
+            }
+            _uiState.update { it.copy(productStockMap = stockMap) }
+        }
     }
 
     fun loadTransactionHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             val invoices = invoiceDao.getAllInvoicesSync()
-            val vouchers = voucherDao.getAllVouchers().let {
-                // استرجاع السندات
-                val list = mutableListOf<PaymentVoucherEntity>()
-                val job = viewModelScope.launch {
-                    it.collectLatest { vList -> list.clear(); list.addAll(vList) }
-                }
-                job.cancel()
-                list
-            }
-            val expenses = expenseDao.getAllExpenses().let {
-                val list = mutableListOf<ExpenseEntity>()
-                val job = viewModelScope.launch {
-                    it.collectLatest { eList -> list.clear(); list.addAll(eList) }
-                }
-                job.cancel()
-                list
-            }
+            val vouchers = voucherDao.getAllVouchersSync()
+            val expenses = expenseDao.getAllExpensesSync()
 
             val records = mutableListOf<PosTransactionRecord>()
 
@@ -425,6 +456,36 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // التحقق من توفر المخزون عند البيع أو مردود الشراء إذا كان البيع بالسالب غير مسموح
+        val allowNegativeStock = state.systemSettings?.enableNegativeStock ?: false
+        if (!allowNegativeStock && (state.activeOperation == PosOperation.SALE || state.activeOperation == PosOperation.PURCHASE_RETURN)) {
+            viewModelScope.launch(Dispatchers.IO) {
+                for (item in state.cartItems) {
+                    if (item.productId > 0) {
+                        val requiredBase = item.quantity * item.conversionFactor
+                        val availableBase = stockMovementDao.getTotalStockQuantity(item.productId)
+                        if (availableBase < requiredBase) {
+                            val availableInUnit = (availableBase / item.conversionFactor).coerceAtLeast(0.0)
+                            _uiState.update {
+                                it.copy(
+                                    userFeedbackMessage = "لا يمكن إتمام البيع: الكمية المتوفرة بالمخزون من الصنف (${item.productName}) هي ${String.format(Locale.US, "%.2f", availableInUnit)} ${item.unitName} فقط، بينما الكمية المطلوبة بالسلة هي ${item.quantity} ${item.unitName}! (يمكن لمدير النظام تفعيل خيار البيع بالسالب من شاشة الضبط).",
+                                    isError = true
+                                )
+                            }
+                            return@launch
+                        }
+                    }
+                }
+                proceedInvoiceCheckout()
+            }
+            return
+        }
+
+        proceedInvoiceCheckout()
+    }
+
+    private fun proceedInvoiceCheckout() {
+        val state = _uiState.value
         _uiState.update { it.copy(isProcessingCheckout = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -453,6 +514,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                     val paid = if (isCredit) 0.0 else state.cartSummary.finalTotal
                     val remaining = if (isCredit) state.cartSummary.finalTotal else 0.0
 
+                    val returnNotePart = state.originalInvoiceForReturn?.let { " - مرتبط بالفاتورة رقم: ${it.invoiceNumber}" } ?: ""
+
                     // 1. إنشاء وحفظ رأس الفاتورة
                     val invoiceId = invoiceDao.insertInvoice(
                         InvoiceEntity(
@@ -471,7 +534,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             remainingAmount = remaining,
                             paymentMethod = state.paymentMethod,
                             status = InvoiceStatus.COMPLETED,
-                            notes = "عملية نقطة البيع (${state.activeOperation.titleArabic})"
+                            notes = "عملية نقطة البيع (${state.activeOperation.titleArabic})$returnNotePart"
                         )
                     )
 
@@ -672,12 +735,15 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             cartSummary = recalculateSummary(emptyList(), 0.0),
                             lastCheckoutResult = result,
                             showReceiptDialog = true,
+                            originalInvoiceForReturn = null,
+                            returnOriginalInvoiceItems = emptyList(),
                             userFeedbackMessage = "تم حفظ الفاتورة بنجاح: $invoiceNumber",
                             isError = false
                         )
                     }
 
                     loadTransactionHistory()
+                    refreshStockQuantities()
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -890,5 +956,330 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+    }
+
+    // --- ربط المردودات بالفواتير الأصلية والبحث برقم الفاتورة ---
+    fun openSelectInvoiceForReturnDialog() {
+        _uiState.update { it.copy(showSelectInvoiceForReturnDialog = true, invoiceSearchQueryForReturn = "") }
+        searchInvoicesForReturn("")
+    }
+
+    fun dismissSelectInvoiceForReturnDialog() {
+        _uiState.update { it.copy(showSelectInvoiceForReturnDialog = false) }
+    }
+
+    fun updateInvoiceSearchQueryForReturn(query: String) {
+        _uiState.update { it.copy(invoiceSearchQueryForReturn = query) }
+        searchInvoicesForReturn(query)
+    }
+
+    fun searchInvoicesForReturn(query: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val targetType = if (_uiState.value.activeOperation == PosOperation.SALE_RETURN) InvoiceType.SALE else InvoiceType.PURCHASE
+            val results = if (query.isBlank()) {
+                invoiceDao.searchInvoicesByType(targetType, "")
+            } else {
+                invoiceDao.searchInvoicesByType(targetType, query.trim())
+            }
+            _uiState.update { it.copy(matchingInvoicesForReturn = results) }
+        }
+    }
+
+    fun selectInvoiceForReturn(invoice: InvoiceEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = invoiceDao.getInvoiceItems(invoice.id)
+            val party = invoice.partyId?.let { partyDao.getPartyById(it) }
+            val products = productDao.getAllProductsSync()
+            val units = productDao.getAllUnitsSync()
+
+            val cartList = mutableListOf<PosCartItem>()
+            items.forEach { invItem ->
+                val prod = products.find { it.id == invItem.productId }
+                val unit = units.find { it.id == invItem.productUnitId }
+                if (prod != null && unit != null) {
+                    cartList.add(
+                        PosCartItem(
+                            cartItemId = UUID.randomUUID().toString(),
+                            productId = prod.id,
+                            productName = prod.name,
+                            productCode = prod.code,
+                            unitId = unit.id,
+                            unitName = unit.unitName,
+                            conversionFactor = invItem.unitConversionFactor,
+                            unitPrice = invItem.unitSellingPrice,
+                            costPrice = invItem.unitCostPrice,
+                            quantity = invItem.quantity,
+                            discount = invItem.discount,
+                            isWeighted = prod.isWeighted
+                        )
+                    )
+                }
+            }
+
+            _uiState.update { state ->
+                val newSummary = recalculateSummary(cartList, invoice.discount)
+                state.copy(
+                    originalInvoiceForReturn = invoice,
+                    returnOriginalInvoiceItems = items,
+                    selectedParty = party,
+                    cartItems = cartList,
+                    cartSummary = newSummary,
+                    paymentMethod = invoice.paymentMethod,
+                    showSelectInvoiceForReturnDialog = false,
+                    userFeedbackMessage = "تم تحميل أصناف الفاتورة (${invoice.invoiceNumber}) بنجاح لإجراء المردود.",
+                    isError = false
+                )
+            }
+        }
+    }
+
+    fun clearOriginalInvoiceForReturn() {
+        _uiState.update {
+            it.copy(
+                originalInvoiceForReturn = null,
+                returnOriginalInvoiceItems = emptyList()
+            )
+        }
+    }
+
+    // --- إمكانية الحذف والتعديل لمدير النظام مع عكس القيود المحاسبية وحركات المخزون ---
+    fun deleteTransactionRecord(record: PosTransactionRecord) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    when (record.operation) {
+                        PosOperation.SALE, PosOperation.PURCHASE, PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> {
+                            val inv = invoiceDao.getInvoiceByInvoiceNumber(record.id)
+                            if (inv != null) {
+                                // 1. حذف حركات المخزون المعلقة بالفاتورة
+                                stockMovementDao.deleteMovementsByReferenceNumber(inv.invoiceNumber)
+
+                                // 2. عكس رصيد العميل أو المورد إذا كانت العملية آجلة
+                                inv.partyId?.let { pId ->
+                                    val party = partyDao.getPartyById(pId)
+                                    if (party != null && inv.paymentMethod == PaymentMethod.CREDIT) {
+                                        val newBal = when (inv.type) {
+                                            InvoiceType.SALE -> party.currentBalance - inv.total
+                                            InvoiceType.PURCHASE -> party.currentBalance + inv.total
+                                            InvoiceType.SALE_RETURN -> party.currentBalance + inv.total
+                                            InvoiceType.PURCHASE_RETURN -> party.currentBalance - inv.total
+                                        }
+                                        partyDao.updateParty(party.copy(currentBalance = newBal))
+                                    }
+                                }
+
+                                // 3. عكس نقدية الصندوق في الشفت المفتوح
+                                if (inv.paymentMethod == PaymentMethod.CASH) {
+                                    val shifts = shiftDao.getAllShiftsSync()
+                                    val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                                    if (currentShift != null) {
+                                        when (inv.type) {
+                                            InvoiceType.SALE -> shiftDao.updateSales(
+                                                currentShift.id,
+                                                (currentShift.totalCashSales - inv.total).coerceAtLeast(0.0)
+                                            )
+                                            InvoiceType.PURCHASE -> shiftDao.updateExpenses(
+                                                currentShift.id,
+                                                (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                                            )
+                                            else -> {}
+                                        }
+                                    }
+                                }
+
+                                // 4. حذف الفاتورة
+                                invoiceDao.deleteInvoice(inv)
+                            }
+                        }
+                        PosOperation.RECEIPT -> {
+                            val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
+                            if (v != null) {
+                                val party = partyDao.getPartyById(v.partyId)
+                                if (party != null) {
+                                    partyDao.updateParty(party.copy(currentBalance = party.currentBalance + v.amount))
+                                }
+                                if (v.paymentMethod == PaymentMethod.CASH) {
+                                    val shifts = shiftDao.getAllShiftsSync()
+                                    val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                                    if (currentShift != null) {
+                                        shiftDao.updateCollections(
+                                            currentShift.id,
+                                            (currentShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
+                                        )
+                                    }
+                                }
+                                voucherDao.deleteVoucher(v)
+                            }
+                        }
+                        PosOperation.EXPENSE -> {
+                            val exp = expenseDao.getAllExpensesSync().find { it.expenseNumber == record.id }
+                            if (exp != null) {
+                                if (exp.paymentMethod == PaymentMethod.CASH) {
+                                    val shifts = shiftDao.getAllShiftsSync()
+                                    val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                                    if (currentShift != null) {
+                                        shiftDao.updateExpenses(
+                                            currentShift.id,
+                                            (currentShift.totalCashExpenses - exp.amount).coerceAtLeast(0.0)
+                                        )
+                                    }
+                                }
+                                expenseDao.deleteExpense(exp)
+                            }
+                        }
+                    }
+                }
+
+                loadTransactionHistory()
+                refreshStockQuantities()
+                _uiState.update {
+                    it.copy(
+                        userFeedbackMessage = "تم حذف العملية (${record.id}) وعكس كافة القيود المحاسبية والمخزنية بنجاح.",
+                        isError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        userFeedbackMessage = "فشل حذف العملية: ${e.localizedMessage}",
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun openEditRecordDialog(record: PosTransactionRecord) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (record.operation.isVoucher) {
+                _uiState.update {
+                    it.copy(
+                        showEditVoucherDialog = true,
+                        editingVoucherRecord = record,
+                        editVoucherAmount = record.amount.toString(),
+                        editVoucherNotes = record.notes,
+                        editVoucherPaymentMethod = record.paymentMethod
+                    )
+                }
+            } else {
+                val inv = invoiceDao.getInvoiceByInvoiceNumber(record.id)
+                if (inv != null) {
+                    _uiState.update {
+                        it.copy(
+                            showEditInvoiceDialog = true,
+                            editingInvoice = inv,
+                            editInvoiceNotes = inv.notes,
+                            editInvoicePaymentMethod = inv.paymentMethod
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun dismissEditDialogs() {
+        _uiState.update {
+            it.copy(
+                showEditInvoiceDialog = false,
+                editingInvoice = null,
+                showEditVoucherDialog = false,
+                editingVoucherRecord = null
+            )
+        }
+    }
+
+    fun saveEditedInvoice(notes: String, paymentMethod: PaymentMethod) {
+        val inv = _uiState.value.editingInvoice ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    val oldMethod = inv.paymentMethod
+                    val updated = inv.copy(notes = notes, paymentMethod = paymentMethod)
+                    invoiceDao.updateInvoice(updated)
+
+                    // إذا تغيرت طريقة الدفع بين آجل ونقدي
+                    if (oldMethod != paymentMethod && inv.partyId != null) {
+                        val party = partyDao.getPartyById(inv.partyId)
+                        if (party != null) {
+                            if (oldMethod == PaymentMethod.CREDIT && paymentMethod != PaymentMethod.CREDIT) {
+                                val newBal = if (inv.type == InvoiceType.SALE) party.currentBalance - inv.total else party.currentBalance + inv.total
+                                partyDao.updateParty(party.copy(currentBalance = newBal))
+                            } else if (oldMethod != PaymentMethod.CREDIT && paymentMethod == PaymentMethod.CREDIT) {
+                                val newBal = if (inv.type == InvoiceType.SALE) party.currentBalance + inv.total else party.currentBalance - inv.total
+                                partyDao.updateParty(party.copy(currentBalance = newBal))
+                            }
+                        }
+                    }
+                }
+                loadTransactionHistory()
+                _uiState.update {
+                    it.copy(
+                        showEditInvoiceDialog = false,
+                        editingInvoice = null,
+                        userFeedbackMessage = "تم تحديث بيانات الفاتورة بنجاح.",
+                        isError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        userFeedbackMessage = "فشل تعديل الفاتورة: ${e.localizedMessage}",
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveEditedVoucher(notes: String, paymentMethod: PaymentMethod) {
+        val record = _uiState.value.editingVoucherRecord ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    if (record.operation == PosOperation.RECEIPT) {
+                        val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
+                        if (v != null) {
+                            val updated = v.copy(notes = notes, paymentMethod = paymentMethod)
+                            voucherDao.updateVoucher(updated)
+                        }
+                    } else if (record.operation == PosOperation.EXPENSE) {
+                        val exp = expenseDao.getAllExpensesSync().find { it.expenseNumber == record.id }
+                        if (exp != null) {
+                            val updated = exp.copy(notes = notes, paymentMethod = paymentMethod)
+                            expenseDao.updateExpense(updated)
+                        }
+                    }
+                }
+                loadTransactionHistory()
+                _uiState.update {
+                    it.copy(
+                        showEditVoucherDialog = false,
+                        editingVoucherRecord = null,
+                        userFeedbackMessage = "تم تحديث بيانات السند بنجاح.",
+                        isError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        userFeedbackMessage = "فشل تعديل السند: ${e.localizedMessage}",
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
+    // --- استعراض وتصفية السجل أسفل الشاشة ---
+    fun setHistorySearchQuery(query: String) {
+        _uiState.update { it.copy(historySearchQuery = query) }
+    }
+
+    fun setHistoryFilter(filter: String) {
+        _uiState.update { it.copy(historyFilter = filter) }
+    }
+
+    fun toggleBottomHistoryExpanded() {
+        _uiState.update { it.copy(isBottomHistoryExpanded = !it.isBottomHistoryExpanded) }
     }
 }

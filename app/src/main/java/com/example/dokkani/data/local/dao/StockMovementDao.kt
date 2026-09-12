@@ -84,4 +84,10 @@ interface StockMovementDao {
 
     @Update
     suspend fun updateMovement(movement: StockMovementEntity)
+
+    @Query("DELETE FROM stock_movements WHERE referenceNumber = :referenceNumber")
+    suspend fun deleteMovementsByReferenceNumber(referenceNumber: String): Int
+
+    @Query("SELECT * FROM stock_movements WHERE referenceNumber = :referenceNumber")
+    suspend fun getMovementsByReferenceNumber(referenceNumber: String): List<StockMovementEntity>
 }

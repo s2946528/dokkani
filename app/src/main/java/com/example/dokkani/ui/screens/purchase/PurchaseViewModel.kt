@@ -80,7 +80,18 @@ data class PurchaseUiState(
     val showSuccessDialog: Boolean = false,
     val showAddSupplierDialog: Boolean = false,
     val feedbackMessage: String? = null,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+
+    // استعراض فواتير الشراء والتعديل والحذف
+    val purchaseInvoices: List<InvoiceEntity> = emptyList(),
+    val invoiceSearchQuery: String = "",
+    val showInvoiceDetailsDialog: Boolean = false,
+    val selectedInvoiceWithDetails: List<InvoiceItemEntity> = emptyList(),
+    val selectedInvoice: InvoiceEntity? = null,
+    val showEditPurchaseDialog: Boolean = false,
+    val editPurchaseNotes: String = "",
+    val editPurchasePaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val isBottomHistoryExpanded: Boolean = true
 ) {
     val subtotal: Double get() = items.sumOf { it.totalCost }
     val taxableAmount: Double get() = (subtotal - discount).coerceAtLeast(0.0)
@@ -119,6 +130,13 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             productDao.getProductsWithUnits().collectLatest { products ->
                 _uiState.update { it.copy(productsWithUnits = products) }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            invoiceDao.getAllInvoices().collectLatest { invoices ->
+                val purchases = invoices.filter { it.type == InvoiceType.PURCHASE || it.type == InvoiceType.PURCHASE_RETURN }
+                _uiState.update { it.copy(purchaseInvoices = purchases) }
             }
         }
     }
@@ -436,5 +454,144 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                 )
             }
         }
+    }
+
+    // --- استعراض فواتير الشراء والتعديل والحذف لمدير النظام ---
+    fun deletePurchaseInvoice(invoiceId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    val inv = invoiceDao.getInvoiceById(invoiceId) ?: return@withTransaction
+
+                    // 1. عكس حركات المخزون
+                    stockMovementDao.deleteMovementsByReferenceNumber(inv.invoiceNumber)
+
+                    // 2. عكس رصيد المورد إذا كانت العملية آجلة
+                    if (inv.partyId != null && inv.paymentMethod == PaymentMethod.CREDIT) {
+                        val party = partyDao.getPartyById(inv.partyId)
+                        if (party != null) {
+                            val newBal = if (inv.type == InvoiceType.PURCHASE) party.currentBalance + inv.total else party.currentBalance - inv.total
+                            partyDao.updateParty(party.copy(currentBalance = newBal))
+                        }
+                    }
+
+                    // 3. عكس نقدية الصندوق للشفت المفتوح إذا كان الدفع نقداً
+                    if (inv.paymentMethod == PaymentMethod.CASH) {
+                        val shifts = shiftDao.getAllShiftsSync()
+                        val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                        if (currentShift != null && inv.type == InvoiceType.PURCHASE) {
+                            val newExp = (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                            shiftDao.updateExpenses(currentShift.id, newExp)
+                        }
+                    }
+
+                    // 4. حذف الفاتورة
+                    invoiceDao.deleteInvoice(inv)
+                }
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "تم حذف فاتورة الشراء وعكس حركات المخزون ورصيد المورد بنجاح.",
+                        isError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "فشل حذف فاتورة الشراء: ${e.localizedMessage}",
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun openInvoiceDetails(invoice: InvoiceEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = invoiceDao.getInvoiceItems(invoice.id)
+            _uiState.update {
+                it.copy(
+                    selectedInvoice = invoice,
+                    selectedInvoiceWithDetails = items,
+                    showInvoiceDetailsDialog = true
+                )
+            }
+        }
+    }
+
+    fun dismissInvoiceDetails() {
+        _uiState.update {
+            it.copy(
+                selectedInvoice = null,
+                selectedInvoiceWithDetails = emptyList(),
+                showInvoiceDetailsDialog = false
+            )
+        }
+    }
+
+    fun openEditPurchaseDialog(invoice: InvoiceEntity) {
+        _uiState.update {
+            it.copy(
+                selectedInvoice = invoice,
+                editPurchaseNotes = invoice.notes,
+                editPurchasePaymentMethod = invoice.paymentMethod,
+                showEditPurchaseDialog = true
+            )
+        }
+    }
+
+    fun dismissEditPurchaseDialog() {
+        _uiState.update {
+            it.copy(
+                selectedInvoice = null,
+                showEditPurchaseDialog = false
+            )
+        }
+    }
+
+    fun saveEditedPurchaseInvoice(notes: String, method: PaymentMethod) {
+        val inv = _uiState.value.selectedInvoice ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    val oldMethod = inv.paymentMethod
+                    val updated = inv.copy(notes = notes, paymentMethod = method)
+                    invoiceDao.updateInvoice(updated)
+
+                    if (oldMethod != method && inv.partyId != null) {
+                        val party = partyDao.getPartyById(inv.partyId)
+                        if (party != null) {
+                            if (oldMethod == PaymentMethod.CREDIT && method != PaymentMethod.CREDIT) {
+                                partyDao.updateParty(party.copy(currentBalance = party.currentBalance + inv.total))
+                            } else if (oldMethod != PaymentMethod.CREDIT && method == PaymentMethod.CREDIT) {
+                                partyDao.updateParty(party.copy(currentBalance = party.currentBalance - inv.total))
+                            }
+                        }
+                    }
+                }
+                _uiState.update {
+                    it.copy(
+                        showEditPurchaseDialog = false,
+                        selectedInvoice = null,
+                        feedbackMessage = "تم حفظ تعديلات فاتورة الشراء بنجاح.",
+                        isError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "فشل تعديل الفاتورة: ${e.localizedMessage}",
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun setInvoiceSearchQuery(query: String) {
+        _uiState.update { it.copy(invoiceSearchQuery = query) }
+    }
+
+    fun toggleBottomHistoryExpanded() {
+        _uiState.update { it.copy(isBottomHistoryExpanded = !it.isBottomHistoryExpanded) }
     }
 }

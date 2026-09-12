@@ -65,4 +65,13 @@ interface InvoiceDao {
 
     @Query("SELECT COUNT(*) FROM invoices WHERE type = 'SALE'")
     suspend fun countSaleInvoices(): Int
+
+    @Query("SELECT * FROM invoices WHERE invoiceNumber = :invoiceNumber LIMIT 1")
+    suspend fun getInvoiceByInvoiceNumber(invoiceNumber: String): InvoiceEntity?
+
+    @Query("SELECT * FROM invoices WHERE invoiceNumber LIKE '%' || :query || '%' ORDER BY date DESC LIMIT 50")
+    suspend fun searchInvoicesByNumber(query: String): List<InvoiceEntity>
+
+    @Query("SELECT * FROM invoices WHERE type = :type AND (invoiceNumber LIKE '%' || :query || '%' OR notes LIKE '%' || :query || '%') ORDER BY date DESC LIMIT 50")
+    suspend fun searchInvoicesByType(type: InvoiceType, query: String): List<InvoiceEntity>
 }

@@ -127,10 +127,10 @@ fun DokkaniApp(
                     val activeTabTitle = allowedTabs.getOrNull(currentTabIndex)?.title ?: ""
                     when (activeTabTitle) {
                         "نقطة البيع" -> {
-                            PosScreen()
+                            PosScreen(currentUserRole = currentUserRole)
                         }
                         "فواتير الشراء" -> {
-                            PurchaseScreen()
+                            PurchaseScreen(currentUserRole = currentUserRole)
                         }
                         "المنتجات والوحدات" -> {
                             ProductsAndUnitsScreen(
@@ -212,6 +212,7 @@ fun DokkaniApp(
                                 parties = uiState.parties,
                                 invoices = uiState.invoices,
                                 currentUserRole = currentUserRole,
+                                onUpdateEnableNegativeStock = viewModel::updateEnableNegativeStock,
                                 onSaveCurrency = viewModel::saveCurrency,
                                 onDeleteCurrency = viewModel::deleteCurrency,
                                 onSaveParty = viewModel::saveParty,

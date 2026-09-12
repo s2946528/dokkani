@@ -7,12 +7,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,6 +48,7 @@ fun SystemSettingsScreen(
     invoices: List<InvoiceEntity> = emptyList(),
     currentUserRole: UserRole = UserRole.ADMIN,
     onUpdateValuationMethod: (CostValuationMethod) -> Unit = {},
+    onUpdateEnableNegativeStock: (Boolean) -> Unit = {},
     onSaveCurrency: (CurrencyEntity) -> Unit = {},
     onDeleteCurrency: (CurrencyEntity) -> Unit = {},
     onSaveParty: (PartyEntity) -> Unit = {},
@@ -141,6 +145,97 @@ fun SystemSettingsScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            // ضبط الرصيد المخزني ومنع البيع بالسالب
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Inventory2,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "التحقق من توفر المخزون عند البيع (Stock Validation)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "تحديد سياسة البيع عند نفاد الكمية أو عدم توفر رصيد بالمخزن",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Switch(
+                                checked = settings?.enableNegativeStock == true,
+                                onCheckedChange = { if (isAdmin) onUpdateEnableNegativeStock(it) },
+                                enabled = isAdmin
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (settings?.enableNegativeStock == true)
+                                Color(0xFFFFF3E0)
+                            else
+                                Color(0xFFE8F5E9),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (settings?.enableNegativeStock == true) Icons.Default.Warning else Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (settings?.enableNegativeStock == true) Color(0xFFE65100) else Color(0xFF2E7D32),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (settings?.enableNegativeStock == true)
+                                        "السماح بالبيع بالسالب مفعل: يمكن للكاشير إتمام الفواتير حتى وإن نفدت الكمية من المخزن (مفيد عند تأخر إدخال فواتير التوريد)."
+                                    else
+                                        "منع البيع بالسالب مفعل (موصى به): سيقوم النظام بفحص كمية المخزون ومنع إتمام الفاتورة إذا كانت الكمية المطلوبة غير متوفرة بالمخزن.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (settings?.enableNegativeStock == true) Color(0xFFE65100) else Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        if (!isAdmin) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "تعديل هذا الخيار متاح فقط لمدير النظام (Admin)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                 }

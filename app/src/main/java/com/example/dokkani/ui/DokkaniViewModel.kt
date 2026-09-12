@@ -3,6 +3,7 @@ package com.example.dokkani.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
@@ -607,20 +608,80 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateEnableNegativeStock(enable: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.systemSettingsDao().updateEnableNegativeStock(enable)
+        }
+    }
+
     fun deleteInvoice(invoiceId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            val inv = db.invoiceDao().getInvoiceById(invoiceId)
-            if (inv != null) {
-                db.invoiceDao().deleteInvoice(inv)
+            db.withTransaction {
+                val inv = db.invoiceDao().getInvoiceById(invoiceId)
+                if (inv != null) {
+                    // 1. التراجع عن حركات المخزون
+                    db.stockMovementDao().deleteMovementsByReferenceNumber(inv.invoiceNumber)
+
+                    // 2. التراجع عن رصيد العميل أو المورد في حال البيع/الشراء الآجل
+                    inv.partyId?.let { pId ->
+                        val party = db.partyDao().getPartyById(pId)
+                        if (party != null && inv.paymentMethod == PaymentMethod.CREDIT) {
+                            val newBalance = when (inv.type) {
+                                InvoiceType.SALE -> party.currentBalance - inv.total
+                                InvoiceType.PURCHASE -> party.currentBalance + inv.total
+                                InvoiceType.SALE_RETURN -> party.currentBalance + inv.total
+                                InvoiceType.PURCHASE_RETURN -> party.currentBalance - inv.total
+                            }
+                            db.partyDao().updateParty(party.copy(currentBalance = newBalance))
+                        }
+                    }
+
+                    // 3. التراجع عن مبيعات الصندوق في الشفت المفتوح إذا كان الدفع نقداً
+                    if (inv.paymentMethod == PaymentMethod.CASH) {
+                        val shifts = db.cashShiftDao().getAllShiftsSync()
+                        val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                        if (currentShift != null) {
+                            when (inv.type) {
+                                InvoiceType.SALE -> {
+                                    val newSales = (currentShift.totalCashSales - inv.total).coerceAtLeast(0.0)
+                                    db.cashShiftDao().updateSales(currentShift.id, newSales)
+                                }
+                                InvoiceType.PURCHASE -> {
+                                    val newExp = (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                                    db.cashShiftDao().updateExpenses(currentShift.id, newExp)
+                                }
+                                else -> {}
+                            }
+                        }
+                    }
+
+                    // 4. حذف الفاتورة وبنودها
+                    db.invoiceDao().deleteInvoice(inv)
+                }
             }
         }
     }
 
     fun deletePaymentVoucher(voucherId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            val v = db.paymentVoucherDao().getVoucherById(voucherId)
-            if (v != null) {
-                db.paymentVoucherDao().deleteVoucher(v)
+            db.withTransaction {
+                val v = db.paymentVoucherDao().getVoucherById(voucherId)
+                if (v != null) {
+                    // التراجع عن رصيد العميل (تم سداد مبلغ، فعند الحذف نعيد المديونية)
+                    val party = db.partyDao().getPartyById(v.partyId)
+                    if (party != null) {
+                        db.partyDao().updateParty(party.copy(currentBalance = party.currentBalance + v.amount))
+                    }
+                    if (v.paymentMethod == PaymentMethod.CASH) {
+                        val shifts = db.cashShiftDao().getAllShiftsSync()
+                        val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                        if (currentShift != null) {
+                            val newCollections = (currentShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
+                            db.cashShiftDao().updateCollections(currentShift.id, newCollections)
+                        }
+                    }
+                    db.paymentVoucherDao().deleteVoucher(v)
+                }
             }
         }
     }

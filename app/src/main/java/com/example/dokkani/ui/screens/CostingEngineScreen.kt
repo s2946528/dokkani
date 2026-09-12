@@ -63,18 +63,18 @@ import java.util.Locale
 
 @Composable
 fun CostingEngineScreen(
-    productsWithUnits: List<ProductWithUnits>,
-    selectedProductId: Long?,
-    selectedMethod: CostValuationMethod,
-    costingResult: CostCalculationResult?,
-    wacResult: CostCalculationResult?,
-    fifoResult: CostCalculationResult?,
-    lppResult: CostCalculationResult?,
-    activeLots: List<StockMovementEntity>,
-    onSelectProduct: (Long) -> Unit,
-    onSelectMethod: (CostValuationMethod) -> Unit,
-    onSaveMethodToSettings: (CostValuationMethod) -> Unit,
-    onAddSimulatedPurchaseBatch: (quantity: Double, unitCost: Double) -> Unit,
+    productsWithUnits: List<ProductWithUnits> = emptyList(),
+    selectedProductId: Long? = null,
+    selectedMethod: CostValuationMethod = CostValuationMethod.WAC,
+    costingResult: CostCalculationResult? = null,
+    wacResult: CostCalculationResult? = null,
+    fifoResult: CostCalculationResult? = null,
+    lppResult: CostCalculationResult? = null,
+    activeLots: List<StockMovementEntity> = emptyList(),
+    onSelectProduct: (Long) -> Unit = {},
+    onSelectMethod: (CostValuationMethod) -> Unit = {},
+    onSaveMethodToSettings: (CostValuationMethod) -> Unit = {},
+    onAddSimulatedPurchaseBatch: (quantity: Double, unitCost: Double) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showAddBatchDialog by remember { mutableStateOf(false) }

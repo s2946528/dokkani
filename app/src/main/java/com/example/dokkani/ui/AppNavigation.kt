@@ -12,6 +12,8 @@ import com.example.dokkani.ui.screens.DokkaniApp
 import com.example.dokkani.ui.screens.users.LoginViewModel
 import com.example.dokkani.ui.screens.users.PinLoginScreen
 
+import com.example.dokkani.ui.screens.SplashScreen
+
 @Composable
 fun AppNavigation(
     dokkaniViewModel: DokkaniViewModel,
@@ -22,8 +24,18 @@ fun AppNavigation(
 
     NavHost(
         navController = navController,
-        startDestination = "login"
+        startDestination = "splash"
     ) {
+        composable("splash") {
+            SplashScreen(
+                onTimeout = {
+                    navController.navigate("login") {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable("login") {
             PinLoginScreen(
                 viewModel = loginViewModel,
@@ -36,24 +48,16 @@ fun AppNavigation(
         }
 
         composable("main") {
-            if (currentUserRole != null) {
-                // Pass currentUserRole to DokkaniApp so it can restrict tabs
-                DokkaniApp(
-                    viewModel = dokkaniViewModel,
-                    currentUserRole = currentUserRole!!,
-                    onLogout = {
-                        loginViewModel.logout()
-                        navController.navigate("login") {
-                            popUpTo("main") { inclusive = true }
-                        }
+            DokkaniApp(
+                viewModel = dokkaniViewModel,
+                currentUserRole = currentUserRole ?: UserRole.ADMIN,
+                onLogout = {
+                    loginViewModel.logout()
+                    navController.navigate("login") {
+                        popUpTo("main") { inclusive = true }
                     }
-                )
-            } else {
-                // Fallback if role is null (e.g. data cleared)
-                navController.navigate("login") {
-                    popUpTo("main") { inclusive = true }
                 }
-            }
+            )
         }
     }
 }

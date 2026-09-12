@@ -88,12 +88,12 @@ fun LicenseScreen(
     onKeyGenPlanChanged: (ActivationPlan) -> Unit,
     onKeyGenCustomDaysChanged: (String) -> Unit,
     onGenerateKeyGenCode: () -> Unit,
-    onApplyGeneratedKeyGenCodeDirectly: () -> Unit,
-    onResetTrialForTesting: () -> Unit,
-    onSimulateTimeTamperForTesting: () -> Unit,
-    onClearTimeTamper: () -> Unit,
-    onCopyToClipboard: (Context, String, String) -> Unit,
-    onShareViaWhatsApp: (Context, String) -> Unit,
+    onApplyGeneratedKeyGenCodeDirectly: () -> Unit = {},
+    onResetTrialForTesting: () -> Unit = {},
+    onSimulateTimeTamperForTesting: () -> Unit = {},
+    onClearTimeTamper: () -> Unit = {},
+    onCopyToClipboard: (Context, String, String) -> Unit = { _, _, _ -> },
+    onShareViaWhatsApp: (Context, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current

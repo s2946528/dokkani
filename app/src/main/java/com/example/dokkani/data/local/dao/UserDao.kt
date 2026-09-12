@@ -14,6 +14,9 @@ interface UserDao {
     @Query("SELECT * FROM users ORDER BY fullName ASC")
     fun getAllUsers(): Flow<List<UserEntity>>
 
+    @Query("SELECT * FROM users ORDER BY fullName ASC")
+    suspend fun getAllUsersList(): List<UserEntity>
+
     @Query("SELECT * FROM users WHERE isActive = 1 ORDER BY fullName ASC")
     fun getActiveUsers(): Flow<List<UserEntity>>
 

@@ -180,6 +180,14 @@ fun PinLoginScreen(
                 ) {
                     Text("دخول", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
+
+                OutlinedButton(
+                    onClick = { viewModel.selectAdminUser() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("اختيار حساب مدير النظام (مطلوب كلمة المرور)", fontSize = 14.sp)
+                }
             }
         }
     }

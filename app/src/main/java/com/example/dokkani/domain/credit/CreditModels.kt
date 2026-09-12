@@ -19,6 +19,7 @@ enum class StatementEntryType(val labelArabic: String) {
  */
 data class StatementItem(
     val id: String,
+    val rawId: Long = 0L,
     val date: Long,
     val dateFormatted: String,
     val type: StatementEntryType,
@@ -67,6 +68,7 @@ object CreditNotebookEngine {
             val creditAmount = if (inv.remainingAmount > 0.001) inv.remainingAmount else inv.total
             rawItems.add(
                 RawMovement(
+                    rawId = inv.id,
                     date = inv.date,
                     type = StatementEntryType.SALE_INVOICE,
                     refNumber = inv.invoiceNumber,
@@ -82,6 +84,7 @@ object CreditNotebookEngine {
         vouchers.filter { it.partyId == party.id }.forEach { vch ->
             rawItems.add(
                 RawMovement(
+                    rawId = vch.id,
                     date = vch.date,
                     type = StatementEntryType.PAYMENT_VOUCHER,
                     refNumber = vch.voucherNumber,
@@ -104,6 +107,7 @@ object CreditNotebookEngine {
             timelineItems.add(
                 StatementItem(
                     id = "${m.refNumber}_${m.date}",
+                    rawId = m.rawId,
                     date = m.date,
                     dateFormatted = dateFormat.format(Date(m.date)),
                     type = m.type,
@@ -163,6 +167,7 @@ object CreditNotebookEngine {
     }
 
     private data class RawMovement(
+        val rawId: Long = 0L,
         val date: Long,
         val type: StatementEntryType,
         val refNumber: String,

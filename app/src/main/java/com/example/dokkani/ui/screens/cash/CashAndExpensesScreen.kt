@@ -72,11 +72,13 @@ fun CashAndExpensesScreen(
     expenses: List<ExpenseEntity>,
     cashShifts: List<CashShiftEntity>,
     uiState: DokkaniUiState,
+    currentUserRole: com.example.dokkani.data.local.entities.UserRole = com.example.dokkani.data.local.entities.UserRole.ADMIN,
     onSelectSubTab: (Int) -> Unit,
     onOpenAddExpenseDialog: () -> Unit,
     onDismissAddExpenseDialog: () -> Unit,
     onExpenseInputsChanged: (String, String, String, String, PaymentMethod) -> Unit,
     onSubmitExpense: () -> Unit,
+    onDeleteExpense: (ExpenseEntity) -> Unit = {},
     onDrawerInputsChanged: (String, String, String) -> Unit,
     onCalculateDrawerReconciliation: () -> Unit,
     onCloseShiftAndSave: () -> Unit

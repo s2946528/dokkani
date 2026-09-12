@@ -6,6 +6,7 @@ import com.example.dokkani.data.local.dao.UserDao
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
@@ -28,6 +29,7 @@ import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceStatus
 import com.example.dokkani.data.local.entities.InvoiceType
+import com.example.dokkani.data.local.entities.LicenseEntity
 import com.example.dokkani.data.local.entities.MixedProduceBatchEntity
 import com.example.dokkani.data.local.entities.MixedProduceYieldItemEntity
 import com.example.dokkani.data.local.entities.MovementType
@@ -62,7 +64,7 @@ import kotlinx.coroutines.launch
         PaymentVoucherEntity::class,
         ExpenseEntity::class,
         CashShiftEntity::class,
-        com.example.dokkani.data.local.entities.LicenseEntity::class
+        LicenseEntity::class
     ],
     version = 2,
     exportSchema = false
@@ -112,9 +114,9 @@ abstract class DokkaniDatabase : RoomDatabase() {
             super.onCreate(db)
             scope.launch(Dispatchers.IO) {
                 provider()?.let { database ->
-                    database.runInTransaction {
-                        // تنفيذ بذر البيانات داخلTransaction
-                        launch { populateInitialGroceryData(database) }
+                    database.withTransaction {
+                        // تنفيذ بذر البيانات داخل Transaction
+                        populateInitialGroceryData(database)
                     }
                 }
             }

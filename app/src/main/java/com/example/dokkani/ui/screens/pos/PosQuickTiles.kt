@@ -110,7 +110,7 @@ fun PosQuickTilesGrid(
             contentPadding = PaddingValues(6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().weight(1f)
         ) {
             items(tiles, key = { it.id }) { tile ->
                 QuickTileCard(
@@ -151,7 +151,7 @@ fun QuickTileCard(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {

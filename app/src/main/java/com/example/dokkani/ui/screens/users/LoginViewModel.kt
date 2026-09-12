@@ -17,6 +17,22 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private val userDao = DokkaniDatabase.getDatabase(application, viewModelScope).userDao()
     private val sessionManager = SessionManager(application)
 
+    init {
+        viewModelScope.launch {
+            val users = userDao.getAllUsersList()
+            if (users.isEmpty()) {
+                val adminUser = UserEntity(
+                    username = "admin",
+                    fullName = "مدير النظام",
+                    pinCode = "1234",
+                    role = com.example.dokkani.data.local.entities.UserRole.ADMIN,
+                    isActive = true
+                )
+                userDao.insertUser(adminUser)
+            }
+        }
+    }
+
     val activeUsers: StateFlow<List<UserEntity>> = userDao.getActiveUsers()
         .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList<UserEntity>())
 
@@ -35,6 +51,18 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         _selectedUser.value = user
         _pinCodeInput.value = ""
         _loginError.value = null
+    }
+
+    fun selectAdminUser() {
+        viewModelScope.launch {
+            val users = userDao.getAllUsersList()
+            val admin = users.firstOrNull { it.role == com.example.dokkani.data.local.entities.UserRole.ADMIN } ?: users.firstOrNull()
+            if (admin != null) {
+                _selectedUser.value = admin
+                _pinCodeInput.value = ""
+                _loginError.value = "تم تحديد حساب مدير النظام. يرجى إدخال رمز PIN (الافتراضي: 1234)"
+            }
+        }
     }
 
     fun enterPinDigit(digit: String) {

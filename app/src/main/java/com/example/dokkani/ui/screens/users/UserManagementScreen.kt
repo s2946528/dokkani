@@ -22,7 +22,7 @@ import com.example.dokkani.data.local.entities.UserRole
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserManagementScreen(viewModel: UserManagementViewModel) {
+fun UserManagementScreen(viewModel: UserManagementViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
     val users by viewModel.allUsers.collectAsState()
     val showDialog by viewModel.showAddEditDialog.collectAsState()
 

@@ -41,7 +41,9 @@ import com.example.dokkani.ui.screens.cash.CashAndExpensesScreen
 import com.example.dokkani.ui.screens.credit.CreditLedgerScreen
 import com.example.dokkani.ui.screens.license.LicenseScreen
 import com.example.dokkani.ui.screens.pos.PosScreen
+import com.example.dokkani.ui.screens.purchase.PurchaseScreen
 import com.example.dokkani.ui.screens.reports.ReportsDashboardScreen
+import androidx.compose.material.icons.filled.ShoppingBag
 import com.example.dokkani.ui.screens.users.UserManagementScreen
 
 data class NavTabItem(
@@ -61,6 +63,7 @@ fun DokkaniApp(
 
     val allTabs = listOf(
         NavTabItem("نقطة البيع", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+        NavTabItem("فواتير الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("المنتجات والوحدات", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("التكلفة والخضار", Icons.Default.Calculate, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
@@ -125,6 +128,9 @@ fun DokkaniApp(
                     when (activeTabTitle) {
                         "نقطة البيع" -> {
                             PosScreen()
+                        }
+                        "فواتير الشراء" -> {
+                            PurchaseScreen()
                         }
                         "المنتجات والوحدات" -> {
                             ProductsAndUnitsScreen(

@@ -101,3 +101,32 @@ data class PosCheckoutResult(
     val receiptData: com.example.dokkani.domain.hardware.ReceiptPrintData,
     val message: String
 )
+
+/**
+ * العمليات المالية والمحاسبية في نقطة البيع
+ */
+enum class PosOperation(val code: String, val titleArabic: String, val isInvoiceType: Boolean) {
+    SALE("SALE", "فاتورة بيع", true),
+    PURCHASE("PURCHASE", "فاتورة شراء", true),
+    SALE_RETURN("SALE_RETURN", "مردود بيع", true),
+    PURCHASE_RETURN("PURCHASE_RETURN", "مردود شراء", true),
+    RECEIPT("RECEIPT", "سند قبض", false),
+    EXPENSE("EXPENSE", "سند صرف", false);
+
+    val isVoucher: Boolean get() = !isInvoiceType
+}
+
+/**
+ * سجل الحركات والعمليات المالية للاستعراض
+ */
+data class PosTransactionRecord(
+    val id: String,
+    val partyName: String,
+    val date: String,
+    val amount: Double,
+    val status: String,
+    val operation: PosOperation,
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val notes: String = ""
+)
+

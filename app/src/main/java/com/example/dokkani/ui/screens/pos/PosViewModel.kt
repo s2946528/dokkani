@@ -62,6 +62,8 @@ data class PosUiState(
     // فحص المخزون والضبط
     val systemSettings: SystemSettingsEntity? = null,
     val productStockMap: Map<Long, Double> = emptyMap(),
+    val currencySymbol: String = "ر.س",
+    val currencyName: String = "الريال السعودي",
 
     // الصندوق والشفت الحالي
     val shiftTotalSales: Double = 0.0,
@@ -128,6 +130,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     private val expenseDao = db.expenseDao()
     private val shiftDao = db.cashShiftDao()
     private val settingsDao = db.systemSettingsDao()
+    private val currencyDao = db.currencyDao()
 
     private val _uiState = MutableStateFlow(PosUiState())
     val uiState: StateFlow<PosUiState> = _uiState.asStateFlow()
@@ -139,6 +142,20 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun observeData() {
+        // 0. مراقبة العملة الأساسية للمتجر وتحديث الرمز تفاعلياً
+        viewModelScope.launch(Dispatchers.IO) {
+            currencyDao.getBaseCurrencyFlow().collectLatest { baseCurrency ->
+                if (baseCurrency != null) {
+                    _uiState.update {
+                        it.copy(
+                            currencySymbol = baseCurrency.symbol,
+                            currencyName = baseCurrency.name
+                        )
+                    }
+                }
+            }
+        }
+
         // 1. مراقبة المنتجات والوحدات
         viewModelScope.launch(Dispatchers.IO) {
             productDao.getProductsWithUnits().collectLatest { products ->

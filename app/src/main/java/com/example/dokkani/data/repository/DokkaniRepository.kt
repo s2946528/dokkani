@@ -23,7 +23,7 @@ class DokkaniRepository @Inject constructor(
     // 2. جلب قائمة كل العملات
     fun getAllCurrencies(): Flow<List<CurrencyEntity>> = currencyDao.getAllCurrencies()
 
-    // 3. التبديل الذري للعملة الأساسية (تعديل ذري يزيل الريال السعودي ويُثبّت العملة الجديدة)
+    // 3. التبديل الذري للعملة الأساسية (يزيل راية الأساسي القديمة ويُثبّت العملة جديدة)
     suspend fun setAsBaseCurrency(selectedCurrency: CurrencyEntity) {
         database.withTransaction {
             // تصفير رايات العملة الأساسية والافتراضية القديمة

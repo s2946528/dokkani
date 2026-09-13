@@ -19,7 +19,7 @@ interface CurrencyDao {
     @Query("SELECT * FROM currencies ORDER BY isBaseCurrency DESC, isDefault DESC, code ASC")
     suspend fun getAllCurrenciesSync(): List<CurrencyEntity>
 
-    // 1. مراقبة التغيرات لحظياً على العملة الأساسية (مهم جداً للواجهات)
+    // مراقبة العملة الأساسية بشكل تفاعلي للحظات التحديث في الواجهات
     @Query("SELECT * FROM currencies WHERE isBaseCurrency = 1 LIMIT 1")
     fun getBaseCurrencyFlow(): Flow<CurrencyEntity?>
 
@@ -32,21 +32,13 @@ interface CurrencyDao {
     @Query("SELECT * FROM currencies WHERE id = :id LIMIT 1")
     suspend fun getCurrencyById(id: Long): CurrencyEntity?
 
-    // 2. تصفير راية العملة الأساسية السابقة لضمان عدم وجود أكثر من عملة أساسية
-    @Query("UPDATE currencies SET isBaseCurrency = 0")
-    suspend fun clearBaseCurrencyFlag()
+    // تصفير راية العملة الأساسية والافتراضية لجميع العملات
+    @Query("UPDATE currencies SET isBaseCurrency = 0, isDefault = 0")
+    suspend fun clearBaseAndDefaultFlags()
 
-    @Query("UPDATE currencies SET isDefault = 0")
-    suspend fun clearDefaultCurrencyFlag()
-
-    // 3. تعيين عملة كعملة أساسية جديدة بشكل آمن (Transaction)
-    @Transaction
-    suspend fun setAsBaseCurrency(currencyId: Long) {
-        clearBaseCurrencyFlag()
-        clearDefaultCurrencyFlag()
-        @Query("UPDATE currencies SET isBaseCurrency = 1, isDefault = 1, exchangeRate = 1.0 WHERE id = :currencyId")
-        // تنفيذ التحديث داخل الـ Repository أو استخدام الاستعلام المنفصل
-    }
+    // تعيين عملة جديدة كعملة أساسية وافتراضية بسعر صرف 1.0 مع إعادة ضبط العملات الأخرى
+    @Query("UPDATE currencies SET isBaseCurrency = 1, isDefault = 1, exchangeRateToBase = 1.0 WHERE id = :currencyId")
+    suspend fun setCurrencyAsBaseById(currencyId: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCurrency(currency: CurrencyEntity): Long

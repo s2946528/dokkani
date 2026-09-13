@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.SessionManager
+import com.example.dokkani.data.repository.DokkaniRepository
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
@@ -85,6 +86,7 @@ data class DokkaniUiState(
     val cashShifts: List<CashShiftEntity> = emptyList(),
     val invoices: List<InvoiceEntity> = emptyList(),
     val currencies: List<CurrencyEntity> = emptyList(),
+    val baseCurrency: CurrencyEntity? = null,
     val settings: SystemSettingsEntity? = null,
 
     // Cash & Expenses
@@ -177,6 +179,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     private val db = DokkaniDatabase.getDatabase(application, viewModelScope)
     private val sessionManager = SessionManager(application)
+    val repository = DokkaniRepository(db)
 
     private val _uiState = MutableStateFlow(DokkaniUiState())
     val uiState: StateFlow<DokkaniUiState> = _uiState.asStateFlow()
@@ -223,6 +226,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.currencyDao().getAllCurrencies().collectLatest { currencies ->
                 _uiState.update { it.copy(currencies = currencies) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.baseCurrencyFlow.collectLatest { baseCurr ->
+                _uiState.update { it.copy(baseCurrency = baseCurr) }
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -713,31 +721,17 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun setAsBaseCurrency(currency: CurrencyEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.setAsBaseCurrency(currency)
+        }
+    }
+
     fun setAsBaseCurrency(currencyId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val allCurrencies = db.currencyDao().getAllCurrenciesSync()
             val targetCurrency = allCurrencies.find { it.id == currencyId } ?: return@launch
-            if (targetCurrency.isBaseCurrency) return@launch
-
-            val oldRate = if (targetCurrency.exchangeRateToBase > 0) targetCurrency.exchangeRateToBase else 1.0
-
-            val updatedCurrencies = allCurrencies.map { curr ->
-                if (curr.id == targetCurrency.id) {
-                    curr.copy(
-                        isBaseCurrency = true,
-                        exchangeRateToBase = 1.0,
-                        isDefault = true
-                    )
-                } else {
-                    val newRate = if (oldRate > 0) curr.exchangeRateToBase / oldRate else curr.exchangeRateToBase
-                    val roundedRate = (kotlin.math.round(newRate * 10000.0) / 10000.0).coerceAtLeast(0.0001)
-                    curr.copy(
-                        isBaseCurrency = false,
-                        exchangeRateToBase = roundedRate
-                    )
-                }
-            }
-            db.currencyDao().insertCurrencies(updatedCurrencies)
+            repository.setAsBaseCurrency(targetCurrency)
         }
     }
 
@@ -833,6 +827,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     // --- معالج التهيئة الأولى والرقابة المحاسبية (Onboarding Wizard) ---
     fun completeOnboarding(
+        selectedBaseCurrency: CurrencyEntity? = null,
         isNewGrocery: Boolean,
         storeName: String,
         cashierName: String,
@@ -845,6 +840,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {
+                // 0. تثبيت العملة الأساسية عبر DokkaniRepository
+                if (selectedBaseCurrency != null) {
+                    repository.setAsBaseCurrency(selectedBaseCurrency)
+                }
+
                 val now = System.currentTimeMillis()
 
                 // 1. تحديث إعدادات النظام

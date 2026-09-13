@@ -51,8 +51,25 @@ fun OnboardingWizardScreen(
     onFinish: () -> Unit
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        val uiState by viewModel.uiState.collectAsState()
+
         var currentStep by remember { mutableIntStateOf(0) }
         var setupMode by remember { mutableStateOf(GrocerySetupMode.NEW_GROCERY) }
+
+        // العملة الأساسية المختارة
+        var selectedBaseCurrency by remember { mutableStateOf<com.example.dokkani.data.local.entities.CurrencyEntity?>(null) }
+
+        // المزامنة التلقائية مع العملة الأساسية من حالة النظام
+        LaunchedEffect(uiState.baseCurrency, uiState.currencies) {
+            if (selectedBaseCurrency == null) {
+                selectedBaseCurrency = uiState.baseCurrency
+                    ?: uiState.currencies.find { it.isBaseCurrency }
+                    ?: uiState.currencies.firstOrNull()
+            }
+        }
+
+        val activeCurrencySymbol = uiState.baseCurrency?.symbol ?: selectedBaseCurrency?.symbol ?: "ر.س"
+        val activeCurrencyName = uiState.baseCurrency?.name ?: selectedBaseCurrency?.name ?: "الريال السعودي"
 
         // بيانات التهيئة
         var storeName by remember { mutableStateOf("تموينات ومخضار السعادة") }
@@ -104,8 +121,12 @@ fun OnboardingWizardScreen(
 
         var isSubmitting by remember { mutableStateOf(false) }
 
-        // عدد الخطوات يعتمد على النمط
-        val totalSteps = if (setupMode == GrocerySetupMode.NEW_GROCERY) 3 else 5
+        // عدد الخطوات يعتمد على النمط (إضافة خطوة اختيار العملة الأساسية كخطوة 0 إجبارية)
+        val totalSteps = if (setupMode == GrocerySetupMode.NEW_GROCERY) 4 else 6
+
+        // التحقق من صحة خطوة العملة
+        val isCurrencyStepValid = uiState.baseCurrency != null || selectedBaseCurrency != null
+        val canProceedNext = if (currentStep == 0) isCurrencyStepValid else true
 
         Scaffold(
             topBar = {
@@ -136,66 +157,96 @@ fun OnboardingWizardScreen(
                     color = Color.White,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(16.dp)
                     ) {
-                        if (currentStep > 0) {
-                            OutlinedButton(
-                                onClick = { currentStep-- },
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("السابق", fontWeight = FontWeight.Bold)
-                            }
-                        } else {
-                            Spacer(modifier = Modifier.width(1.dp))
+                        if (currentStep == 0 && !isCurrencyStepValid) {
+                            Text(
+                                text = "⚠️ يرجى اختيار وتثبيت العملة الأساسية أولاً للمتابعة",
+                                fontSize = 12.sp,
+                                color = Color(0xFFD32F2F),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp),
+                                textAlign = TextAlign.Center
+                            )
                         }
-
-                        if (currentStep < totalSteps - 1) {
-                            Button(
-                                onClick = { currentStep++ },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("التالي", fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (currentStep > 0) {
+                                OutlinedButton(
+                                    onClick = { currentStep-- },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("السابق", fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.width(1.dp))
                             }
-                        } else {
-                            Button(
-                                onClick = {
-                                    if (!isSubmitting) {
-                                        isSubmitting = true
-                                        val openingCashVal = openingCash.toDoubleOrNull() ?: 200.0
-                                        viewModel.completeOnboarding(
-                                            isNewGrocery = setupMode == GrocerySetupMode.NEW_GROCERY,
-                                            storeName = storeName.ifBlank { "تموينات ومخضار السعادة" },
-                                            cashierName = cashierName.ifBlank { "كاشير 1" },
-                                            openingCash = openingCashVal,
-                                            valuationMethod = valuationMethod,
-                                            openingItems = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) openingItems else emptyList(),
-                                            openingCustomers = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) customers else emptyList(),
-                                            openingSuppliers = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) suppliers else emptyList(),
-                                            onCompleted = onFinish
-                                        )
+
+                            if (currentStep < totalSteps - 1) {
+                                Button(
+                                    onClick = {
+                                        if (canProceedNext) {
+                                            if (currentStep == 0 && selectedBaseCurrency != null) {
+                                                viewModel.setAsBaseCurrency(selectedBaseCurrency!!)
+                                            }
+                                            currentStep++
+                                        }
+                                    },
+                                    enabled = canProceedNext,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF1B5E20),
+                                        disabledContainerColor = Color(0xFFA5D6A7)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("التالي", fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        if (!isSubmitting) {
+                                            isSubmitting = true
+                                            val openingCashVal = openingCash.toDoubleOrNull() ?: 200.0
+                                            val finalBaseCurr = uiState.baseCurrency ?: selectedBaseCurrency
+                                            viewModel.completeOnboarding(
+                                                selectedBaseCurrency = finalBaseCurr,
+                                                isNewGrocery = setupMode == GrocerySetupMode.NEW_GROCERY,
+                                                storeName = storeName.ifBlank { "تموينات ومخضار السعادة" },
+                                                cashierName = cashierName.ifBlank { "كاشير 1" },
+                                                openingCash = openingCashVal,
+                                                valuationMethod = valuationMethod,
+                                                openingItems = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) openingItems else emptyList(),
+                                                openingCustomers = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) customers else emptyList(),
+                                                openingSuppliers = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) suppliers else emptyList(),
+                                                onCompleted = onFinish
+                                            )
+                                        }
+                                    },
+                                    enabled = isCurrencyStepValid,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D5324)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    if (isSubmitting) {
+                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("جارِ تهيئة النظام...")
+                                    } else {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("إنهاء التهيئة وبدء العمل", fontWeight = FontWeight.Bold)
                                     }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D5324)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                if (isSubmitting) {
-                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("جارِ تهيئة النظام...")
-                                } else {
-                                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("إنهاء التهيئة وبدء العمل", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -240,11 +291,19 @@ fun OnboardingWizardScreen(
                         label = "WizardStepAnimation"
                     ) { step ->
                         when (step) {
-                            0 -> StepSelectMode(
+                            0 -> StepSelectBaseCurrency(
+                                currencies = uiState.currencies,
+                                selectedCurrency = selectedBaseCurrency ?: uiState.baseCurrency,
+                                onSelectCurrency = { curr ->
+                                    selectedBaseCurrency = curr
+                                    viewModel.setAsBaseCurrency(curr)
+                                }
+                            )
+                            1 -> StepSelectMode(
                                 selectedMode = setupMode,
                                 onSelectMode = { setupMode = it }
                             )
-                            1 -> StepStoreInfo(
+                            2 -> StepStoreInfo(
                                 storeName = storeName,
                                 onStoreNameChange = { storeName = it },
                                 cashierName = cashierName,
@@ -252,15 +311,18 @@ fun OnboardingWizardScreen(
                                 openingCash = openingCash,
                                 onOpeningCashChange = { openingCash = it },
                                 valuationMethod = valuationMethod,
-                                onValuationMethodChange = { valuationMethod = it }
+                                onValuationMethodChange = { valuationMethod = it },
+                                currencySymbol = activeCurrencySymbol
                             )
-                            2 -> {
+                            3 -> {
                                 if (setupMode == GrocerySetupMode.NEW_GROCERY) {
                                     // الخطوة الأخيرة للبقالة الجديدة: مراجعة وملخص
                                     StepNewGrocerySummary(
                                         storeName = storeName,
                                         openingCash = openingCash,
-                                        valuationMethod = valuationMethod
+                                        valuationMethod = valuationMethod,
+                                        currencyName = activeCurrencyName,
+                                        currencySymbol = activeCurrencySymbol
                                     )
                                 } else {
                                     // بضاعة أول المدة للبقالة القائمة
@@ -300,7 +362,7 @@ fun OnboardingWizardScreen(
                                     )
                                 }
                             }
-                            3 -> {
+                            4 -> {
                                 // دفتر ديون العملاء الافتتاحي (للبقالة القائمة)
                                 StepOpeningCustomers(
                                     customers = customers,
@@ -324,7 +386,7 @@ fun OnboardingWizardScreen(
                                     }
                                 )
                             }
-                            4 -> {
+                            5 -> {
                                 // مستحقات الموردين وتأكيد الرقابة (للبقالة القائمة)
                                 StepOpeningSuppliersAndReview(
                                     suppliers = suppliers,
@@ -580,6 +642,152 @@ private fun SetupModeCard(
 }
 
 @Composable
+private fun StepSelectBaseCurrency(
+    currencies: List<com.example.dokkani.data.local.entities.CurrencyEntity>,
+    selectedCurrency: com.example.dokkani.data.local.entities.CurrencyEntity?,
+    onSelectCurrency: (com.example.dokkani.data.local.entities.CurrencyEntity) -> Unit
+) {
+    val defaultCurrencies = listOf(
+        com.example.dokkani.data.local.entities.CurrencyEntity(code = "YER", name = "الريال اليمني", symbol = "ر.ي", exchangeRateToBase = 1.0, isBaseCurrency = true, isDefault = true),
+        com.example.dokkani.data.local.entities.CurrencyEntity(code = "SAR", name = "الريال السعودي", symbol = "ر.س", exchangeRateToBase = 1.0, isBaseCurrency = false, isDefault = false),
+        com.example.dokkani.data.local.entities.CurrencyEntity(code = "USD", name = "الدولار الأمريكي", symbol = "$", exchangeRateToBase = 3.75, isBaseCurrency = false, isDefault = false),
+        com.example.dokkani.data.local.entities.CurrencyEntity(code = "EGP", name = "الجنيه المصري", symbol = "ج.م", exchangeRateToBase = 0.076, isBaseCurrency = false, isDefault = false),
+        com.example.dokkani.data.local.entities.CurrencyEntity(code = "AED", name = "الدرهم الإماراتي", symbol = "د.إ", exchangeRateToBase = 1.02, isBaseCurrency = false, isDefault = false)
+    )
+
+    val displayList = if (currencies.isNotEmpty()) {
+        val existingCodes = currencies.map { it.code }.toSet()
+        val missingDefaults = defaultCurrencies.filter { it.code !in existingCodes }
+        currencies + missingDefaults
+    } else {
+        defaultCurrencies
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(
+                text = "الخطوة الأولى: تحديد العملة الأساسية للمتجر (Base Currency)",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1B5E20)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "اختر العملة الرئيسية المعتمدة لكافة حسابات المتجر والميزانية العمومية والتعاملات المالّية:",
+                fontSize = 13.sp,
+                color = Color(0xFF555555),
+                lineHeight = 19.sp
+            )
+        }
+
+        items(displayList) { curr ->
+            val isSelected = selectedCurrency?.code == curr.code || (selectedCurrency == null && curr.isBaseCurrency)
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSelected) Color(0xFFF1F8E9) else Color.White
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = if (isSelected) 2.dp else 1.dp,
+                    color = if (isSelected) Color(0xFF2E7D32) else Color(0xFFE0E0E0)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelectCurrency(curr) }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) Color(0xFF1B5E20) else Color(0xFFE8F5E9)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = curr.symbol,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else Color(0xFF2E7D32)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = curr.name,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color(0xFF1B5E20) else Color(0xFF212121)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFFE0E0E0)
+                                ) {
+                                    Text(
+                                        text = curr.code,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF424242),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "رمز التعامل: ${curr.symbol} • سعر الصرف الأساسي 1.0",
+                                fontSize = 12.sp,
+                                color = Color(0xFF757575)
+                            )
+                        }
+                    }
+
+                    RadioButton(
+                        selected = isSelected,
+                        onClick = { onSelectCurrency(curr) },
+                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF1B5E20))
+                    )
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFE8F5E9),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA5D6A7)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = Color(0xFF2E7D32))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "عند تثبيت العملة المختارة كعملة أساسية، يتم تصفير أي رايات أساسية سابقة تلقائياً وبشكل حتمي في قاعدة البيانات.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF1B5E20),
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun StepStoreInfo(
     storeName: String,
     onStoreNameChange: (String) -> Unit,
@@ -588,7 +796,8 @@ private fun StepStoreInfo(
     openingCash: String,
     onOpeningCashChange: (String) -> Unit,
     valuationMethod: CostValuationMethod,
-    onValuationMethodChange: (CostValuationMethod) -> Unit
+    onValuationMethodChange: (CostValuationMethod) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -635,7 +844,7 @@ private fun StepStoreInfo(
             OutlinedTextField(
                 value = openingCash,
                 onValueChange = onOpeningCashChange,
-                label = { Text("العهدة الافتتاحية في درج الكاشير (الفكة) - ر.س") },
+                label = { Text("العهدة الافتتاحية في درج الكاشير (الفكة) - $currencySymbol") },
                 leadingIcon = { Icon(Icons.Default.Payments, contentDescription = null, tint = Color(0xFF2E7D32)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth(),
@@ -700,7 +909,9 @@ private fun StepStoreInfo(
 private fun StepNewGrocerySummary(
     storeName: String,
     openingCash: String,
-    valuationMethod: CostValuationMethod
+    valuationMethod: CostValuationMethod,
+    currencyName: String = "الريال السعودي",
+    currencySymbol: String = "ر.س"
 ) {
     Column(
         modifier = Modifier
@@ -729,9 +940,11 @@ private fun StepNewGrocerySummary(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                SummaryRow("العملة الأساسية للنظام:", "$currencyName ($currencySymbol)")
+                Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFFEEEEEE))
                 SummaryRow("اسم المتجر:", storeName)
                 Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFFEEEEEE))
-                SummaryRow("عهدة الدرج الافتتاحية:", "$openingCash ر.س")
+                SummaryRow("عهدة الدرج الافتتاحية:", "$openingCash $currencySymbol")
                 Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFFEEEEEE))
                 SummaryRow("طريقة التقييم المحاسبي:", valuationMethod.labelArabic)
                 Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFFEEEEEE))

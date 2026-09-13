@@ -173,12 +173,22 @@ abstract class DokkaniDatabase : RoomDatabase() {
             )
             currencyDao.insertCurrency(
                 CurrencyEntity(
+                    code = "YER", name = "ريال يمني", symbol = "ر.ي", exchangeRateToBase = 0.007, isBaseCurrency = false, isDefault = false
+                )
+            )
+            currencyDao.insertCurrency(
+                CurrencyEntity(
                     code = "USD", name = "دولار أمريكي", symbol = "$", exchangeRateToBase = 3.75, isBaseCurrency = false, isDefault = false
                 )
             )
             currencyDao.insertCurrency(
                 CurrencyEntity(
                     code = "EGP", name = "جنيه مصري", symbol = "ج.م", exchangeRateToBase = 0.076, isBaseCurrency = false, isDefault = false
+                )
+            )
+            currencyDao.insertCurrency(
+                CurrencyEntity(
+                    code = "AED", name = "درهم إماراتي", symbol = "د.إ", exchangeRateToBase = 1.02, isBaseCurrency = false, isDefault = false
                 )
             )
 

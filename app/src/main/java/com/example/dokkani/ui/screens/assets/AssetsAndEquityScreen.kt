@@ -24,14 +24,13 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Calculate
-import androidx.compose.material.icons.filled.CorporateFare
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.PlusOne
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Store
-import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,7 +59,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -73,6 +71,9 @@ import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.domain.assets.AssetCategories
 import com.example.dokkani.domain.assets.EquityCalculationResult
+import androidx.compose.material.icons.filled.CorporateFare
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.TrendingDown
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -624,145 +625,6 @@ private fun FixedAssetsTabContent(
 }
 
 @Composable
-private fun LeaseholdRightsTabContent(
-    leaseholdRights: List<LeaseholdRightEntity>,
-    dateFormat: SimpleDateFormat,
-    onOpenAddLeaseholdDialog: () -> Unit,
-    onOpenAmortizeLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
-    onOpenSellLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
-    onDeleteLeasehold: (Long) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "سجل نقل القدم والخلو (الأصول غير الملموسة)",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = Color(0xFF1E293B)
-            )
-
-            Button(
-                onClick = onOpenAddLeaseholdDialog,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("إضافة خلو / نقل قدم", fontWeight = FontWeight.Bold)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        if (leaseholdRights.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("لا توجد حقوق نقل قدم أو خلو مسجلة حالياً.", color = Color.Gray)
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(leaseholdRights, key = { it.id }) { item ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = Color(0xFFF3E8FF)
-                                    ) {
-                                        Text(
-                                            text = item.code,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF7C3AED)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = item.name,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = Color(0xFF0F172A)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "التكلفة الأصلية: ${"%.2f".format(item.initialCost)} ر.س | سنوات الإطفاء: ${item.amortizationYears} سنوات",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF64748B)
-                                )
-                                Text(
-                                    text = "تاريخ التسجيل: ${dateFormat.format(Date(item.createdDate))}",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF94A3B8)
-                                )
-                                if (item.notes.isNotEmpty()) {
-                                    Text(
-                                        text = "ملاحظات: ${item.notes}",
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF475569)
-                                    )
-                                }
-                            }
-
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = "${"%.2f".format(item.currentValue)} ر.س",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = Color(0xFF7C3AED)
-                                )
-                                Text(
-                                    text = "إطفاء متراكم: ${"%.2f".format(item.accumulatedAmortization)} ر.س",
-                                    fontSize = 11.sp,
-                                    color = Color.Gray
-                                )
-
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row {
-                                    IconButton(onClick = { onOpenAmortizeLeaseholdDialog(item) }) {
-                                        Icon(Icons.Default.TrendingDown, contentDescription = "إطفاء أصل", tint = Color(0xFFD97706))
-                                    }
-                                    IconButton(onClick = { onOpenSellLeaseholdDialog(item) }) {
-                                        Icon(Icons.Default.Sell, contentDescription = "بيع خلو", tint = Color(0xFF16A34A))
-                                    }
-                                    IconButton(onClick = { onDeleteLeasehold(item.id) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "حذف الخلو", tint = Color(0xFFEF4444))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun OwnerTransactionsTabContent(
     ownerTransactions: List<OwnerTransactionEntity>,
     dateFormat: SimpleDateFormat,
@@ -856,15 +718,17 @@ private fun OwnerTransactionsTabContent(
 
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "التاريخ: ${dateFormat.format(Date(trans.createdDate))} | طريقة السداد: ${trans.paymentMethod.name}",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF64748B)
+                                    text = "التاريخ: ${dateFormat.format(Date(trans.date))} | البيان: ${trans.details}",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF475569)
                                 )
-                                if (trans.details.isNotEmpty()) {
+
+                                if (trans.type == OwnerTransactionType.GOODS_DRAWING && trans.quantity > 0) {
                                     Text(
-                                        text = "التفاصيل: ${trans.details}",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF334155)
+                                        text = "الكمية المسحوبة: ${trans.quantity} بسعر تكلفة الوحدة: ${trans.unitCost} ر.س",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFD97706),
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
@@ -889,8 +753,6 @@ private fun OwnerTransactionsTabContent(
     }
 }
 
-// ------------------- المكونات المساعدة (Helper Components) -------------------
-
 @Composable
 private fun KpiCard(
     modifier: Modifier = Modifier,
@@ -898,27 +760,27 @@ private fun KpiCard(
     value: String,
     subtitle: String,
     color: Color,
-    icon: ImageVector
+    icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = color)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF64748B))
-                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+                Text(title, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(20.dp))
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color)
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(value, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(2.dp))
-            Text(text = subtitle, fontSize = 9.sp, color = Color(0xFF94A3B8))
+            Text(subtitle, color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
         }
     }
 }
@@ -935,18 +797,21 @@ private fun EquationRow(
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, fontSize = 13.sp, color = Color(0xFF475569))
         Text(
-            text = "${if (isPositive) "+" else "-"} ${"%.2f".format(amount)} ر.س",
+            text = label,
             fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isPositive) Color(0xFF16A34A) else Color(0xFFDC2626)
+            color = if (isPositive) Color(0xFF1E293B) else Color(0xFFB91C1C)
+        )
+        Text(
+            text = "${if (isPositive) "+" else "-"}${"%.2f".format(amount)} ر.س",
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = if (isPositive) Color(0xFF15803D) else Color(0xFFB91C1C)
         )
     }
 }
 
-// ------------------- نوافذ الحوار (Dialog Components) -------------------
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddAssetDialog(
     assetCodeInput: String,
@@ -960,53 +825,114 @@ private fun AddAssetDialog(
     onDismiss: () -> Unit,
     onSubmit: () -> Unit
 ) {
+    var categoryExpanded by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("إضافة أصل ثابت جديد") },
+        title = { Text("شراء / تسجيل أصل ثابت جديد", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = assetCodeInput,
-                    onValueChange = { onInputsChanged(it, assetNameInput, assetCategoryInput, assetCostInput, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
-                    label = { Text("كود الأصل (مثلاً AST-001)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = assetNameInput,
                     onValueChange = { onInputsChanged(assetCodeInput, it, assetCategoryInput, assetCostInput, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
-                    label = { Text("اسم الأصل (مثلاً: ثلاجة عرض)") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("اسم الأصل (مثال: ثلاجة ألبان 3 أبواب)*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                OutlinedTextField(
-                    value = assetCategoryInput,
-                    onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, it, assetCostInput, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
-                    label = { Text("التصنيف") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = assetCostInput,
-                    onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, assetCategoryInput, it, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
-                    label = { Text("تكلفة الشراء") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
+
+                ExposedDropdownMenuBox(
+                    expanded = categoryExpanded,
+                    onExpandedChange = { categoryExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = assetCategoryInput,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("تصنيف الأصل الثابت*") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false }
+                    ) {
+                        AssetCategories.ALL.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category) },
+                                onClick = {
+                                    onInputsChanged(assetCodeInput, assetNameInput, category, assetCostInput, assetSupplierInput, assetNotesInput, assetPaymentMethod)
+                                    categoryExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = assetCostInput,
+                        onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, assetCategoryInput, it, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
+                        label = { Text("تكلفة الشراء (ر.س)*") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = assetCodeInput,
+                        onValueChange = { onInputsChanged(it, assetNameInput, assetCategoryInput, assetCostInput, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
+                        label = { Text("كود الأصل (تلقائي)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+
                 OutlinedTextField(
                     value = assetSupplierInput,
                     onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, assetCategoryInput, assetCostInput, it, assetNotesInput, assetPaymentMethod) },
-                    label = { Text("المورد") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("المورد / المصدر") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
+
                 OutlinedTextField(
                     value = assetNotesInput,
                     onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, assetCategoryInput, assetCostInput, assetSupplierInput, it, assetPaymentMethod) },
-                    label = { Text("ملاحظات") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("ملاحظات / الضمان والبيانات") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
                 )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF0FDF4),
+                    border = BorderStroke(1.dp, Color(0xFFBBF7D0))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "تنويه محاسبي: توجيه الشراء إلى حساب الأصول (CapEx) مباشرة ودون التأثير على مصروفات التشغيل الأرباح.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF15803D)
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onSubmit) {
-                Text("حفظ الأصل")
+            Button(
+                onClick = onSubmit,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+            ) {
+                Text("حفظ الأصل الثابت")
             }
         },
         dismissButton = {
@@ -1017,6 +943,7 @@ private fun AddAssetDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddOwnerTransactionDialog(
     type: OwnerTransactionType,
@@ -1030,39 +957,91 @@ private fun AddOwnerTransactionDialog(
     onDismiss: () -> Unit,
     onSubmit: () -> Unit
 ) {
+    var productExpanded by remember { mutableStateOf(false) }
+    val selectedProduct = products.find { it.product.id == productIdInput }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(type.labelArabic) },
+        title = { Text(type.labelArabic, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 if (type == OwnerTransactionType.GOODS_DRAWING) {
-                    Text("سحب بضاعة يتم بسعر التكلفة لتحديد المسحوبات بدقة.", fontSize = 12.sp, color = Color.Gray)
+                    ExposedDropdownMenuBox(
+                        expanded = productExpanded,
+                        onExpandedChange = { productExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedProduct?.product?.name ?: "اختر المنتج المسحوب...",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("المنتج المسحوب بسعر التكلفة*") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = productExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = productExpanded,
+                            onDismissRequest = { productExpanded = false }
+                        ) {
+                            products.forEach { pwu ->
+                                DropdownMenuItem(
+                                    text = {
+                                        val baseCost = pwu.units.firstOrNull { it.isBaseUnit }?.costPrice ?: 0.0
+                                        Text("${pwu.product.name} (التكلفة: $baseCost ر.س)")
+                                    },
+                                    onClick = {
+                                        onInputsChanged(type, amountInput, pwu.product.id, quantityInput, detailsInput, paymentMethodInput)
+                                        productExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = quantityInput,
                         onValueChange = { onInputsChanged(type, amountInput, productIdInput, it, detailsInput, paymentMethodInput) },
-                        label = { Text("الكمية المسحوبة") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
+                        label = { Text("الكمية المسحوبة بالوحدة الأساسية*") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = amountInput,
+                        onValueChange = { onInputsChanged(type, it, productIdInput, quantityInput, detailsInput, paymentMethodInput) },
+                        label = { Text("المبلغ النقدي (ر.س)*") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
                 }
-                OutlinedTextField(
-                    value = amountInput,
-                    onValueChange = { onInputsChanged(type, it, productIdInput, quantityInput, detailsInput, paymentMethodInput) },
-                    label = { Text("المبلغ الإجمالي") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
+
                 OutlinedTextField(
                     value = detailsInput,
                     onValueChange = { onInputsChanged(type, amountInput, productIdInput, quantityInput, it, paymentMethodInput) },
-                    label = { Text("التفاصيل / السبب") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("البيان والملاحظات") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
                 )
             }
         },
         confirmButton = {
-            Button(onClick = onSubmit) {
-                Text("حفظ الحركة")
+            Button(
+                onClick = onSubmit,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = when (type) {
+                        OwnerTransactionType.CASH_DRAWING -> Color(0xFFDC2626)
+                        OwnerTransactionType.GOODS_DRAWING -> Color(0xFFD97706)
+                        OwnerTransactionType.CAPITAL_DEPOSIT -> Color(0xFF16A34A)
+                    }
+                )
+            ) {
+                Text("اعتماد الحركة")
             }
         },
         dismissButton = {
@@ -1071,6 +1050,193 @@ private fun AddOwnerTransactionDialog(
             }
         }
     )
+}
+
+@Composable
+private fun LeaseholdRightsTabContent(
+    leaseholdRights: List<LeaseholdRightEntity>,
+    dateFormat: SimpleDateFormat,
+    onOpenAddLeaseholdDialog: () -> Unit,
+    onOpenAmortizeLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
+    onOpenSellLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
+    onDeleteLeasehold: (Long) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "المعالجة المحاسبية لنقل القدم / الخلو (Goodwill & Leasehold Rights)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = Color(0xFF1E293B)
+                )
+                Text(
+                    text = "تسجيل أصل الخلو التأسيسي غير الملموس، الإطفاء الدوري على الأرباح، وإعادة البيع أو التنازل",
+                    fontSize = 11.sp,
+                    color = Color(0xFF64748B)
+                )
+            }
+
+            Button(
+                onClick = onOpenAddLeaseholdDialog,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("إضافة سند خلو / نقل قدم", fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (leaseholdRights.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("لا توجد حقوق خلو/نقل قدم مسجلة حالياً.", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(leaseholdRights, key = { it.id }) { item ->
+                    val statusColor = when (item.status) {
+                        "ACTIVE" -> Color(0xFF16A34A)
+                        "FULLY_AMORTIZED" -> Color(0xFF64748B)
+                        "SOLD_TRANSFERRED" -> Color(0xFFD97706)
+                        else -> Color(0xFF16A34A)
+                    }
+
+                    val statusText = when (item.status) {
+                        "ACTIVE" -> "نشط (قائم)"
+                        "FULLY_AMORTIZED" -> "مُطفأ بالكامل"
+                        "SOLD_TRANSFERRED" -> "مُباع / مُتنازل عنه"
+                        else -> item.status
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFFF3E8FF)
+                                    ) {
+                                        Text(
+                                            text = item.code,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF7C3AED)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = item.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color(0xFF0F172A)
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = statusColor.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = statusText,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = statusColor
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(color = Color(0xFFF1F5F9))
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("التكلفة الافتتاحية الأصلي: ${"%.2f".format(item.initialCost)} ر.س", fontSize = 12.sp, color = Color(0xFF475569))
+                                    Text("مجمع الإطفاء المتراكم: ${"%.2f".format(item.accumulatedAmortization)} ر.س", fontSize = 12.sp, color = Color(0xFFB91C1C))
+                                    Text("مدة عقد الإيجار: ${item.contractDurationYears} سنوات", fontSize = 12.sp, color = Color(0xFF475569))
+                                    if (item.notes.isNotEmpty()) {
+                                        Text("ملاحظات: ${item.notes}", fontSize = 11.sp, color = Color(0xFF64748B))
+                                    }
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("القيمة الدفترية الحالية:", fontSize = 10.sp, color = Color.Gray)
+                                    Text(
+                                        text = "${"%.2f".format(item.currentBookValue)} ر.س",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = Color(0xFF7C3AED)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (item.status == "ACTIVE") {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { onOpenAmortizeLeaseholdDialog(item) },
+                                        modifier = Modifier.padding(end = 6.dp)
+                                    ) {
+                                        Icon(Icons.Default.TrendingDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("إطفاء دوري (Amortization)", fontSize = 11.sp)
+                                    }
+
+                                    Button(
+                                        onClick = { onOpenSellLeaseholdDialog(item) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                                    ) {
+                                        Icon(Icons.Default.Sell, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("إعادة بيع / تنازل", fontSize = 11.sp)
+                                    }
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+
+                                    IconButton(onClick = { onDeleteLeasehold(item.id) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "حذف الخلو", tint = Color(0xFFEF4444))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1086,46 +1252,82 @@ private fun AddLeaseholdDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("إضافة خلو / نقل قدم جديد") },
+        title = { Text("إضافة سند نقل قدم / خلو محل جديد", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { onInputsChanged(it, name, cost, years, notes) },
-                    label = { Text("الكود (مثلاً LSH-001)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { onInputsChanged(code, it, cost, years, notes) },
-                    label = { Text("الاسم / البيان") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("اسم الموقع / الخلو (مثال: خلو موقع فرع الشارع العام)*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = cost,
+                        onValueChange = { onInputsChanged(code, name, it, years, notes) },
+                        label = { Text("مبلغ الخلو المدفوع (ر.س)*") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = years,
+                        onValueChange = { onInputsChanged(code, name, cost, it, notes) },
+                        label = { Text("مدة العقد (سنوات)*") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+
                 OutlinedTextField(
-                    value = cost,
-                    onValueChange = { onInputsChanged(code, name, it, years, notes) },
-                    label = { Text("التكلفة المدفوعة (الخلو)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    value = code,
+                    onValueChange = { onInputsChanged(it, name, cost, years, notes) },
+                    label = { Text("كود الأصل (تلقائي)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                OutlinedTextField(
-                    value = years,
-                    onValueChange = { onInputsChanged(code, name, cost, it, notes) },
-                    label = { Text("عدد سنوات الإطفاء") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
+
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { onInputsChanged(code, name, cost, years, it) },
-                    label = { Text("ملاحظات") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("ملاحظات / بيانات المؤجر ورقم العقد") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
                 )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF3E8FF),
+                    border = BorderStroke(1.dp, Color(0xFFDDD6FE))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF7C3AED), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "يتم إدراج المبلغ ضمن إجمالي أصول التأسيس لبناء رأس المال الافتتاحي المحسوب بدقة.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF6D28D9)
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onSubmit) {
-                Text("حفظ الخلو")
+            Button(
+                onClick = onSubmit,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+            ) {
+                Text("اعتماد وإضافة الخلو")
             }
         },
         dismissButton = {
@@ -1146,22 +1348,58 @@ private fun AmortizeLeaseholdDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تسجيل إطفاء خلو المحل (${item.name})") },
+        title = { Text("تسجيل قسط إطفاء دوري لخلو المحل", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("القيمة الحالية: ${"%.2f".format(item.currentValue)} ر.س", fontSize = 13.sp)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "اسم الخلو: ${item.name} (${item.code})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = "القيمة الدفترية الحالية: ${"%.2f".format(item.currentBookValue)} ر.س",
+                    fontSize = 12.sp,
+                    color = Color(0xFF64748B)
+                )
+
                 OutlinedTextField(
                     value = amortizeAmountInput,
                     onValueChange = onAmortizeAmountChanged,
-                    label = { Text("مبلغ الإطفاء") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("قسط الإطفاء المراد خصمه (ر.س)*") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFEFF6FF),
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "سيتم ترحيل هذا القسط تلقائياً كمصروف تشغيلي (إطفاء أصول) لحساب الأرباح والخسائر بتوازن.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF1D4ED8)
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onSubmit) {
-                Text("إثبات الإطفاء")
+            Button(
+                onClick = onSubmit,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            ) {
+                Text("ترحيل الإطفاء كمصروف")
             }
         },
         dismissButton = {
@@ -1172,6 +1410,7 @@ private fun AmortizeLeaseholdDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SellLeaseholdDialog(
     item: LeaseholdRightEntity,
@@ -1181,24 +1420,115 @@ private fun SellLeaseholdDialog(
     onDismiss: () -> Unit,
     onSubmit: () -> Unit
 ) {
+    var paymentExpanded by remember { mutableStateOf(false) }
+    val sellPrice = sellPriceInput.toDoubleOrNull() ?: 0.0
+    val currentBook = item.currentBookValue
+    val gainOrLoss = sellPrice - currentBook
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("بيع / التنازل عن الخلو (${item.name})") },
+        title = { Text("إعادة بيع / التنازل عن خلو المحل", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("القيمة الدفترية المسجلة: ${"%.2f".format(item.currentValue)} ر.س", fontSize = 13.sp)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "اسم الخلو: ${item.name} (${item.code})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = "القيمة الدفترية المتبقية: ${"%.2f".format(currentBook)} ر.س",
+                    fontSize = 12.sp,
+                    color = Color(0xFF64748B)
+                )
+
                 OutlinedTextField(
                     value = sellPriceInput,
                     onValueChange = { onInputsChanged(it, paymentMethod) },
-                    label = { Text("سعر البيع المقبوض") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("سعر البيع / قيمة التنازل المتفق عليها (ر.س)*") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
+
+                ExposedDropdownMenuBox(
+                    expanded = paymentExpanded,
+                    onExpandedChange = { paymentExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = when (paymentMethod) {
+                            PaymentMethod.CASH -> "نقدية الخزينة"
+                            PaymentMethod.BANK_TRANSFER -> "تحويل بنكي"
+                            PaymentMethod.MADA -> "بطاقة مدى"
+                            PaymentMethod.CREDIT -> "آجل / مستحقات"
+                            else -> "متعدد / آخر"
+                        },
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("طريقة تحصيل قيمة التنازل*") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = paymentExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = paymentExpanded,
+                        onDismissRequest = { paymentExpanded = false }
+                    ) {
+                        PaymentMethod.entries.forEach { pm ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        when (pm) {
+                                            PaymentMethod.CASH -> "نقدية الخزينة"
+                                            PaymentMethod.BANK_TRANSFER -> "تحويل بنكي"
+                                            PaymentMethod.MADA -> "بطاقة مدى"
+                                            PaymentMethod.CREDIT -> "آجل / مستحقات"
+                                            else -> "متعدد / آخر"
+                                        }
+                                    )
+                                },
+                                onClick = {
+                                    onInputsChanged(sellPriceInput, pm)
+                                    paymentExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (gainOrLoss >= 0) Color(0xFFF0FDF4) else Color(0xFFFEF2F2),
+                    border = BorderStroke(1.dp, if (gainOrLoss >= 0) Color(0xFFBBF7D0) else Color(0xFFFECACA))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = if (gainOrLoss >= 0)
+                                "النتيجة: ربح رأسمالي قدره ${"%.2f".format(gainOrLoss)} ر.س"
+                            else
+                                "النتيجة: خسارة رأسمالية قدرها ${"%.2f".format(kotlin.math.abs(gainOrLoss))} ر.س",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = if (gainOrLoss >= 0) Color(0xFF15803D) else Color(0xFFB91C1C)
+                        )
+                        Text(
+                            text = "سيتم تسجيل حصيلة البيع بسند قبض وتعديل حالة الأصل غير الملموس تلقائياً.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF475569)
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onSubmit) {
-                Text("تأكيد البيع")
+            Button(
+                onClick = onSubmit,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+            ) {
+                Text("إتمام التنازل وتسجيل القبض")
             }
         },
         dismissButton = {

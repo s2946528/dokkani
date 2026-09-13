@@ -5,16 +5,13 @@ import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.dao.CurrencyDao
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import kotlinx.coroutines.flow.Flow
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * المستودع الرئيسي لإدارة البيانات في نظام دكاني
  */
-@Singleton
-class DokkaniRepository @Inject constructor(
+class DokkaniRepository(
     private val database: DokkaniDatabase,
-    private val currencyDao: CurrencyDao
+    private val currencyDao: CurrencyDao = database.currencyDao()
 ) {
 
     // 1. مراقبة العملة الأساسية تفاعلياً لجميع شاشات النظام

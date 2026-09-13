@@ -77,57 +77,83 @@ fun PosScreen(
                     .padding(8.dp)
             ) {
                 // 1. كرت إجمالي مبيعات الشفت وحالة صندوق الكاشير
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text("إجمالي مبيعات الشفت", color = Color(0xFFC8E6C9), fontSize = 11.sp)
-                                Text("%.2f ر.س".format(uiState.shiftTotalSales), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(modifier = Modifier.width(24.dp))
-                            Column {
-                                Text("النقدية الحالية بالدرج", color = Color(0xFFC8E6C9), fontSize = 11.sp)
-                                Text("%.2f ر.س".format(uiState.cashInDrawer), color = Color(0xFFFFD54F), fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
+              Card(
+    modifier = Modifier
+        .fillMaxWidth()
+        .padding(bottom = 8.dp),
+    colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // السطر الأول: إحصائيات الشفت مع رمز العملة الديناميكي
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("إجمالي مبيعات الشفت", color = Color(0xFFC8E6C9), fontSize = 11.sp)
+                Text(
+                    text = "%.2f ${uiState.currencySymbol}".trim(),
+                    formatArgs = arrayOf(uiState.shiftTotalSales),
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Column {
+                Text("النقدية الحالية بالدرج", color = Color(0xFFC8E6C9), fontSize = 11.sp)
+                Text(
+                    text = "%.2f ${uiState.currencySymbol}".trim(),
+                    formatArgs = arrayOf(uiState.cashInDrawer),
+                    color = Color(0xFFFFD54F),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Button(
-                                onClick = { viewModel.openShiftCloseDialog() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("إغلاق ومطابقة الشفت", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = { viewModel.toggleHistoryDialog(true) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("سجل العمليات", color = Color.White, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
+        // السطر الثاني: الأزرار في سطر منفصل
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = { viewModel.openShiftCloseDialog() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("إغلاق ومطابقة الشفت", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Button(
+                onClick = { viewModel.toggleHistoryDialog(true) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("سجل العمليات", color = Color.White, fontSize = 12.sp)
+            }
+        }
+    }
+}
+                
+                
+                
 
                 // 2. شريط العمليات الست والتبديل السريع
                 LazyRow(

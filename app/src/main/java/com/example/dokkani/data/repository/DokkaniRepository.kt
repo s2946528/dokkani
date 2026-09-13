@@ -23,13 +23,13 @@ class DokkaniRepository @Inject constructor(
     // 2. جلب قائمة كل العملات
     fun getAllCurrencies(): Flow<List<CurrencyEntity>> = currencyDao.getAllCurrencies()
 
-    // 3. التبديل الذري للعملة الأساسية (يزيل راية الأساسي القديمة ويُثبّت العملة جديدة)
+    // 3. التبديل الذري للعملة الأساسية (يزيل راية الأساسي القديمة ويُثبّت العملة الجديدة)
     suspend fun setAsBaseCurrency(selectedCurrency: CurrencyEntity) {
         database.withTransaction {
             // تصفير رايات العملة الأساسية والافتراضية القديمة
             currencyDao.clearBaseAndDefaultFlags()
 
-            // إعداد الكيان الجديد (مثلاً الريال اليمني YER) برقم صرف 1.0 وراية الأساسي
+            // إعداد الكيان الجديد برقم صرف 1.0 وراية الأساسي
             val updatedCurrency = selectedCurrency.copy(
                 isBaseCurrency = true,
                 isDefault = true,

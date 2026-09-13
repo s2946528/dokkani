@@ -19,6 +19,17 @@ class SessionManager(private val context: Context) {
         val CURRENT_USER_ID = intPreferencesKey("current_user_id")
         val CURRENT_USER_ROLE = stringPreferencesKey("current_user_role")
         val CURRENT_USER_FULL_NAME = stringPreferencesKey("current_user_full_name")
+        val ONBOARDING_COMPLETED = androidx.datastore.preferences.core.booleanPreferencesKey("onboarding_completed")
+    }
+
+    val isOnboardingCompleted: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[ONBOARDING_COMPLETED] ?: false
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean = true) {
+        context.dataStore.edit { preferences ->
+            preferences[ONBOARDING_COMPLETED] = completed
+        }
     }
 
     val currentUserId: Flow<Int?> = context.dataStore.data.map { preferences ->

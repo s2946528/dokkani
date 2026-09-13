@@ -37,6 +37,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList<UserEntity>())
 
     val currentUserRole = sessionManager.currentUserRole.stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = null)
+    val isOnboardingCompleted = sessionManager.isOnboardingCompleted.stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = false)
 
     private val _selectedUser = MutableStateFlow<UserEntity?>(null)
     val selectedUser: StateFlow<UserEntity?> = _selectedUser.asStateFlow()

@@ -14,6 +14,9 @@ interface StockMovementDao {
     @Query("SELECT * FROM stock_movements WHERE productId = :productId ORDER BY timestamp DESC")
     fun getMovementsForProduct(productId: Long): Flow<List<StockMovementEntity>>
 
+    @Query("SELECT * FROM stock_movements ORDER BY timestamp DESC")
+    fun getAllMovements(): Flow<List<StockMovementEntity>>
+
     @Query("SELECT * FROM stock_movements WHERE productId = :productId ORDER BY timestamp DESC")
     suspend fun getMovementsForProductSync(productId: Long): List<StockMovementEntity>
 

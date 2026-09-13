@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,6 +52,7 @@ fun SystemSettingsScreen(
     onUpdateValuationMethod: (CostValuationMethod) -> Unit = {},
     onUpdateEnableNegativeStock: (Boolean) -> Unit = {},
     onSaveCurrency: (CurrencyEntity) -> Unit = {},
+    onSetBaseCurrency: (Long) -> Unit = {},
     onDeleteCurrency: (CurrencyEntity) -> Unit = {},
     onSaveParty: (PartyEntity) -> Unit = {},
     onDeleteParty: (PartyEntity) -> Unit = {},
@@ -62,6 +65,7 @@ fun SystemSettingsScreen(
     var showAddCurrencyDialog by remember { mutableStateOf(false) }
     var editingCurrency by remember { mutableStateOf<CurrencyEntity?>(null) }
     var deletingCurrency by remember { mutableStateOf<CurrencyEntity?>(null) }
+    var settingBaseCurrencyConfirm by remember { mutableStateOf<CurrencyEntity?>(null) }
 
     var showAddPartyDialog by remember { mutableStateOf(false) }
     var editingParty by remember { mutableStateOf<PartyEntity?>(null) }
@@ -243,6 +247,8 @@ fun SystemSettingsScreen(
 
             // جدول العملات وأسعار الصرف
             item {
+                val baseCurr = currencies.find { it.isBaseCurrency } ?: currencies.firstOrNull()
+
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -264,7 +270,7 @@ fun SystemSettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "جدول العملات وأسعار الصرف (Currencies):",
+                                    text = "إدارة العملات والعملة الأساسية (Currencies):",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -284,15 +290,51 @@ fun SystemSettingsScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        // بطاقة إرشادات العملة الأساسية الحالية
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFE8F5E9),
+                            border = BorderStroke(1.dp, Color(0xFFA5D6A7)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "العملة الأساسية للنظام: ${baseCurr?.name ?: "غير محددة"} (${baseCurr?.symbol ?: ""})",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1B5E20)
+                                    )
+                                    Text(
+                                        text = "تقاس القوائم المالية، الأصول، ورأس المال بالعملة الأساسية. يمكنك تغيير العملة الأساسية في أي وقت من القائمة أدناه.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF2E7D32)
+                                    )
+                                }
+                            }
+                        }
+
                         for (curr in currencies) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
+                                    .padding(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "${curr.name} (${curr.code})",
                                         style = MaterialTheme.typography.bodySmall,
@@ -304,11 +346,42 @@ fun SystemSettingsScreen(
                                             shape = RoundedCornerShape(4.dp),
                                             color = Color(0xFF0F5132)
                                         ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(2.dp))
+                                                Text(
+                                                    text = "الأساسية (1.0)",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color.White
+                                                )
+                                            }
+                                        }
+                                    } else if (isAdmin) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        OutlinedButton(
+                                            onClick = { settingBaseCurrencyConfirm = curr },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.height(26.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Star,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "الأساسية",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.White,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                text = "جعلها الأساسية",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
                                             )
                                         }
                                     }
@@ -316,7 +389,7 @@ fun SystemSettingsScreen(
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "1 ${curr.symbol} = ${curr.exchangeRateToBase} ر.س",
+                                        text = if (curr.isBaseCurrency) "1.0 ${curr.symbol}" else "1 ${curr.symbol} = ${curr.exchangeRateToBase} ${baseCurr?.symbol ?: "ر.س"}",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -335,16 +408,18 @@ fun SystemSettingsScreen(
                                             )
                                         }
 
-                                        IconButton(
-                                            onClick = { deletingCurrency = curr },
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "حذف العملة",
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                        if (!curr.isBaseCurrency) {
+                                            IconButton(
+                                                onClick = { deletingCurrency = curr },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "حذف العملة",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -562,6 +637,51 @@ fun SystemSettingsScreen(
                 showAddCurrencyDialog = false
                 editingCurrency = null
             }
+        )
+    }
+
+    if (settingBaseCurrencyConfirm != null) {
+        val target = settingBaseCurrencyConfirm!!
+        AlertDialog(
+            onDismissRequest = { settingBaseCurrencyConfirm = null },
+            icon = {
+                Icon(
+                    Icons.Default.Star,
+                    contentDescription = null,
+                    tint = Color(0xFF0F5132),
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "تأكيد تغيير العملة الأساسية",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "هل أنت تأكيد من تغيير العملة الأساسية للنظام إلى '${target.name} (${target.symbol})'؟\n\nسيتم جعل سعر صرف هذه العملة (1.0) وإعادة تحويل وتعديل أسعار الصرف النسبية للعملات الأخرى تلقائياً.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onSetBaseCurrency(target.id)
+                        settingBaseCurrencyConfirm = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132))
+                ) {
+                    Text("تأكيد التعيين كعملة أساسية")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { settingBaseCurrencyConfirm = null }) {
+                    Text("إلغاء")
+                }
+            },
+            shape = RoundedCornerShape(16.dp)
         )
     }
 

@@ -507,13 +507,14 @@ fun AddEditCurrencyDialog(
     var name by remember { mutableStateOf(initialCurrency?.name ?: "ريال يمني") }
     var symbol by remember { mutableStateOf(initialCurrency?.symbol ?: "ر.ي") }
     var exchangeRate by remember { mutableStateOf(initialCurrency?.exchangeRateToBase?.toString() ?: "1.0") }
+    var isBaseCurrency by remember { mutableStateOf(initialCurrency?.isBaseCurrency ?: false) }
     var isDefault by remember { mutableStateOf(initialCurrency?.isDefault ?: false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (initialCurrency == null) "إضافة عملة جديدة" else "تعديل العملة",
+                text = if (initialCurrency == null) "إضافة عملة جديدة" else "تعديل بيانات العملة",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -526,7 +527,7 @@ fun AddEditCurrencyDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("اسم العملة (مثال: ريال يمني، دولار) *") },
+                    label = { Text("اسم العملة (مثال: ريال يمني، دولار، دينار) *") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )
@@ -535,7 +536,7 @@ fun AddEditCurrencyDialog(
                     OutlinedTextField(
                         value = code,
                         onValueChange = { code = it },
-                        label = { Text("رمز العملة (Code)") },
+                        label = { Text("رمز ISO (Code)") },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     )
@@ -549,18 +550,55 @@ fun AddEditCurrencyDialog(
                 }
 
                 OutlinedTextField(
-                    value = exchangeRate,
-                    onValueChange = { exchangeRate = it },
-                    label = { Text("سعر الصرف مقابل العملة الأساسية") },
+                    value = if (isBaseCurrency) "1.0" else exchangeRate,
+                    onValueChange = { if (!isBaseCurrency) exchangeRate = it },
+                    enabled = !isBaseCurrency,
+                    label = { Text(if (isBaseCurrency) "سعر الصرف (العملة الأساسية = 1.0 ثابتاً)" else "سعر الصرف مقابل العملة الأساسية") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )
 
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Switch(
+                            checked = isBaseCurrency,
+                            onCheckedChange = { checked ->
+                                isBaseCurrency = checked
+                                if (checked) {
+                                    exchangeRate = "1.0"
+                                    isDefault = true
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "تعيين كـ العملة الأساسية للنظام المحاسبي",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "سيتم اعتماد هذه العملة لجميع الحسابات وتقارير القوائم المالية.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = isDefault, onCheckedChange = { isDefault = it })
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("العملة الافتراضية للنظام", fontSize = 14.sp)
+                    Text("العملة الافتراضية للمعاملات والفواتير", fontSize = 14.sp)
                 }
             }
         },
@@ -568,18 +606,21 @@ fun AddEditCurrencyDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
+                        val finalRate = if (isBaseCurrency) 1.0 else (exchangeRate.toDoubleOrNull() ?: 1.0)
                         val currency = (initialCurrency ?: CurrencyEntity(
                             code = code.trim(),
                             name = name.trim(),
                             symbol = symbol.trim(),
-                            exchangeRateToBase = exchangeRate.toDoubleOrNull() ?: 1.0,
-                            isDefault = isDefault
+                            exchangeRateToBase = finalRate,
+                            isBaseCurrency = isBaseCurrency,
+                            isDefault = isDefault || isBaseCurrency
                         )).copy(
                             code = code.trim(),
                             name = name.trim(),
                             symbol = symbol.trim(),
-                            exchangeRateToBase = exchangeRate.toDoubleOrNull() ?: 1.0,
-                            isDefault = isDefault
+                            exchangeRateToBase = finalRate,
+                            isBaseCurrency = isBaseCurrency,
+                            isDefault = isDefault || isBaseCurrency
                         )
                         onSaveCurrency(currency)
                     }

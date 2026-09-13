@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
+import com.example.dokkani.data.local.SessionManager
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
@@ -13,12 +14,15 @@ import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceType
 import com.example.dokkani.data.local.entities.LicenseEntity
+import com.example.dokkani.data.local.entities.MovementType
 import com.example.dokkani.data.local.entities.PartyEntity
+import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.PaymentVoucherEntity
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
+import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.domain.cash.CashDrawerEngine
 import com.example.dokkani.domain.cash.CashReconciliationResult
@@ -35,6 +39,16 @@ import com.example.dokkani.domain.security.KeyGeneratorResult
 import com.example.dokkani.domain.security.LicenseEvaluationResult
 import com.example.dokkani.domain.security.LicenseStatus
 import com.example.dokkani.domain.security.OfflineLicenseManager
+import com.example.dokkani.data.local.entities.FixedAssetEntity
+import com.example.dokkani.data.local.entities.LeaseholdRightEntity
+import com.example.dokkani.data.local.entities.OwnerTransactionEntity
+import com.example.dokkani.data.local.entities.OwnerTransactionType
+import com.example.dokkani.domain.assets.AssetCategories
+import com.example.dokkani.domain.assets.AssetsAndEquityEngine
+import com.example.dokkani.domain.assets.EquityCalculationResult
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +56,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+data class OpeningBalanceItem(
+    val name: String,
+    val category: String,
+    val quantity: Double,
+    val costPrice: Double,
+    val sellingPrice: Double
+)
+
+data class OpeningBalanceCustomer(
+    val name: String,
+    val phone: String,
+    val openingBalance: Double
+)
+
+data class OpeningBalanceSupplier(
+    val name: String,
+    val phone: String,
+    val openingPayable: Double
+)
 
 data class DokkaniUiState(
     val selectedTab: Int = 0,
@@ -99,12 +133,50 @@ data class DokkaniUiState(
     val isDeveloperKeyGenExpanded: Boolean = false,
     val keyGenRequestCodeInput: String = "",
     val keyGenSelectedPlan: ActivationPlan = ActivationPlan.YEARLY_1,
-    val keyGenGeneratedResult: KeyGeneratorResult? = null
+    val keyGenGeneratedResult: KeyGeneratorResult? = null,
+
+    // Assets & Equity
+    val fixedAssets: List<FixedAssetEntity> = emptyList(),
+    val leaseholdRights: List<LeaseholdRightEntity> = emptyList(),
+    val ownerTransactions: List<OwnerTransactionEntity> = emptyList(),
+    val stockMovements: List<StockMovementEntity> = emptyList(),
+    val equityResult: EquityCalculationResult? = null,
+    val assetsSubTab: Int = 0,
+    val showAddAssetDialog: Boolean = false,
+    val assetCodeInput: String = "",
+    val assetNameInput: String = "",
+    val assetCategoryInput: String = AssetCategories.REFRIGERATION,
+    val assetCostInput: String = "",
+    val assetSupplierInput: String = "",
+    val assetNotesInput: String = "",
+    val assetPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val showOwnerTransDialog: Boolean = false,
+    val ownerTransTypeInput: OwnerTransactionType = OwnerTransactionType.CASH_DRAWING,
+    val ownerTransAmountInput: String = "",
+    val ownerTransProductId: Long? = null,
+    val ownerTransQuantityInput: String = "",
+    val ownerTransDetailsInput: String = "",
+    val ownerTransPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+
+    // Leasehold & Goodwill
+    val showAddLeaseholdDialog: Boolean = false,
+    val showAmortizeLeaseholdDialog: Boolean = false,
+    val showSellLeaseholdDialog: Boolean = false,
+    val selectedLeaseholdItem: LeaseholdRightEntity? = null,
+    val leaseholdCodeInput: String = "",
+    val leaseholdNameInput: String = "",
+    val leaseholdCostInput: String = "",
+    val leaseholdYearsInput: String = "5",
+    val leaseholdNotesInput: String = "",
+    val leaseholdAmortizeAmountInput: String = "",
+    val leaseholdSellPriceInput: String = "",
+    val leaseholdSellPaymentMethod: PaymentMethod = PaymentMethod.CASH
 )
 
 class DokkaniViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = DokkaniDatabase.getDatabase(application, viewModelScope)
+    private val sessionManager = SessionManager(application)
 
     private val _uiState = MutableStateFlow(DokkaniUiState())
     val uiState: StateFlow<DokkaniUiState> = _uiState.asStateFlow()
@@ -156,6 +228,30 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.systemSettingsDao().getSettings().collectLatest { settings ->
                 _uiState.update { it.copy(settings = settings) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.fixedAssetDao().getAllAssets().collectLatest { assets ->
+                _uiState.update { it.copy(fixedAssets = assets) }
+                recalculateEquity()
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.leaseholdRightDao().getAllLeaseholdRights().collectLatest { leaseholds ->
+                _uiState.update { it.copy(leaseholdRights = leaseholds) }
+                recalculateEquity()
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.ownerTransactionDao().getAllTransactions().collectLatest { trans ->
+                _uiState.update { it.copy(ownerTransactions = trans) }
+                recalculateEquity()
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.stockMovementDao().getAllMovements().collectLatest { movements ->
+                _uiState.update { it.copy(stockMovements = movements) }
+                recalculateEquity()
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -592,7 +688,56 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun saveCurrency(currency: CurrencyEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            db.currencyDao().insertCurrency(currency)
+            if (currency.isBaseCurrency) {
+                val allCurrencies = db.currencyDao().getAllCurrenciesSync()
+                val updatedCurrencies = mutableListOf<CurrencyEntity>()
+                var handledTarget = false
+
+                allCurrencies.forEach { curr ->
+                    if (curr.id == currency.id || (currency.id == 0L && curr.code.equals(currency.code, ignoreCase = true))) {
+                        updatedCurrencies.add(currency.copy(isBaseCurrency = true, exchangeRateToBase = 1.0))
+                        handledTarget = true
+                    } else {
+                        updatedCurrencies.add(curr.copy(isBaseCurrency = false))
+                    }
+                }
+
+                if (!handledTarget) {
+                    updatedCurrencies.add(currency.copy(isBaseCurrency = true, exchangeRateToBase = 1.0))
+                }
+
+                db.currencyDao().insertCurrencies(updatedCurrencies)
+            } else {
+                db.currencyDao().insertCurrency(currency)
+            }
+        }
+    }
+
+    fun setAsBaseCurrency(currencyId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allCurrencies = db.currencyDao().getAllCurrenciesSync()
+            val targetCurrency = allCurrencies.find { it.id == currencyId } ?: return@launch
+            if (targetCurrency.isBaseCurrency) return@launch
+
+            val oldRate = if (targetCurrency.exchangeRateToBase > 0) targetCurrency.exchangeRateToBase else 1.0
+
+            val updatedCurrencies = allCurrencies.map { curr ->
+                if (curr.id == targetCurrency.id) {
+                    curr.copy(
+                        isBaseCurrency = true,
+                        exchangeRateToBase = 1.0,
+                        isDefault = true
+                    )
+                } else {
+                    val newRate = if (oldRate > 0) curr.exchangeRateToBase / oldRate else curr.exchangeRateToBase
+                    val roundedRate = (kotlin.math.round(newRate * 10000.0) / 10000.0).coerceAtLeast(0.0001)
+                    curr.copy(
+                        isBaseCurrency = false,
+                        exchangeRateToBase = roundedRate
+                    )
+                }
+            }
+            db.currencyDao().insertCurrencies(updatedCurrencies)
         }
     }
 
@@ -683,6 +828,594 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     db.paymentVoucherDao().deleteVoucher(v)
                 }
             }
+        }
+    }
+
+    // --- معالج التهيئة الأولى والرقابة المحاسبية (Onboarding Wizard) ---
+    fun completeOnboarding(
+        isNewGrocery: Boolean,
+        storeName: String,
+        cashierName: String,
+        openingCash: Double,
+        valuationMethod: CostValuationMethod,
+        openingItems: List<OpeningBalanceItem>,
+        openingCustomers: List<OpeningBalanceCustomer>,
+        openingSuppliers: List<OpeningBalanceSupplier>,
+        onCompleted: () -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                val now = System.currentTimeMillis()
+
+                // 1. تحديث إعدادات النظام
+                val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+                db.systemSettingsDao().insertOrUpdateSettings(
+                    currentSettings.copy(
+                        storeName = storeName,
+                        costValuationMethod = valuationMethod,
+                        lastUpdated = now
+                    )
+                )
+
+                // 2. إنشاء وفتح أول شفت مالي كاشير
+                val shiftNumber = "SHF-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date(now))}"
+                val initialShift = CashShiftEntity(
+                    shiftNumber = shiftNumber,
+                    cashierName = cashierName,
+                    startTime = now,
+                    openingCash = openingCash,
+                    totalCashSales = 0.0,
+                    totalCashCollections = 0.0,
+                    totalCashExpenses = 0.0,
+                    expectedCashInDrawer = openingCash,
+                    actualPhysicalCash = openingCash,
+                    cashDiscrepancy = 0.0,
+                    status = "OPEN",
+                    notes = if (isNewGrocery) "افتتاح أول فترة مالية - بقالة جديدة" else "افتتاح أول فترة مالية - ترحيل أرصدة وجرد افتتاحي"
+                )
+                db.cashShiftDao().insertShift(initialShift)
+
+                // 3. في حال البقالة القائمة: إدراج بضاعة أول المدة
+                if (!isNewGrocery && openingItems.isNotEmpty()) {
+                    openingItems.forEachIndexed { index, item ->
+                        val code = "INIT-${1000 + index}"
+                        val prodId = db.productDao().insertProduct(
+                            ProductEntity(
+                                code = code,
+                                name = item.name,
+                                category = item.category,
+                                isWeighted = false,
+                                minStockAlert = 5.0
+                            )
+                        )
+                        val unitId = db.productDao().insertUnit(
+                            ProductUnitEntity(
+                                productId = prodId,
+                                unitName = "حبة/قطعة",
+                                conversionFactor = 1.0,
+                                barcode = "628${System.currentTimeMillis().toString().takeLast(9)}",
+                                costPrice = item.costPrice,
+                                sellingPrice = item.sellingPrice,
+                                isBaseUnit = true
+                            )
+                        )
+                        // قيد حركة مخزون بضاعة أول المدة
+                        db.stockMovementDao().insertMovement(
+                            StockMovementEntity(
+                                productId = prodId,
+                                productUnitId = unitId,
+                                movementType = MovementType.PURCHASE_IN,
+                                quantityBaseUnit = item.quantity,
+                                remainingQuantityForFifo = item.quantity,
+                                unitCostPriceBase = item.costPrice,
+                                timestamp = now,
+                                referenceNumber = "OPENING-STOCK"
+                            )
+                        )
+                    }
+                }
+
+                // 4. إدراج ديون العملاء الافتتاحية من الدفتر القديم
+                if (!isNewGrocery && openingCustomers.isNotEmpty()) {
+                    openingCustomers.forEach { cust ->
+                        db.partyDao().insertParty(
+                            PartyEntity(
+                                name = cust.name,
+                                type = PartyType.CUSTOMER,
+                                phone = cust.phone,
+                                currentBalance = cust.openingBalance,
+                                creditLimit = (cust.openingBalance * 2).coerceAtLeast(500.0),
+                                notes = "رصيد افتتاحي مرحل من الدفتر الورقي"
+                            )
+                        )
+                    }
+                }
+
+                // 5. إدراج مستحقات الموردين الافتتاحية
+                if (!isNewGrocery && openingSuppliers.isNotEmpty()) {
+                    openingSuppliers.forEach { supp ->
+                        db.partyDao().insertParty(
+                            PartyEntity(
+                                name = supp.name,
+                                type = PartyType.SUPPLIER,
+                                phone = supp.phone,
+                                currentBalance = -supp.openingPayable, // سالب دائن له عندنا
+                                notes = "مستحق افتتاحي سابق مرحل للمورد"
+                            )
+                        )
+                    }
+                }
+
+                // 6. حفظ اكتمال التهيئة في تفضيلات الجلسة
+                sessionManager.setOnboardingCompleted(true)
+            }
+
+            launch(Dispatchers.Main) {
+                onCompleted()
+            }
+        }
+    }
+
+    // --- Assets & Equity Actions ---
+    fun selectAssetsSubTab(index: Int) {
+        _uiState.update { it.copy(assetsSubTab = index) }
+    }
+
+    fun recalculateEquity() {
+        val state = _uiState.value
+        val openShiftCash = state.cashShifts.firstOrNull { it.status == "OPEN" }?.openingCash ?: 200.0
+        val bankBalance = state.expenses
+            .filter { it.paymentMethod == PaymentMethod.BANK_TRANSFER || it.paymentMethod == PaymentMethod.MADA }
+            .sumOf { it.amount }
+
+        val pnl = state.pnlReport
+        val netOperatingProfit = pnl?.netOperatingProfit ?: 0.0
+
+        val result = AssetsAndEquityEngine.calculateInitialCapitalAndEquity(
+            cashInDrawer = openShiftCash,
+            bankBalances = bankBalance,
+            productsWithUnits = state.products,
+            stockMovements = state.stockMovements,
+            parties = state.parties,
+            fixedAssets = state.fixedAssets,
+            leaseholdRights = state.leaseholdRights,
+            ownerTransactions = state.ownerTransactions,
+            netOperatingProfit = netOperatingProfit
+        )
+
+        _uiState.update { it.copy(equityResult = result) }
+    }
+
+    fun openAddAssetDialog() {
+        val nextCode = "AST-${(100..999).random()}"
+        _uiState.update {
+            it.copy(
+                showAddAssetDialog = true,
+                assetCodeInput = nextCode,
+                assetNameInput = "",
+                assetCategoryInput = AssetCategories.REFRIGERATION,
+                assetCostInput = "",
+                assetSupplierInput = "",
+                assetNotesInput = "",
+                assetPaymentMethod = PaymentMethod.CASH
+            )
+        }
+    }
+
+    fun dismissAddAssetDialog() {
+        _uiState.update { it.copy(showAddAssetDialog = false) }
+    }
+
+    fun updateAssetInputs(
+        code: String,
+        name: String,
+        category: String,
+        cost: String,
+        supplier: String,
+        notes: String,
+        paymentMethod: PaymentMethod
+    ) {
+        _uiState.update {
+            it.copy(
+                assetCodeInput = code,
+                assetNameInput = name,
+                assetCategoryInput = category,
+                assetCostInput = cost,
+                assetSupplierInput = supplier,
+                assetNotesInput = notes,
+                assetPaymentMethod = paymentMethod
+            )
+        }
+    }
+
+    fun submitAddAsset() {
+        val state = _uiState.value
+        val name = state.assetNameInput.trim()
+        val cost = state.assetCostInput.toDoubleOrNull() ?: 0.0
+        if (name.isEmpty() || cost <= 0) return
+
+        val code = state.assetCodeInput.trim().ifEmpty { "AST-${System.currentTimeMillis() % 10000}" }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                // 1. إدراج الأصل الثابت
+                db.fixedAssetDao().insertAsset(
+                    FixedAssetEntity(
+                        assetCode = code,
+                        name = name,
+                        category = state.assetCategoryInput,
+                        purchaseCost = cost,
+                        currentValue = cost,
+                        purchaseDate = System.currentTimeMillis(),
+                        supplierName = state.assetSupplierInput.trim(),
+                        paymentMethod = state.assetPaymentMethod,
+                        status = "ACTIVE",
+                        notes = state.assetNotesInput.trim()
+                    )
+                )
+
+                // 2. تسجيل سند صرف أصول ثابتة (CapEx) للخصم من النقدية/البنك دون التأثير على المصروفات التشغيلية
+                val now = System.currentTimeMillis()
+                val expCount = db.expenseDao().getAllExpenses()
+                val expNum = "AST-EXP-${now % 100000}"
+                db.expenseDao().insertExpense(
+                    ExpenseEntity(
+                        expenseNumber = expNum,
+                        category = "شراء أصل ثابت (ثلاجات/أرفف/موازين)",
+                        amount = cost,
+                        paymentMethod = state.assetPaymentMethod,
+                        date = now,
+                        paidTo = state.assetSupplierInput.trim().ifEmpty { "مورد أصول" },
+                        notes = "شراء أصل ثابت: $name ($code)",
+                        recordedBy = "المدير العام"
+                    )
+                )
+            }
+
+            _uiState.update { it.copy(showAddAssetDialog = false) }
+        }
+    }
+
+    fun deleteAsset(assetId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.fixedAssetDao().deleteAssetById(assetId)
+        }
+    }
+
+    fun openOwnerTransDialog(type: OwnerTransactionType) {
+        _uiState.update { currentState ->
+            currentState.copy(
+                showOwnerTransDialog = true,
+                ownerTransTypeInput = type,
+                ownerTransAmountInput = "",
+                ownerTransProductId = currentState.products.firstOrNull()?.product?.id,
+                ownerTransQuantityInput = "1.0",
+                ownerTransDetailsInput = "",
+                ownerTransPaymentMethod = PaymentMethod.CASH
+            )
+        }
+    }
+
+    fun dismissOwnerTransDialog() {
+        _uiState.update { it.copy(showOwnerTransDialog = false) }
+    }
+
+    fun updateOwnerTransInputs(
+        type: OwnerTransactionType,
+        amount: String,
+        productId: Long?,
+        quantity: String,
+        details: String,
+        paymentMethod: PaymentMethod
+    ) {
+        _uiState.update {
+            it.copy(
+                ownerTransTypeInput = type,
+                ownerTransAmountInput = amount,
+                ownerTransProductId = productId,
+                ownerTransQuantityInput = quantity,
+                ownerTransDetailsInput = details,
+                ownerTransPaymentMethod = paymentMethod
+            )
+        }
+    }
+
+    fun submitOwnerTrans() {
+        val state = _uiState.value
+        val type = state.ownerTransTypeInput
+        val now = System.currentTimeMillis()
+        val transNum = "EQ-${now % 100000}"
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                when (type) {
+                    OwnerTransactionType.CASH_DRAWING -> {
+                        val amt = state.ownerTransAmountInput.toDoubleOrNull() ?: 0.0
+                        if (amt <= 0) return@withTransaction
+
+                        db.ownerTransactionDao().insertTransaction(
+                            OwnerTransactionEntity(
+                                transactionNumber = transNum,
+                                type = OwnerTransactionType.CASH_DRAWING,
+                                amount = amt,
+                                paymentMethod = state.ownerTransPaymentMethod,
+                                date = now,
+                                details = state.ownerTransDetailsInput.ifEmpty { "مسحوبات نقدية للمالك" },
+                                recordedBy = "المدير العام"
+                            )
+                        )
+
+                        // تسجيل خصم نقدية CapEx
+                        db.expenseDao().insertExpense(
+                            ExpenseEntity(
+                                expenseNumber = "DRW-$transNum",
+                                category = "مسحوبات شخصية للمالك (نقدية)",
+                                amount = amt,
+                                paymentMethod = state.ownerTransPaymentMethod,
+                                date = now,
+                                paidTo = "المالك شخصياً",
+                                notes = state.ownerTransDetailsInput,
+                                recordedBy = "المدير العام"
+                            )
+                        )
+                    }
+                    OwnerTransactionType.GOODS_DRAWING -> {
+                        val prodId = state.ownerTransProductId ?: return@withTransaction
+                        val qty = state.ownerTransQuantityInput.toDoubleOrNull() ?: 0.0
+                        if (qty <= 0) return@withTransaction
+
+                        val pwu = state.products.find { it.product.id == prodId } ?: return@withTransaction
+                        val baseUnit = pwu.units.firstOrNull { it.isBaseUnit } ?: pwu.units.firstOrNull() ?: return@withTransaction
+                        val unitCost = baseUnit.costPrice
+                        val totalCostAmount = qty * unitCost
+
+                        db.ownerTransactionDao().insertTransaction(
+                            OwnerTransactionEntity(
+                                transactionNumber = transNum,
+                                type = OwnerTransactionType.GOODS_DRAWING,
+                                amount = totalCostAmount,
+                                productId = prodId,
+                                quantity = qty,
+                                unitCost = unitCost,
+                                paymentMethod = PaymentMethod.CASH,
+                                date = now,
+                                details = "سحب بضاعة: ${pwu.product.name} (كمية $qty بسعر تكلفة $unitCost ر.س)",
+                                recordedBy = "المدير العام"
+                            )
+                        )
+
+                        // خصم البضاعة من المخزون بسعر التكلفة دون تسجيل مبيعات أو إيرادات
+                        db.stockMovementDao().insertMovement(
+                            StockMovementEntity(
+                                productId = prodId,
+                                productUnitId = baseUnit.id,
+                                movementType = MovementType.INVENTORY_ADJUSTMENT,
+                                quantityBaseUnit = -qty,
+                                remainingQuantityForFifo = 0.0,
+                                unitCostPriceBase = unitCost,
+                                timestamp = now,
+                                referenceNumber = transNum,
+                                notes = "مسحوبات المالك الشخصية بسعر التكلفة"
+                            )
+                        )
+                    }
+                    OwnerTransactionType.CAPITAL_DEPOSIT -> {
+                        val amt = state.ownerTransAmountInput.toDoubleOrNull() ?: 0.0
+                        if (amt <= 0) return@withTransaction
+
+                        db.ownerTransactionDao().insertTransaction(
+                            OwnerTransactionEntity(
+                                transactionNumber = transNum,
+                                type = OwnerTransactionType.CAPITAL_DEPOSIT,
+                                amount = amt,
+                                paymentMethod = state.ownerTransPaymentMethod,
+                                date = now,
+                                details = state.ownerTransDetailsInput.ifEmpty { "إيداع ضخ سيولة إضافية في رأس المال" },
+                                recordedBy = "المدير العام"
+                            )
+                        )
+                    }
+                }
+            }
+
+            _uiState.update { it.copy(showOwnerTransDialog = false) }
+        }
+    }
+
+    fun deleteOwnerTrans(transId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.ownerTransactionDao().deleteTransactionById(transId)
+        }
+    }
+
+    // --- Leasehold Rights & Goodwill Handlers ---
+
+    fun openAddLeaseholdDialog() {
+        val nextCode = "GW-${(100..999).random()}"
+        _uiState.update {
+            it.copy(
+                showAddLeaseholdDialog = true,
+                leaseholdCodeInput = nextCode,
+                leaseholdNameInput = "",
+                leaseholdCostInput = "",
+                leaseholdYearsInput = "5",
+                leaseholdNotesInput = ""
+            )
+        }
+    }
+
+    fun dismissAddLeaseholdDialog() {
+        _uiState.update { it.copy(showAddLeaseholdDialog = false) }
+    }
+
+    fun updateLeaseholdInputs(code: String, name: String, cost: String, years: String, notes: String) {
+        _uiState.update {
+            it.copy(
+                leaseholdCodeInput = code,
+                leaseholdNameInput = name,
+                leaseholdCostInput = cost,
+                leaseholdYearsInput = years,
+                leaseholdNotesInput = notes
+            )
+        }
+    }
+
+    fun submitAddLeasehold() {
+        val state = _uiState.value
+        val name = state.leaseholdNameInput.trim()
+        val cost = state.leaseholdCostInput.toDoubleOrNull() ?: 0.0
+        val years = state.leaseholdYearsInput.toIntOrNull() ?: 5
+        if (name.isEmpty() || cost <= 0) return
+
+        val code = state.leaseholdCodeInput.trim().ifEmpty { "GW-${System.currentTimeMillis() % 10000}" }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.leaseholdRightDao().insertLeaseholdRight(
+                LeaseholdRightEntity(
+                    code = code,
+                    name = name,
+                    initialCost = cost,
+                    currentBookValue = cost,
+                    accumulatedAmortization = 0.0,
+                    contractStartDate = System.currentTimeMillis(),
+                    contractDurationYears = years,
+                    status = "ACTIVE",
+                    notes = state.leaseholdNotesInput.trim()
+                )
+            )
+            _uiState.update { it.copy(showAddLeaseholdDialog = false) }
+        }
+    }
+
+    fun openAmortizeLeaseholdDialog(item: LeaseholdRightEntity) {
+        val yearlyAmort = if (item.contractDurationYears > 0) item.initialCost / item.contractDurationYears else item.currentBookValue
+        _uiState.update {
+            it.copy(
+                showAmortizeLeaseholdDialog = true,
+                selectedLeaseholdItem = item,
+                leaseholdAmortizeAmountInput = String.format(java.util.Locale.US, "%.2f", yearlyAmort)
+            )
+        }
+    }
+
+    fun dismissAmortizeLeaseholdDialog() {
+        _uiState.update { it.copy(showAmortizeLeaseholdDialog = false, selectedLeaseholdItem = null) }
+    }
+
+    fun updateAmortizeAmountInput(amount: String) {
+        _uiState.update { it.copy(leaseholdAmortizeAmountInput = amount) }
+    }
+
+    fun submitAmortizeLeasehold() {
+        val state = _uiState.value
+        val item = state.selectedLeaseholdItem ?: return
+        val amortAmount = state.leaseholdAmortizeAmountInput.toDoubleOrNull() ?: 0.0
+        if (amortAmount <= 0) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                val newAccum = item.accumulatedAmortization + amortAmount
+                val newBookVal = (item.initialCost - newAccum).coerceAtLeast(0.0)
+                val newStatus = if (newBookVal <= 0.0001) "FULLY_AMORTIZED" else item.status
+
+                val updatedItem = item.copy(
+                    accumulatedAmortization = newAccum,
+                    currentBookValue = newBookVal,
+                    status = newStatus
+                )
+                db.leaseholdRightDao().updateLeaseholdRight(updatedItem)
+
+                // تحميل قسط الإطفاء كمصروف تشغيلي دوري على الأرباح والخسائر
+                val now = System.currentTimeMillis()
+                val expNum = "AMORT-${now % 100000}"
+                db.expenseDao().insertExpense(
+                    ExpenseEntity(
+                        expenseNumber = expNum,
+                        category = "إطفاء خلو المحل (Amortization)",
+                        amount = amortAmount,
+                        paymentMethod = PaymentMethod.CASH,
+                        date = now,
+                        paidTo = "إطفاء أصول غير ملموسة",
+                        notes = "إطفاء دوري لخلو المحل: ${item.name} (${item.code})",
+                        recordedBy = "المدير العام"
+                    )
+                )
+            }
+            _uiState.update { it.copy(showAmortizeLeaseholdDialog = false, selectedLeaseholdItem = null) }
+        }
+    }
+
+    fun openSellLeaseholdDialog(item: LeaseholdRightEntity) {
+        _uiState.update {
+            it.copy(
+                showSellLeaseholdDialog = true,
+                selectedLeaseholdItem = item,
+                leaseholdSellPriceInput = String.format(java.util.Locale.US, "%.2f", item.currentBookValue),
+                leaseholdSellPaymentMethod = PaymentMethod.CASH
+            )
+        }
+    }
+
+    fun dismissSellLeaseholdDialog() {
+        _uiState.update { it.copy(showSellLeaseholdDialog = false, selectedLeaseholdItem = null) }
+    }
+
+    fun updateSellLeaseholdInputs(price: String, paymentMethod: PaymentMethod) {
+        _uiState.update {
+            it.copy(
+                leaseholdSellPriceInput = price,
+                leaseholdSellPaymentMethod = paymentMethod
+            )
+        }
+    }
+
+    fun submitSellLeasehold() {
+        val state = _uiState.value
+        val item = state.selectedLeaseholdItem ?: return
+        val salePrice = state.leaseholdSellPriceInput.toDoubleOrNull() ?: 0.0
+        if (salePrice < 0) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                val currentBook = item.currentBookValue
+                val gainOrLoss = salePrice - currentBook
+                val now = System.currentTimeMillis()
+                val transNum = "SELL-GW-${now % 100000}"
+
+                // 1. تحديث حالة الأصل غير الملموس إلى مباع/متنازل عنه
+                val updatedItem = item.copy(
+                    currentBookValue = 0.0,
+                    status = "SOLD_TRANSFERRED",
+                    notes = item.notes + " | تم التنازل/إعادة البيع بسعر $salePrice ر.س بتاريخ ${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(now)}"
+                )
+                db.leaseholdRightDao().updateLeaseholdRight(updatedItem)
+
+                // 2. إدراج سند إيداع/قبض للمالك بتفاصيل بيع الخلو والأرباح/الخسائر الرأسمالية
+                val gainLossDetails = if (gainOrLoss >= 0) {
+                    "ربح رأسمالي قدره ${String.format(java.util.Locale.US, "%.2f", gainOrLoss)} ر.س"
+                } else {
+                    "خسارة رأسمالية قدرها ${String.format(java.util.Locale.US, "%.2f", kotlin.math.abs(gainOrLoss))} ر.س"
+                }
+
+                db.ownerTransactionDao().insertTransaction(
+                    OwnerTransactionEntity(
+                        transactionNumber = transNum,
+                        type = OwnerTransactionType.CAPITAL_DEPOSIT,
+                        amount = salePrice,
+                        paymentMethod = state.leaseholdSellPaymentMethod,
+                        date = now,
+                        details = "حصيلة إعادة بيع/التنازل عن الخلو: ${item.name} ($gainLossDetails)",
+                        recordedBy = "المدير العام"
+                    )
+                )
+            }
+            _uiState.update { it.copy(showSellLeaseholdDialog = false, selectedLeaseholdItem = null) }
+        }
+    }
+
+    fun deleteLeasehold(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.leaseholdRightDao().deleteLeaseholdRightById(id)
         }
     }
 }

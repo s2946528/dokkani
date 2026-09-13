@@ -105,6 +105,17 @@ fun PosScreen(
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Button(
+                                onClick = { viewModel.openShiftCloseDialog() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("إغلاق ومطابقة الشفت", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
                                 onClick = { viewModel.toggleHistoryDialog(true) },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -267,6 +278,15 @@ fun PosScreen(
                 initialPaymentMethod = uiState.editVoucherPaymentMethod,
                 onDismiss = { viewModel.dismissEditDialogs() },
                 onSave = { notes, method -> viewModel.saveEditedVoucher(notes, method) }
+            )
+        }
+
+        // نافذة إغلاق ومطابقة الشفت في الصندوق
+        if (uiState.showShiftCloseDialog) {
+            PosShiftCloseDialog(
+                uiState = uiState,
+                viewModel = viewModel,
+                onDismiss = { viewModel.dismissShiftCloseDialog() }
             )
         }
 
@@ -2069,6 +2089,176 @@ private fun PosHistoryDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("إغلاق")
+            }
+        }
+    )
+}
+
+@Composable
+fun PosShiftCloseDialog(
+    uiState: PosUiState,
+    viewModel: PosViewModel,
+    onDismiss: () -> Unit
+) {
+    val recon = uiState.shiftReconciliation
+    val currentShift = uiState.currentShift
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFFC62828),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("مطابقة النقدية وإغلاق الشفت", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        text = "رقم الشفت: ${currentShift?.shiftNumber ?: "---"}",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // بطاقة المعادلة المحاسبية
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "حركة الصندوق الدفترية:",
+                            color = Color(0xFFC8E6C9),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("العهدة الافتتاحية:", color = Color.White, fontSize = 12.sp)
+                            Text("${"%.2f".format(recon?.openingCash ?: 0.0)} ر.س", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("+ المبيعات النقدية:", color = Color(0xFF86EFAC), fontSize = 12.sp)
+                            Text("+${"%.2f".format(recon?.totalCashSales ?: 0.0)} ر.س", color = Color(0xFF86EFAC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("+ سندات القبض (الديون):", color = Color(0xFF86EFAC), fontSize = 12.sp)
+                            Text("+${"%.2f".format(recon?.totalCashCollections ?: 0.0)} ر.س", color = Color(0xFF86EFAC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("- سندات الصرف (المصروفات):", color = Color(0xFFFCA5A5), fontSize = 12.sp)
+                            Text("-${"%.2f".format(recon?.totalCashExpenses ?: 0.0)} ر.س", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Color(0xFF2E7D32))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("النقدية المتوقعة بالدرج:", color = Color(0xFFFFD54F), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                "${"%.2f".format(recon?.expectedCashInDrawer ?: 0.0)} ر.س",
+                                color = Color(0xFFFFD54F),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                // إدخال الجرد الفعلي باليد
+                OutlinedTextField(
+                    value = uiState.shiftActualCashInput,
+                    onValueChange = { viewModel.updateShiftActualCashInput(it) },
+                    label = { Text("النقدية الفعلية المجرودة باليد في الدرج (ر.س)*") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                // نتيجة المطابقة
+                recon?.let { r ->
+                    val statusColor = when (r.discrepancyType) {
+                        com.example.dokkani.domain.cash.CashDiscrepancyType.MATCHED -> Color(0xFF2E7D32)
+                        com.example.dokkani.domain.cash.CashDiscrepancyType.SURPLUS -> Color(0xFF1976D2)
+                        com.example.dokkani.domain.cash.CashDiscrepancyType.SHORTAGE -> Color(0xFFC62828)
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = statusColor.copy(alpha = 0.1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "حالة الدرج: ${r.discrepancyType.labelArabic}",
+                                color = statusColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "الفرق: ${"%.2f".format(r.discrepancy)} ر.س",
+                                color = statusColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                // ملاحظات تسليم الشفت
+                OutlinedTextField(
+                    value = uiState.shiftCloseNotes,
+                    onValueChange = { viewModel.updateShiftCloseNotes(it) },
+                    label = { Text("ملاحظات تسليم الشفت والكاشير") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { viewModel.confirmCloseShift() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+            ) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("إغلاق الشفت واعتماد النقدية", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
             }
         }
     )

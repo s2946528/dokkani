@@ -21,6 +21,9 @@ import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
+import com.example.dokkani.domain.cash.CashDiscrepancyType
+import com.example.dokkani.domain.cash.CashDrawerEngine
+import com.example.dokkani.domain.cash.CashReconciliationResult
 import com.example.dokkani.domain.hardware.ReceiptItemData
 import com.example.dokkani.domain.hardware.ReceiptPrintData
 import com.example.dokkani.domain.pos.CartSummary
@@ -100,6 +103,10 @@ data class PosUiState(
     val showHistoryDialog: Boolean = false,
     val showCheckoutDialog: Boolean = false,
     val showAddPartyDialog: Boolean = false,
+    val showShiftCloseDialog: Boolean = false,
+    val shiftActualCashInput: String = "",
+    val shiftCloseNotes: String = "",
+    val shiftReconciliation: CashReconciliationResult? = null,
     val userFeedbackMessage: String? = null,
     val isError: Boolean = false,
 
@@ -1281,5 +1288,109 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleBottomHistoryExpanded() {
         _uiState.update { it.copy(isBottomHistoryExpanded = !it.isBottomHistoryExpanded) }
+    }
+
+    // --- إغلاق الشفت ومطابقة النقدية في الدرج (Shift Closing & Cash Audit) ---
+    fun openShiftCloseDialog() {
+        val shift = _uiState.value.currentShift
+        val expected = _uiState.value.cashInDrawer
+        val recon = CashDrawerEngine.calculateReconciliation(
+            openingCash = shift?.openingCash ?: 200.0,
+            cashSales = if ((shift?.totalCashSales ?: 0.0) > 0) listOf(shift?.totalCashSales ?: 0.0) else emptyList(),
+            cashCollections = if ((shift?.totalCashCollections ?: 0.0) > 0) listOf(shift?.totalCashCollections ?: 0.0) else emptyList(),
+            cashExpenses = if ((shift?.totalCashExpenses ?: 0.0) > 0) listOf(shift?.totalCashExpenses ?: 0.0) else emptyList(),
+            actualPhysicalCash = expected
+        )
+        _uiState.update {
+            it.copy(
+                showShiftCloseDialog = true,
+                shiftActualCashInput = "%.2f".format(expected),
+                shiftCloseNotes = "",
+                shiftReconciliation = recon
+            )
+        }
+    }
+
+    fun dismissShiftCloseDialog() {
+        _uiState.update { it.copy(showShiftCloseDialog = false) }
+    }
+
+    fun updateShiftActualCashInput(input: String) {
+        val shift = _uiState.value.currentShift
+        val actual = input.toDoubleOrNull() ?: 0.0
+        val recon = CashDrawerEngine.calculateReconciliation(
+            openingCash = shift?.openingCash ?: 200.0,
+            cashSales = if ((shift?.totalCashSales ?: 0.0) > 0) listOf(shift?.totalCashSales ?: 0.0) else emptyList(),
+            cashCollections = if ((shift?.totalCashCollections ?: 0.0) > 0) listOf(shift?.totalCashCollections ?: 0.0) else emptyList(),
+            cashExpenses = if ((shift?.totalCashExpenses ?: 0.0) > 0) listOf(shift?.totalCashExpenses ?: 0.0) else emptyList(),
+            actualPhysicalCash = actual
+        )
+        _uiState.update {
+            it.copy(
+                shiftActualCashInput = input,
+                shiftReconciliation = recon
+            )
+        }
+    }
+
+    fun updateShiftCloseNotes(notes: String) {
+        _uiState.update { it.copy(shiftCloseNotes = notes) }
+    }
+
+    fun confirmCloseShift(onSuccess: (() -> Unit)? = null) {
+        val currentShift = _uiState.value.currentShift ?: return
+        val recon = _uiState.value.shiftReconciliation ?: return
+        val notes = _uiState.value.shiftCloseNotes
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    val now = System.currentTimeMillis()
+                    val closedShift = currentShift.copy(
+                        endTime = now,
+                        expectedCashInDrawer = recon.expectedCashInDrawer,
+                        actualPhysicalCash = recon.actualPhysicalCash,
+                        cashDiscrepancy = recon.discrepancy,
+                        status = "CLOSED",
+                        notes = notes.ifBlank { "تم إغلاق الشفت والمطابقة: ${recon.discrepancyType.labelArabic}" }
+                    )
+                    shiftDao.updateShift(closedShift)
+
+                    // فتح شفت جديد فوراً للكاشير التالي بالعهدة المتبقية
+                    val nextShiftNumber = "SHF-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date(now))}"
+                    val nextShift = CashShiftEntity(
+                        shiftNumber = nextShiftNumber,
+                        cashierName = currentShift.cashierName,
+                        startTime = now,
+                        openingCash = recon.actualPhysicalCash, // العهدة الافتتاحية هي المبلغ الفعلي المستلم
+                        totalCashSales = 0.0,
+                        totalCashCollections = 0.0,
+                        totalCashExpenses = 0.0,
+                        expectedCashInDrawer = recon.actualPhysicalCash,
+                        actualPhysicalCash = recon.actualPhysicalCash,
+                        cashDiscrepancy = 0.0,
+                        status = "OPEN",
+                        notes = "تم فتح الشفت تلقائياً بعد إغلاق ${currentShift.shiftNumber}"
+                    )
+                    shiftDao.insertShift(nextShift)
+                }
+
+                _uiState.update {
+                    it.copy(
+                        showShiftCloseDialog = false,
+                        userFeedbackMessage = "تم إغلاق الشفت بنجاح (${currentShift.shiftNumber})، ومطابقة النقدية: ${recon.discrepancyType.labelArabic}",
+                        isError = false
+                    )
+                }
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        userFeedbackMessage = "فشل إغلاق الشفت: ${e.localizedMessage}",
+                        isError = true
+                    )
+                }
+            }
+        }
     }
 }

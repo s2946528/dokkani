@@ -6,8 +6,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import com.example.dokkani.ui.screens.assets.AssetsAndEquityScreen
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Inventory
@@ -57,7 +60,8 @@ data class NavTabItem(
 fun DokkaniApp(
     viewModel: DokkaniViewModel,
     currentUserRole: UserRole = UserRole.ADMIN,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onOpenOnboardingWizard: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -68,6 +72,7 @@ fun DokkaniApp(
         NavTabItem("التكلفة والخضار", Icons.Default.Calculate, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("دفتر الديون", Icons.Default.CreditCard, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("الأصول والملكية", Icons.Default.AccountBalance, setOf(UserRole.ADMIN)),
         NavTabItem("التقارير", Icons.Default.Analytics, setOf(UserRole.ADMIN)),
         NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الترخيص والحماية", Icons.Default.Security, setOf(UserRole.ADMIN)),
@@ -88,6 +93,15 @@ fun DokkaniApp(
                     }
                 },
                 actions = {
+                    if (currentUserRole == UserRole.ADMIN) {
+                        IconButton(onClick = onOpenOnboardingWizard) {
+                            Icon(
+                                Icons.Default.AutoFixHigh,
+                                contentDescription = "معالج التهيئة الأولى والرقابة",
+                                tint = Color.White
+                            )
+                        }
+                    }
                     IconButton(onClick = onLogout) {
                         Icon(
                             Icons.AutoMirrored.Filled.ExitToApp,
@@ -180,6 +194,67 @@ fun DokkaniApp(
                                 onSendWhatsAppReminder = { _, _, _ -> }
                             )
                         }
+                        "الأصول والملكية" -> {
+                            AssetsAndEquityScreen(
+                                equityResult = uiState.equityResult,
+                                fixedAssets = uiState.fixedAssets,
+                                leaseholdRights = uiState.leaseholdRights,
+                                ownerTransactions = uiState.ownerTransactions,
+                                products = uiState.products,
+                                subTab = uiState.assetsSubTab,
+                                showAddAssetDialog = uiState.showAddAssetDialog,
+                                showOwnerTransDialog = uiState.showOwnerTransDialog,
+                                ownerTransType = uiState.ownerTransTypeInput,
+                                assetCodeInput = uiState.assetCodeInput,
+                                assetNameInput = uiState.assetNameInput,
+                                assetCategoryInput = uiState.assetCategoryInput,
+                                assetCostInput = uiState.assetCostInput,
+                                assetSupplierInput = uiState.assetSupplierInput,
+                                assetNotesInput = uiState.assetNotesInput,
+                                assetPaymentMethod = uiState.assetPaymentMethod,
+                                ownerTransAmountInput = uiState.ownerTransAmountInput,
+                                ownerTransProductId = uiState.ownerTransProductId,
+                                ownerTransQuantityInput = uiState.ownerTransQuantityInput,
+                                ownerTransDetailsInput = uiState.ownerTransDetailsInput,
+                                ownerTransPaymentMethod = uiState.ownerTransPaymentMethod,
+                                showAddLeaseholdDialog = uiState.showAddLeaseholdDialog,
+                                showAmortizeLeaseholdDialog = uiState.showAmortizeLeaseholdDialog,
+                                showSellLeaseholdDialog = uiState.showSellLeaseholdDialog,
+                                selectedLeaseholdItem = uiState.selectedLeaseholdItem,
+                                leaseholdCodeInput = uiState.leaseholdCodeInput,
+                                leaseholdNameInput = uiState.leaseholdNameInput,
+                                leaseholdCostInput = uiState.leaseholdCostInput,
+                                leaseholdYearsInput = uiState.leaseholdYearsInput,
+                                leaseholdNotesInput = uiState.leaseholdNotesInput,
+                                leaseholdAmortizeAmountInput = uiState.leaseholdAmortizeAmountInput,
+                                leaseholdSellPriceInput = uiState.leaseholdSellPriceInput,
+                                leaseholdSellPaymentMethod = uiState.leaseholdSellPaymentMethod,
+                                onSelectSubTab = viewModel::selectAssetsSubTab,
+                                onOpenAddAssetDialog = viewModel::openAddAssetDialog,
+                                onDismissAddAssetDialog = viewModel::dismissAddAssetDialog,
+                                onAssetInputsChanged = viewModel::updateAssetInputs,
+                                onSubmitAddAsset = viewModel::submitAddAsset,
+                                onDeleteAsset = viewModel::deleteAsset,
+                                onOpenOwnerTransDialog = viewModel::openOwnerTransDialog,
+                                onDismissOwnerTransDialog = viewModel::dismissOwnerTransDialog,
+                                onOwnerTransInputsChanged = viewModel::updateOwnerTransInputs,
+                                onSubmitOwnerTrans = viewModel::submitOwnerTrans,
+                                onDeleteOwnerTrans = viewModel::deleteOwnerTrans,
+                                onOpenAddLeaseholdDialog = viewModel::openAddLeaseholdDialog,
+                                onDismissAddLeaseholdDialog = viewModel::dismissAddLeaseholdDialog,
+                                onLeaseholdInputsChanged = viewModel::updateLeaseholdInputs,
+                                onSubmitAddLeasehold = viewModel::submitAddLeasehold,
+                                onOpenAmortizeLeaseholdDialog = viewModel::openAmortizeLeaseholdDialog,
+                                onDismissAmortizeLeaseholdDialog = viewModel::dismissAmortizeLeaseholdDialog,
+                                onAmortizeAmountChanged = viewModel::updateAmortizeAmountInput,
+                                onSubmitAmortizeLeasehold = viewModel::submitAmortizeLeasehold,
+                                onOpenSellLeaseholdDialog = viewModel::openSellLeaseholdDialog,
+                                onDismissSellLeaseholdDialog = viewModel::dismissSellLeaseholdDialog,
+                                onSellLeaseholdInputsChanged = viewModel::updateSellLeaseholdInputs,
+                                onSubmitSellLeasehold = viewModel::submitSellLeasehold,
+                                onDeleteLeasehold = viewModel::deleteLeasehold
+                            )
+                        }
                         "التقارير" -> {
                             ReportsDashboardScreen(
                                 uiState = uiState,
@@ -212,8 +287,10 @@ fun DokkaniApp(
                                 parties = uiState.parties,
                                 invoices = uiState.invoices,
                                 currentUserRole = currentUserRole,
+                                onUpdateValuationMethod = viewModel::selectValuationMethod,
                                 onUpdateEnableNegativeStock = viewModel::updateEnableNegativeStock,
                                 onSaveCurrency = viewModel::saveCurrency,
+                                onSetBaseCurrency = viewModel::setAsBaseCurrency,
                                 onDeleteCurrency = viewModel::deleteCurrency,
                                 onSaveParty = viewModel::saveParty,
                                 onDeleteParty = viewModel::deleteParty,

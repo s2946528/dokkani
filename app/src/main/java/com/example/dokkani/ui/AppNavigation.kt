@@ -9,10 +9,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.ui.screens.DokkaniApp
+import com.example.dokkani.ui.screens.SplashScreen
+import com.example.dokkani.ui.screens.onboarding.OnboardingWizardScreen
 import com.example.dokkani.ui.screens.users.LoginViewModel
 import com.example.dokkani.ui.screens.users.PinLoginScreen
-
-import com.example.dokkani.ui.screens.SplashScreen
 
 @Composable
 fun AppNavigation(
@@ -21,6 +21,7 @@ fun AppNavigation(
 ) {
     val navController = rememberNavController()
     val currentUserRole by loginViewModel.currentUserRole.collectAsState()
+    val isOnboardingCompleted by loginViewModel.isOnboardingCompleted.collectAsState()
 
     NavHost(
         navController = navController,
@@ -29,8 +30,25 @@ fun AppNavigation(
         composable("splash") {
             SplashScreen(
                 onTimeout = {
+                    if (!isOnboardingCompleted) {
+                        navController.navigate("onboarding") {
+                            popUpTo("splash") { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate("login") {
+                            popUpTo("splash") { inclusive = true }
+                        }
+                    }
+                }
+            )
+        }
+
+        composable("onboarding") {
+            OnboardingWizardScreen(
+                viewModel = dokkaniViewModel,
+                onFinish = {
                     navController.navigate("login") {
-                        popUpTo("splash") { inclusive = true }
+                        popUpTo("onboarding") { inclusive = true }
                     }
                 }
             )
@@ -56,6 +74,9 @@ fun AppNavigation(
                     navController.navigate("login") {
                         popUpTo("main") { inclusive = true }
                     }
+                },
+                onOpenOnboardingWizard = {
+                    navController.navigate("onboarding")
                 }
             )
         }

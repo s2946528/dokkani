@@ -51,8 +51,13 @@ object FinancialReportsEngine {
         val grossProfit = netSalesRevenue - calculatedCogs
         val grossMarginPercent = if (netSalesRevenue > 0.001) (grossProfit / netSalesRevenue) * 100 else 0.0
 
-        val totalExpenses = expenses.sumOf { it.amount }
-        val expensesByCategory = expenses.groupBy { it.category }
+        // المصروفات التشغيلية الحقيقية (استبعاد شراء الأصول الثابتة والمسحوبات الشخصية)
+        val operationalExpenses = expenses.filter { exp ->
+            val cat = exp.category.trim()
+            !cat.contains("أصل") && !cat.contains("أصول") && !cat.contains("مسحوبات") && !cat.contains("رأس المال")
+        }
+        val totalExpenses = operationalExpenses.sumOf { it.amount }
+        val expensesByCategory = operationalExpenses.groupBy { it.category }
             .mapValues { entry -> entry.value.sumOf { it.amount } }
 
         val netOperatingProfit = grossProfit - totalExpenses

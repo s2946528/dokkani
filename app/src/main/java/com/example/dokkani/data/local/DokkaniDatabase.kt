@@ -12,9 +12,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.dao.CurrencyDao
 import com.example.dokkani.data.local.dao.ExpenseDao
+import com.example.dokkani.data.local.dao.FixedAssetDao
 import com.example.dokkani.data.local.dao.InvoiceDao
+import com.example.dokkani.data.local.dao.LeaseholdRightDao
 import com.example.dokkani.data.local.dao.LicenseDao
 import com.example.dokkani.data.local.dao.MixedProduceBatchDao
+import com.example.dokkani.data.local.dao.OwnerTransactionDao
 import com.example.dokkani.data.local.dao.PartyDao
 import com.example.dokkani.data.local.dao.PaymentVoucherDao
 import com.example.dokkani.data.local.dao.ProductDao
@@ -25,14 +28,18 @@ import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.ExpenseEntity
+import com.example.dokkani.data.local.entities.FixedAssetEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceStatus
 import com.example.dokkani.data.local.entities.InvoiceType
+import com.example.dokkani.data.local.entities.LeaseholdRightEntity
 import com.example.dokkani.data.local.entities.LicenseEntity
 import com.example.dokkani.data.local.entities.MixedProduceBatchEntity
 import com.example.dokkani.data.local.entities.MixedProduceYieldItemEntity
 import com.example.dokkani.data.local.entities.MovementType
+import com.example.dokkani.data.local.entities.OwnerTransactionEntity
+import com.example.dokkani.data.local.entities.OwnerTransactionType
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
@@ -64,9 +71,12 @@ import kotlinx.coroutines.launch
         PaymentVoucherEntity::class,
         ExpenseEntity::class,
         CashShiftEntity::class,
-        LicenseEntity::class
+        LicenseEntity::class,
+        FixedAssetEntity::class,
+        OwnerTransactionEntity::class,
+        LeaseholdRightEntity::class
     ],
-    version = 2,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -84,6 +94,9 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun cashShiftDao(): CashShiftDao
     abstract fun licenseDao(): LicenseDao
     abstract fun userDao(): UserDao
+    abstract fun fixedAssetDao(): FixedAssetDao
+    abstract fun ownerTransactionDao(): OwnerTransactionDao
+    abstract fun leaseholdRightDao(): LeaseholdRightDao
 
     companion object {
         @Volatile
@@ -256,6 +269,91 @@ abstract class DokkaniDatabase : RoomDatabase() {
             db.cashShiftDao().insertShift(
                 CashShiftEntity(
                     shiftNumber = "SHF-2026-0001", cashierName = "كاشير 1", startTime = now - (24 * 3600000L), endTime = now - (12 * 3600000L), openingCash = 200.0, totalCashSales = 540.0, totalCashCollections = 100.0, totalCashExpenses = 63.0, expectedCashInDrawer = 777.0, actualPhysicalCash = 777.0, cashDiscrepancy = 0.0, status = "CLOSED"
+                )
+            )
+
+            // 8. الأصول الثابتة وحركات حقوق الملكية
+            val fixedAssetDao = db.fixedAssetDao()
+            fixedAssetDao.insertAsset(
+                FixedAssetEntity(
+                    assetCode = "AST-001",
+                    name = "ثلاجة تبريد وتجميد 3 أبواب زجاجية",
+                    category = "ثلاجات وتبريد",
+                    purchaseCost = 14500.0,
+                    currentValue = 14500.0,
+                    purchaseDate = now - (30 * oneDay),
+                    supplierName = "شركة التبريد العربي المحدودة",
+                    paymentMethod = PaymentMethod.BANK_TRANSFER,
+                    status = "ACTIVE",
+                    notes = "ضمان سنتين شامل الصيانة قطع غيار وتبريد"
+                )
+            )
+            fixedAssetDao.insertAsset(
+                FixedAssetEntity(
+                    assetCode = "AST-002",
+                    name = "أرفف جدارية ووسطية صلبة لمنتجات البقالة (10 أمتار)",
+                    category = "أرفف وتجهيزات عرض",
+                    purchaseCost = 8200.0,
+                    currentValue = 8200.0,
+                    purchaseDate = now - (30 * oneDay),
+                    supplierName = "مصنع الرفوف الوطنية",
+                    paymentMethod = PaymentMethod.MADA,
+                    status = "ACTIVE",
+                    notes = "أرفف حماية ضد الصدأ سعة حمولة 150 كجم لكل رف"
+                )
+            )
+            fixedAssetDao.insertAsset(
+                FixedAssetEntity(
+                    assetCode = "AST-003",
+                    name = "ميزان باركود الكتروني الذكي شاشة طابعة",
+                    category = "أجهزة وموازين باركود",
+                    purchaseCost = 3100.0,
+                    currentValue = 3100.0,
+                    purchaseDate = now - (15 * oneDay),
+                    supplierName = "مؤسسة الأنظمة الذكية",
+                    paymentMethod = PaymentMethod.CASH,
+                    status = "ACTIVE",
+                    notes = "متصل مباشرة مع كاشير ونظام دكاني"
+                )
+            )
+
+            val ownerDao = db.ownerTransactionDao()
+            ownerDao.insertTransaction(
+                OwnerTransactionEntity(
+                    transactionNumber = "EQ-2026-0001",
+                    type = OwnerTransactionType.CAPITAL_DEPOSIT,
+                    amount = 25000.0,
+                    paymentMethod = PaymentMethod.BANK_TRANSFER,
+                    date = now - (30 * oneDay),
+                    details = "إيداع ضخ سيولة إضافية في رأس مال البقالة لشراء ثلاجات وتوسعة البضاعة",
+                    recordedBy = "المدير العام"
+                )
+            )
+            ownerDao.insertTransaction(
+                OwnerTransactionEntity(
+                    transactionNumber = "EQ-2026-0002",
+                    type = OwnerTransactionType.CASH_DRAWING,
+                    amount = 1500.0,
+                    paymentMethod = PaymentMethod.CASH,
+                    date = now - (5 * oneDay),
+                    details = "مسحوبات المالك الشخصية نقداً من الخزينة",
+                    recordedBy = "المدير العام"
+                )
+            )
+
+            // 9. نقل القدم / الخلو والأصول غير الملموسة
+            val leaseholdDao = db.leaseholdRightDao()
+            leaseholdDao.insertLeaseholdRight(
+                LeaseholdRightEntity(
+                    code = "GW-2026-0001",
+                    name = "مبلغ نقل القدم / خلو موقع بقالة العليا الممتاز",
+                    initialCost = 50000.0,
+                    currentBookValue = 40000.0,
+                    accumulatedAmortization = 10000.0,
+                    contractStartDate = now - (365 * oneDay),
+                    contractDurationYears = 5,
+                    status = "ACTIVE",
+                    notes = "خلو موقع بقالة قريبة من شارع تجاري حيوي، عقد 5 سنوات بإطفاء 10,000 ر.س سنوياً"
                 )
             )
         }

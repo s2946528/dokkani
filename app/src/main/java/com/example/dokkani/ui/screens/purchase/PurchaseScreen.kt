@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.dokkani.ui.components.BarcodeTextField
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.PartyEntity
@@ -185,18 +186,14 @@ fun PurchaseScreen(
                         Text("البحث عن الأصناف للتوريد", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        OutlinedTextField(
+                        BarcodeTextField(
                             value = uiState.searchQuery,
                             onValueChange = { viewModel.setSearchQuery(it) },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("ابحث بالاسم أو الباركود...") },
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                            trailingIcon = {
-                                if (uiState.searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                        Icon(Icons.Default.Clear, contentDescription = null)
-                                    }
-                                }
+                            placeholder = "ابحث بالاسم أو امسح الباركود...",
+                            label = "البحث أو مسح باركود الصنف",
+                            onBarcodeScanned = { scannedCode ->
+                                viewModel.setSearchQuery(scannedCode)
                             },
                             singleLine = true
                         )

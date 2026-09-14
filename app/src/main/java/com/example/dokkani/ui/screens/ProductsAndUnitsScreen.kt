@@ -32,6 +32,7 @@ import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.ui.screens.crud.AddEditProductDialog
 import com.example.dokkani.ui.screens.crud.AddEditUnitDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
+import com.example.dokkani.ui.components.BarcodeTextField
 
 @Composable
 fun ProductsAndUnitsScreen(
@@ -54,6 +55,19 @@ fun ProductsAndUnitsScreen(
     var deletingUnit by remember { mutableStateOf<ProductUnitEntity?>(null) }
 
     val isAdmin = currentUserRole == UserRole.ADMIN
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredProducts = remember(productsWithUnits, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) {
+            productsWithUnits
+        } else {
+            productsWithUnits.filter { item ->
+                item.product.name.lowercase().contains(q) ||
+                        item.product.code.lowercase().contains(q) ||
+                        item.units.any { it.barcode.lowercase().contains(q) }
+            }
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -95,13 +109,26 @@ fun ProductsAndUnitsScreen(
             }
 
             item {
+                BarcodeTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = "بحث بالاسم أو مسح الباركود",
+                    placeholder = "امسح باركود الصنف للوصول السريع...",
+                    onBarcodeScanned = { scannedCode ->
+                        searchQuery = scannedCode
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "قائمة الأصناف المسجلة بالمتجر (${productsWithUnits.size}):",
+                        text = "قائمة الأصناف المسجلة بالمتجر (${filteredProducts.size}):",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -119,7 +146,7 @@ fun ProductsAndUnitsScreen(
                 }
             }
 
-            items(productsWithUnits) { item ->
+            items(filteredProducts) { item ->
                 val p = item.product
                 Card(
                     shape = RoundedCornerShape(12.dp),

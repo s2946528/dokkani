@@ -1028,6 +1028,23 @@ private fun StepOpeningStock(
                     Text("إضافة صنف جرد سريع:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(6.dp))
 
+                    var tempBarcode by remember { mutableStateOf("") }
+                    com.example.dokkani.ui.components.BarcodeTextField(
+                        value = tempBarcode,
+                        onValueChange = { tempBarcode = it },
+                        label = "مسح باركود المنتج (اختياري)",
+                        placeholder = "امسح الباركود بالكاميرا لتعبئة الصنف...",
+                        onBarcodeScanned = { scannedCode ->
+                            tempBarcode = scannedCode
+                            if (newProdName.isBlank()) {
+                                onNewProdNameChange("صنف باركود $scannedCode")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
                     OutlinedTextField(
                         value = newProdName,
                         onValueChange = onNewProdNameChange,

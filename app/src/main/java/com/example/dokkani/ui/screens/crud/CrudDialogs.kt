@@ -22,6 +22,7 @@ import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
+import com.example.dokkani.ui.components.BarcodeTextField
 
 /**
  * حوار تأكيد الحذف عام
@@ -205,10 +206,14 @@ fun AddEditProductDialog(
                         )
                     }
 
-                    OutlinedTextField(
+                    BarcodeTextField(
                         value = barcode,
                         onValueChange = { barcode = it },
-                        label = { Text("الباركود الخاص بالوحدة") },
+                        label = "الباركود الخاص بالوحدة",
+                        placeholder = "امسح باركود السلعة بالكاميرا أو اكتبه...",
+                        onBarcodeScanned = { scannedCode ->
+                            barcode = scannedCode
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp)
                     )
@@ -308,10 +313,14 @@ fun AddEditUnitDialog(
                     shape = RoundedCornerShape(8.dp)
                 )
 
-                OutlinedTextField(
+                BarcodeTextField(
                     value = barcode,
                     onValueChange = { barcode = it },
-                    label = { Text("باركود الوحدة للماسح الضوئي") },
+                    label = "باركود الوحدة للماسح الضوئي",
+                    placeholder = "امسح باركود العبوة/الوحدة بالكاميرا...",
+                    onBarcodeScanned = { scannedCode ->
+                        barcode = scannedCode
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )

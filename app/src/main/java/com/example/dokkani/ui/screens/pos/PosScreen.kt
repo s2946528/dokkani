@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.dokkani.ui.components.BarcodeTextField
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
@@ -523,17 +524,23 @@ private fun PosProductsPanel(
                 .fillMaxSize()
                 .padding(if (isCompact) 8.dp else 10.dp)
         ) {
-            // شريط البحث
-            OutlinedTextField(
+            // شريط البحث والباركود بالكاميرا
+            BarcodeTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("ابحث بالاسم أو الباركود...", fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (uiState.searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = null)
+                placeholder = "ابحث بالاسم أو امسح الباركود...",
+                label = "البحث أو مسح الباركود",
+                onBarcodeScanned = { scannedCode ->
+                    viewModel.setSearchQuery(scannedCode)
+                    val matchedProduct = uiState.productsWithUnits.find { prod ->
+                        prod.units.any { it.barcode.trim().equals(scannedCode.trim(), ignoreCase = true) }
+                    }
+                    if (matchedProduct != null) {
+                        val matchedUnit = matchedProduct.units.find { it.barcode.trim().equals(scannedCode.trim(), ignoreCase = true) }
+                            ?: matchedProduct.units.firstOrNull()
+                        if (matchedUnit != null) {
+                            viewModel.addToCart(matchedProduct.product, matchedUnit, 1.0)
                         }
                     }
                 },
@@ -1332,17 +1339,23 @@ private fun PosInvoiceSectionOld(
                     .fillMaxSize()
                     .padding(10.dp)
             ) {
-                // شريط البحث
-                OutlinedTextField(
+                // شريط البحث والباركود بالكاميرا
+                BarcodeTextField(
                     value = uiState.searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("ابحث بالاسم أو الباركود...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (uiState.searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = null)
+                    placeholder = "ابحث بالاسم أو امسح الباركود...",
+                    label = "البحث أو مسح الباركود",
+                    onBarcodeScanned = { scannedCode ->
+                        viewModel.setSearchQuery(scannedCode)
+                        val matchedProduct = uiState.productsWithUnits.find { prod ->
+                            prod.units.any { it.barcode.trim().equals(scannedCode.trim(), ignoreCase = true) }
+                        }
+                        if (matchedProduct != null) {
+                            val matchedUnit = matchedProduct.units.find { it.barcode.trim().equals(scannedCode.trim(), ignoreCase = true) }
+                                ?: matchedProduct.units.firstOrNull()
+                            if (matchedUnit != null) {
+                                viewModel.addToCart(matchedProduct.product, matchedUnit, 1.0)
                             }
                         }
                     },

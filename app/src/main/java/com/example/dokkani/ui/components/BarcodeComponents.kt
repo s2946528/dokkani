@@ -72,6 +72,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import java.util.concurrent.Executors
 
 /**
  * دالة لتشغيل صوت تنبيه (Beep) قصير عبر ToneGenerator المدمج في نظام أندرويد
@@ -148,6 +164,131 @@ fun rememberBarcodeScannerLauncher(
                 permissionLauncher.launch(Manifest.permission.CAMERA)
             }
         }
+    }
+}
+
+/**
+ * مكون عرض الكاميرا الحقيقية وتحليل إطارات الفيديو باستخدام CameraX و Google ML Kit
+ */
+@Composable
+fun LiveCameraBarcodePreview(
+    torchEnabled: Boolean,
+    onBarcodeScanned: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var hasScanned by remember { mutableStateOf(false) }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(torchEnabled, camera) {
+        try {
+            camera?.cameraControl?.enableTorch(torchEnabled)
+        } catch (_: Exception) {}
+    }
+
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
+
+    if (cameraError != null) {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF1E293B)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = null,
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = cameraError ?: "تعذر تشغيل الكاميرا",
+                    color = Color(0xFFE2E8F0),
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    } else {
+        AndroidView(
+            modifier = modifier.clip(RoundedCornerShape(12.dp)),
+            factory = { ctx ->
+                val previewView = PreviewView(ctx).apply {
+                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                }
+
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                cameraProviderFuture.addListener({
+                    try {
+                        val cameraProvider = cameraProviderFuture.get()
+
+                        val preview = Preview.Builder().build().also {
+                            it.setSurfaceProvider(previewView.surfaceProvider)
+                        }
+
+                        val barcodeScanner = BarcodeScanning.getClient()
+
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
+
+                        imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                            @androidx.annotation.OptIn(ExperimentalGetImage::class)
+                            val mediaImage = imageProxy.image
+                            if (mediaImage != null && !hasScanned) {
+                                val image = InputImage.fromMediaImage(
+                                    mediaImage,
+                                    imageProxy.imageInfo.rotationDegrees
+                                )
+                                barcodeScanner.process(image)
+                                    .addOnSuccessListener { barcodes ->
+                                        if (!hasScanned && barcodes.isNotEmpty()) {
+                                            val rawValue = barcodes.firstOrNull()?.rawValue
+                                            if (!rawValue.isNullOrBlank()) {
+                                                hasScanned = true
+                                                Handler(Looper.getMainLooper()).post {
+                                                    onBarcodeScanned(rawValue)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .addOnCompleteListener {
+                                        imageProxy.close()
+                                    }
+                            } else {
+                                imageProxy.close()
+                            }
+                        }
+
+                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                        cameraProvider.unbindAll()
+                        camera = cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview,
+                            imageAnalysis
+                        )
+                    } catch (e: Exception) {
+                        cameraError = "تعذر فتح عدسة الكاميرا: ${e.localizedMessage ?: "تأكد من إذن الكاميرا"}"
+                    }
+                }, ContextCompat.getMainExecutor(ctx))
+
+                previewView
+            }
+        )
     }
 }
 
@@ -232,20 +373,27 @@ fun CameraBarcodeScannerDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // شاشة محاكاة إطار الكاميرا الحية مع خط الليزر
+                // شاشة إطار الكاميرا الحية مع خط الليزر
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .height(230.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF0F172A)),
                     contentAlignment = Alignment.Center
                 ) {
-                    // إطار الهدف
+                    // بث الكاميرا الحقيقية ومحلل الباركود
+                    LiveCameraBarcodePreview(
+                        torchEnabled = torchEnabled,
+                        onBarcodeScanned = onBarcodeScanned,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // إطار الهدف الأخضر
                     Box(
                         modifier = Modifier
-                            .size(180.dp, 100.dp)
-                            .border(2.dp, Color(0xFF10B981), RoundedCornerShape(8.dp))
+                            .size(190.dp, 120.dp)
+                            .border(2.5.dp, Color(0xFF10B981), RoundedCornerShape(10.dp))
                     )
 
                     // خط الليزر المتحرك
@@ -254,18 +402,24 @@ fun CameraBarcodeScannerDialog(
                             .fillMaxWidth(0.65f)
                             .height(2.dp)
                             .align(Alignment.TopCenter)
-                            .padding(top = (25 + (laserPosition * 105)).dp)
+                            .padding(top = (45 + (laserPosition * 140)).dp)
                             .background(Color(0xFFEF4444))
                     )
 
-                    Text(
-                        text = "وجّه الكاميرا نحو رمز الباركود",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 11.sp,
+                    Surface(
+                        color = Color(0x99000000),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 8.dp)
-                    )
+                    ) {
+                        Text(
+                            text = "وجّه الكاميرا نحو رمز الباركود لمسحه تلقائياً",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
                 }
 
                 // إدخال يدوي سريع

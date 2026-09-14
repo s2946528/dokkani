@@ -104,6 +104,7 @@ fun BarcodeLabelPrinterScreen(
     onBarcodeChanged: (String) -> Unit = {},
     onGenerateUniqueBarcode: () -> Unit = {},
     onPrintLabel: () -> Unit = {},
+    currencySymbol: String = "ر.س",
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -271,7 +272,7 @@ fun BarcodeLabelPrinterScreen(
                                             style = MaterialTheme.typography.bodyMedium
                                         )
                                         Text(
-                                            text = "%.2f ر.س".format(unit.sellingPrice),
+                                            text = "%.2f %s".format(unit.sellingPrice, currencySymbol),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color(0xFF198754),
                                             fontWeight = FontWeight.Bold
@@ -594,7 +595,8 @@ fun BarcodeLabelPrinterScreen(
                         showBarcodeText = showBarcodeText,
                         showPrice = showPrice,
                         showTaxNote = showTaxNote,
-                        paperSize = labelPaperSize
+                        paperSize = labelPaperSize,
+                    currencySymbol = currencySymbol
                     )
                 }
             }
@@ -748,6 +750,7 @@ fun ThermalLabelCanvasPreview(
     showPrice: Boolean,
     showTaxNote: Boolean,
     paperSize: LabelPaperSize,
+    currencySymbol: String = "ر.س",
     modifier: Modifier = Modifier
 ) {
     val aspectRatio = paperSize.widthMm.toFloat() / paperSize.heightMm.toFloat()
@@ -844,7 +847,7 @@ fun ThermalLabelCanvasPreview(
                     )
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = "ر.س",
+                        text = currencySymbol,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black

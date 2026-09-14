@@ -132,7 +132,7 @@ fun PurchaseScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             OutlinedTextField(
-                                value = uiState.selectedSupplier?.let { "${it.name} (${if (it.currentBalance < 0) "دائن: %.2f".format(-it.currentBalance) else "رصيد: %.2f".format(it.currentBalance)} ر.س)" } ?: "اختر المورد...",
+                                value = uiState.selectedSupplier?.let { "${it.name} (${if (it.currentBalance < 0) "دائن: %.2f".format(-it.currentBalance) else "رصيد: %.2f".format(it.currentBalance)} ${uiState.currencySymbol})" } ?: "اختر المورد...",
                                 onValueChange = {},
                                 readOnly = true,
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = supplierDropdownExpanded) },
@@ -152,7 +152,7 @@ fun PurchaseScreen(
                                             Column {
                                                 Text(supplier.name, fontWeight = FontWeight.Bold)
                                                 Text(
-                                                    text = if (supplier.currentBalance < 0) "مستحق له (دائن): %.2f ر.س".format(-supplier.currentBalance) else "رصيده: %.2f ر.س".format(supplier.currentBalance),
+                                                    text = if (supplier.currentBalance < 0) "مستحق له (دائن): %.2f %s".format(-supplier.currentBalance, uiState.currencySymbol) else "رصيده: %.2f %s".format(supplier.currentBalance, uiState.currencySymbol),
                                                     fontSize = 11.sp,
                                                     color = if (supplier.currentBalance < 0) Color(0xFFD32F2F) else Color.Gray
                                                 )
@@ -263,7 +263,7 @@ fun PurchaseScreen(
                                                 ) {
                                                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("${unit.unitName} (تكلفة: ${unit.costPrice} ر.س)", fontSize = 11.sp)
+                                                    Text("${unit.unitName} (تكلفة: ${unit.costPrice} ${uiState.currencySymbol})", fontSize = 11.sp)
                                                 }
                                             }
                                         }
@@ -342,7 +342,7 @@ fun PurchaseScreen(
                                             ) {
                                                 Column {
                                                     Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                    Text("الوحدة: ${item.unitName} (التكلفة الحالية المسجلة: ${item.oldCostPrice} ر.س)", fontSize = 11.sp, color = Color.DarkGray)
+                                                    Text("الوحدة: ${item.unitName} (التكلفة الحالية المسجلة: ${item.oldCostPrice} ${uiState.currencySymbol})", fontSize = 11.sp, color = Color.DarkGray)
                                                 }
 
                                                 IconButton(
@@ -395,7 +395,7 @@ fun PurchaseScreen(
                                                 ) {
                                                     Text("إجمالي البند", fontSize = 11.sp, color = Color.Gray)
                                                     Text(
-                                                        "%.2f ر.س".format(item.totalCost),
+                                                        "%.2f %s".format(item.totalCost, uiState.currencySymbol),
                                                         fontWeight = FontWeight.Bold,
                                                         color = Color(0xFF1976D2),
                                                         fontSize = 14.sp
@@ -455,12 +455,12 @@ fun PurchaseScreen(
                             }
 
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("المجموع قبل الضريبة: %.2f ر.س".format(uiState.subtotal), fontSize = 12.sp, color = Color.DarkGray)
+                                Text("المجموع قبل الضريبة: %.2f %s".format(uiState.subtotal, uiState.currencySymbol), fontSize = 12.sp, color = Color.DarkGray)
                                 if (uiState.isTaxApplied) {
-                                    Text("ضريبة 15%: ${"%.2f".format(uiState.taxAmount)} ر.س", fontSize = 12.sp, color = Color.DarkGray)
+                                    Text("ضريبة 15%: %.2f %s".format(uiState.taxAmount, uiState.currencySymbol), fontSize = 12.sp, color = Color.DarkGray)
                                 }
                                 Text(
-                                    "الصافي الإجمالي: %.2f ر.س".format(uiState.finalTotal),
+                                    "الصافي الإجمالي: %.2f %s".format(uiState.finalTotal, uiState.currencySymbol),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 18.sp,
                                     color = Color(0xFF1976D2)
@@ -541,7 +541,7 @@ fun PurchaseScreen(
                                         ) {
                                             Text("التكلفة السابقة: %.2f".format(wac.oldCost), fontSize = 11.sp, color = Color.Gray)
                                             Text("شراء جديد: %.2f".format(wac.purchaseCost), fontSize = 11.sp, color = Color.Gray)
-                                            Text("WAC الجديد: %.2f ر.س".format(wac.newWacCost), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF1B5E20))
+                                            Text("WAC الجديد: %.2f %s".format(wac.newWacCost, uiState.currencySymbol), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF1B5E20))
                                         }
                                         Text("الرصيد الجديد: %.2f ${wac.unitName}".format(wac.newStock), fontSize = 10.sp, color = Color.DarkGray)
                                     }
@@ -622,7 +622,8 @@ fun PurchaseScreen(
                 items = uiState.selectedInvoiceWithDetails,
                 products = uiState.productsWithUnits,
                 parties = uiState.suppliers,
-                onDismiss = { viewModel.dismissInvoiceDetails() }
+                onDismiss = { viewModel.dismissInvoiceDetails() },
+                currencySymbol = uiState.currencySymbol
             )
         }
 
@@ -803,7 +804,7 @@ private fun PurchaseBottomHistorySection(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            "%.2f ر.س".format(inv.total),
+                                            "%.2f %s".format(inv.total, uiState.currencySymbol),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp,
                                             color = Color(0xFF1976D2)
@@ -852,7 +853,7 @@ private fun PurchaseBottomHistorySection(
             text = {
                 Column {
                     Text(
-                        "هل أنت متأكد من رغبتك في حذف فاتورة الشراء رقم (${deleteCandidate!!.invoiceNumber}) بقيمة %.2f ر.س؟".format(deleteCandidate!!.total),
+                        "هل أنت متأكد من رغبتك في حذف فاتورة الشراء رقم (${deleteCandidate!!.invoiceNumber}) بقيمة %.2f %s؟".format(deleteCandidate!!.total, uiState.currencySymbol),
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -898,7 +899,8 @@ private fun PurchaseInvoiceDetailsDialog(
     items: List<InvoiceItemEntity>,
     products: List<ProductWithUnits>,
     parties: List<PartyEntity>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     val supplierName = invoice.partyId?.let { pId ->
         parties.find { it.id == pId }?.name
@@ -941,8 +943,8 @@ private fun PurchaseInvoiceDetailsDialog(
                             Text("طريقة السداد: ${invoice.paymentMethod.labelArabic}", fontSize = 11.sp, color = Color.DarkGray)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("الإجمالي: %.2f ر.س".format(invoice.total), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1976D2))
-                            Text("الضريبة: %.2f ر.س".format(invoice.taxAmount), fontSize = 11.sp, color = Color.Gray)
+                            Text("الإجمالي: %.2f %s".format(invoice.total, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1976D2))
+                            Text("الضريبة: %.2f %s".format(invoice.taxAmount, currencySymbol), fontSize = 11.sp, color = Color.Gray)
                         }
                     }
                 }
@@ -975,10 +977,10 @@ private fun PurchaseInvoiceDetailsDialog(
                             ) {
                                 Column {
                                     Text(prod?.product?.name ?: "صنف #${item.productId}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text("الكمية: %.2f %s × %.2f ر.س".format(item.quantity, unitName, item.unitSellingPrice), fontSize = 11.sp, color = Color.DarkGray)
+                                    Text("الكمية: %.2f %s × %.2f %s".format(item.quantity, unitName, item.unitSellingPrice, currencySymbol), fontSize = 11.sp, color = Color.DarkGray)
                                 }
                                 Text(
-                                    "%.2f ر.س".format(item.totalPrice),
+                                    "%.2f %s".format(item.totalPrice, currencySymbol),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = Color(0xFF1976D2)

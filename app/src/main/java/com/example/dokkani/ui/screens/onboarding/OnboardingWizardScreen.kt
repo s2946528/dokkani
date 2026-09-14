@@ -358,13 +358,15 @@ fun OnboardingWizardScreen(
                                         },
                                         onRemoveItem = { item ->
                                             openingItems = openingItems.filter { it != item }
-                                        }
+                                        },
+                                        currencySymbol = activeCurrencySymbol
                                     )
                                 }
                             }
                             4 -> {
                                 // دفتر ديون العملاء الافتتاحي (للبقالة القائمة)
                                 StepOpeningCustomers(
+                currencySymbol = activeCurrencySymbol,
                                     customers = customers,
                                     name = newCustName,
                                     onNameChange = { newCustName = it },
@@ -389,6 +391,7 @@ fun OnboardingWizardScreen(
                             5 -> {
                                 // مستحقات الموردين وتأكيد الرقابة (للبقالة القائمة)
                                 StepOpeningSuppliersAndReview(
+                                    currencySymbol = activeCurrencySymbol,
                                     suppliers = suppliers,
                                     name = newSuppName,
                                     onNameChange = { newSuppName = it },
@@ -993,7 +996,8 @@ private fun StepOpeningStock(
     newProdPrice: String,
     onNewProdPriceChange: (String) -> Unit,
     onAddItem: () -> Unit,
-    onRemoveItem: (OpeningBalanceItem) -> Unit
+    onRemoveItem: (OpeningBalanceItem) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1102,7 +1106,7 @@ private fun StepOpeningStock(
                     Column {
                         Text(item.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text(
-                            "الكمية: ${item.quantity} | التكلفة: ${item.costPrice} ر.س | البيع: ${item.sellingPrice} ر.س",
+                            "الكمية: ${item.quantity} | التكلفة: ${item.costPrice} $currencySymbol | البيع: ${item.sellingPrice} $currencySymbol",
                             fontSize = 11.sp,
                             color = Color(0xFF666666)
                         )
@@ -1118,6 +1122,7 @@ private fun StepOpeningStock(
 
 @Composable
 private fun StepOpeningCustomers(
+    currencySymbol: String = "ر.س",
     customers: List<OpeningBalanceCustomer>,
     name: String,
     onNameChange: (String) -> Unit,
@@ -1208,7 +1213,7 @@ private fun StepOpeningCustomers(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("قائمة عملاء الدفتر (${customers.size}):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text("إجمالي ديون الدفتر: ${"%.2f".format(totalCustomerDebt)} ر.س", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1B5E20))
+                Text("إجمالي ديون الدفتر: ${"%.2f".format(totalCustomerDebt)} $currencySymbol", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1B5E20))
             }
         }
 
@@ -1231,7 +1236,7 @@ private fun StepOpeningCustomers(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "${"%.2f".format(c.openingBalance)} ر.س",
+                            "${"%.2f".format(c.openingBalance)} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFC62828),
                             fontSize = 13.sp
@@ -1248,6 +1253,7 @@ private fun StepOpeningCustomers(
 
 @Composable
 private fun StepOpeningSuppliersAndReview(
+    currencySymbol: String = "ر.س",
     suppliers: List<OpeningBalanceSupplier>,
     name: String,
     onNameChange: (String) -> Unit,
@@ -1312,7 +1318,7 @@ private fun StepOpeningSuppliersAndReview(
                         OutlinedTextField(
                             value = balance,
                             onValueChange = onBalanceChange,
-                            label = { Text("المبلغ المستحق له (ر.س)") },
+                            label = { Text("المبلغ المستحق له (${currencySymbol})") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -1354,7 +1360,7 @@ private fun StepOpeningSuppliersAndReview(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "${"%.2f".format(s.openingPayable)} ر.س",
+                            "${"%.2f".format(s.openingPayable)} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFE65100),
                             fontSize = 13.sp
@@ -1382,7 +1388,7 @@ private fun StepOpeningSuppliersAndReview(
                         color = Color(0xFF1B5E20)
                     )
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("• متجر: $storeName | العهدة النقدية في الدرج: $openingCash ر.س", fontSize = 12.sp)
+                    Text("• متجر: $storeName | العهدة النقدية في الدرج: $openingCash $currencySymbol", fontSize = 12.sp)
                     Text("• تم تقييد $stockCount صنفاً ضمن بضاعة أول المدة", fontSize = 12.sp)
                     Text("• تم ترحيل $customersCount عميلاً من الدفتر القديم", fontSize = 12.sp)
                     Text("• تم قيد ${suppliers.size} مورداً مع التزاماتهم المالية", fontSize = 12.sp)

@@ -75,6 +75,7 @@ fun CostingEngineScreen(
     onSelectMethod: (CostValuationMethod) -> Unit = {},
     onSaveMethodToSettings: (CostValuationMethod) -> Unit = {},
     onAddSimulatedPurchaseBatch: (quantity: Double, unitCost: Double) -> Unit = { _, _ -> },
+    currencySymbol: String = "ر.س",
     modifier: Modifier = Modifier
 ) {
     var showAddBatchDialog by remember { mutableStateOf(false) }
@@ -168,6 +169,7 @@ fun CostingEngineScreen(
                     unitName = wacResult?.targetUnitName ?: "وحدة",
                     isSelected = selectedMethod == CostValuationMethod.WAC,
                     onClick = { onSelectMethod(CostValuationMethod.WAC) },
+                    currencySymbol = currencySymbol,
                     modifier = Modifier.weight(1f).testTag("card_method_wac")
                 )
                 MethodComparisonCard(
@@ -176,6 +178,7 @@ fun CostingEngineScreen(
                     unitName = fifoResult?.targetUnitName ?: "وحدة",
                     isSelected = selectedMethod == CostValuationMethod.FIFO,
                     onClick = { onSelectMethod(CostValuationMethod.FIFO) },
+                    currencySymbol = currencySymbol,
                     modifier = Modifier.weight(1f).testTag("card_method_fifo")
                 )
                 MethodComparisonCard(
@@ -184,6 +187,7 @@ fun CostingEngineScreen(
                     unitName = lppResult?.targetUnitName ?: "وحدة",
                     isSelected = selectedMethod == CostValuationMethod.LAST_PURCHASE_PRICE,
                     onClick = { onSelectMethod(CostValuationMethod.LAST_PURCHASE_PRICE) },
+                    currencySymbol = currencySymbol,
                     modifier = Modifier.weight(1f).testTag("card_method_lpp")
                 )
             }
@@ -219,7 +223,7 @@ fun CostingEngineScreen(
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = "%.4f ر.س".format(res.unitCostBase),
+                                    text = "%.4f %s".format(res.unitCostBase, currencySymbol),
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -357,7 +361,7 @@ fun CostingEngineScreen(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "%.2f ر.س".format(lot.unitCostPriceBase),
+                                text = "%.2f %s".format(lot.unitCostPriceBase, currencySymbol),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0F5132)
@@ -381,7 +385,8 @@ fun CostingEngineScreen(
             onConfirm = { qty, cost ->
                 onAddSimulatedPurchaseBatch(qty, cost)
                 showAddBatchDialog = false
-            }
+            },
+            currencySymbol = currencySymbol
         )
     }
 }
@@ -393,6 +398,7 @@ private fun MethodComparisonCard(
     unitName: String,
     isSelected: Boolean,
     onClick: () -> Unit,
+    currencySymbol: String = "ر.س",
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -424,7 +430,7 @@ private fun MethodComparisonCard(
                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "ر.س / $unitName",
+                text = "$currencySymbol / $unitName",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -435,7 +441,8 @@ private fun MethodComparisonCard(
 @Composable
 private fun AddSimulatedBatchDialog(
     onDismiss: () -> Unit,
-    onConfirm: (quantity: Double, unitCost: Double) -> Unit
+    onConfirm: (quantity: Double, unitCost: Double) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     var qtyText by remember { mutableStateOf("15.0") }
     var costText by remember { mutableStateOf("4.20") }
@@ -459,7 +466,7 @@ private fun AddSimulatedBatchDialog(
                 OutlinedTextField(
                     value = costText,
                     onValueChange = { costText = it },
-                    label = { Text("سعر تكلفة الشراء للوحدة (ر.س)") },
+                    label = { Text("سعر تكلفة الشراء للوحدة (${currencySymbol})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth().testTag("dialog_batch_cost")
                 )

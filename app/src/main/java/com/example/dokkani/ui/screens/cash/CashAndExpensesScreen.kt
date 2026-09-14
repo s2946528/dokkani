@@ -124,7 +124,8 @@ fun CashAndExpensesScreen(
             // محتوى تبويب المصروفات والنثريات
             ExpensesContent(
                 expenses = expenses,
-                onOpenAddDialog = onOpenAddExpenseDialog
+                onOpenAddDialog = onOpenAddExpenseDialog,
+                currencySymbol = uiState.currencySymbol
             )
         } else {
             // محتوى تبويب مطابقة الصندوق وإغلاق الشفت
@@ -149,7 +150,8 @@ fun CashAndExpensesScreen(
             isSubmitting = uiState.isSubmittingExpense,
             onInputsChanged = onExpenseInputsChanged,
             onDismiss = onDismissAddExpenseDialog,
-            onSubmit = onSubmitExpense
+            onSubmit = onSubmitExpense,
+            currencySymbol = uiState.currencySymbol
         )
     }
 }
@@ -160,7 +162,8 @@ fun CashAndExpensesScreen(
 @Composable
 private fun ExpensesContent(
     expenses: List<ExpenseEntity>,
-    onOpenAddDialog: () -> Unit
+    onOpenAddDialog: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     val totalExpenses = expenses.sumOf { it.amount }
     val cashExpenses = expenses.filter { it.paymentMethod == PaymentMethod.CASH }.sumOf { it.amount }
@@ -174,7 +177,7 @@ private fun ExpensesContent(
         ) {
             ExpenseKpiCard(
                 title = "إجمالي المصروفات",
-                value = "${"%.2f".format(totalExpenses)} ر.س",
+                value = "${"%.2f".format(totalExpenses)} $currencySymbol",
                 subtitle = "${expenses.size} عملية مسجلة",
                 backgroundColor = Color(0xFFFEF2F2),
                 textColor = Color(0xFFDC2626),
@@ -182,7 +185,7 @@ private fun ExpensesContent(
             )
             ExpenseKpiCard(
                 title = "مسدد نقداً من الدرج",
-                value = "${"%.2f".format(cashExpenses)} ر.س",
+                value = "${"%.2f".format(cashExpenses)} $currencySymbol",
                 subtitle = "يخصم من نقدية الصندوق",
                 backgroundColor = Color(0xFFFFFBEB),
                 textColor = Color(0xFFD97706),
@@ -190,7 +193,7 @@ private fun ExpensesContent(
             )
             ExpenseKpiCard(
                 title = "مسدد شبكة / بنك",
-                value = "${"%.2f".format(bankExpenses)} ر.س",
+                value = "${"%.2f".format(bankExpenses)} $currencySymbol",
                 subtitle = "حوالات وبطاقات",
                 backgroundColor = Color(0xFFEFF6FF),
                 textColor = Color(0xFF2563EB),
@@ -230,7 +233,7 @@ private fun ExpensesContent(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(expenses, key = { it.id }) { item ->
-                ExpenseItemCard(expense = item)
+                ExpenseItemCard(expense = item, currencySymbol = currencySymbol)
             }
 
             if (expenses.isEmpty()) {
@@ -278,7 +281,7 @@ private fun ExpenseKpiCard(
  * بطاقة تفاصيل عنصر المصروف
  */
 @Composable
-private fun ExpenseItemCard(expense: ExpenseEntity) {
+private fun ExpenseItemCard(expense: ExpenseEntity, currencySymbol: String = "ر.س") {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale.getDefault()) }
     val dateString = remember(expense.date) { dateFormat.format(Date(expense.date)) }
 
@@ -361,7 +364,7 @@ private fun ExpenseItemCard(expense: ExpenseEntity) {
             // المبلغ وطريقة الدفع
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "-${"%.2f".format(expense.amount)} ر.س",
+                    text = "-${"%.2f".format(expense.amount)} $currencySymbol",
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = Color(0xFFDC2626)
@@ -389,7 +392,8 @@ private fun AddExpenseDialog(
     isSubmitting: Boolean,
     onInputsChanged: (String, String, String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -431,7 +435,7 @@ private fun AddExpenseDialog(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { onInputsChanged(category, it, paidTo, notes, selectedMethod) },
-                    label = { Text("مبلغ المصروف (ر.س)*") },
+                    label = { Text("مبلغ المصروف (${currencySymbol})*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier
@@ -557,7 +561,7 @@ private fun ShiftReconciliationContent(
                         Column {
                             Text("العهدة الافتتاحية", fontSize = 11.sp, color = Color(0xFFD1E7DD))
                             Text(
-                                text = "${"%.2f".format(recon?.openingCash ?: 200.0)} ر.س",
+                                text = "${"%.2f".format(recon?.openingCash ?: 200.0)} ${uiState.currencySymbol}",
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 fontSize = 14.sp
@@ -566,7 +570,7 @@ private fun ShiftReconciliationContent(
                         Column {
                             Text("+ مبيعات نقدية", fontSize = 11.sp, color = Color(0xFFD1E7DD))
                             Text(
-                                text = "${"%.2f".format(recon?.totalCashSales ?: 0.0)} ر.س",
+                                text = "${"%.2f".format(recon?.totalCashSales ?: 0.0)} ${uiState.currencySymbol}",
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF86EFAC),
                                 fontSize = 14.sp
@@ -575,7 +579,7 @@ private fun ShiftReconciliationContent(
                         Column {
                             Text("+ مقبوضات ديون", fontSize = 11.sp, color = Color(0xFFD1E7DD))
                             Text(
-                                text = "${"%.2f".format(recon?.totalCashCollections ?: 0.0)} ر.س",
+                                text = "${"%.2f".format(recon?.totalCashCollections ?: 0.0)} ${uiState.currencySymbol}",
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF86EFAC),
                                 fontSize = 14.sp
@@ -584,7 +588,7 @@ private fun ShiftReconciliationContent(
                         Column {
                             Text("- مصروفات درج", fontSize = 11.sp, color = Color(0xFFD1E7DD))
                             Text(
-                                text = "-${"%.2f".format(recon?.totalCashExpenses ?: 0.0)} ر.س",
+                                text = "-${"%.2f".format(recon?.totalCashExpenses ?: 0.0)} ${uiState.currencySymbol}",
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFCA5A5),
                                 fontSize = 14.sp
@@ -608,7 +612,7 @@ private fun ShiftReconciliationContent(
                             color = Color.White
                         )
                         Text(
-                            text = "${"%.2f".format(recon?.expectedCashInDrawer ?: 0.0)} ر.س",
+                            text = "${"%.2f".format(recon?.expectedCashInDrawer ?: 0.0)} ${uiState.currencySymbol}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             color = Color(0xFFFEF08A)
@@ -644,7 +648,7 @@ private fun ShiftReconciliationContent(
                             onValueChange = {
                                 onDrawerInputsChanged(it, uiState.drawerPhysicalCashInput, uiState.drawerShiftNotesInput)
                             },
-                            label = { Text("العهدة الافتتاحية (ر.س)") },
+                            label = { Text("العهدة الافتتاحية (${uiState.currencySymbol})") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
                             modifier = Modifier
@@ -657,7 +661,7 @@ private fun ShiftReconciliationContent(
                             onValueChange = {
                                 onDrawerInputsChanged(uiState.drawerOpeningCashInput, it, uiState.drawerShiftNotesInput)
                             },
-                            label = { Text("النقد الفعلي بالدرج (ر.س)*") },
+                            label = { Text("النقد الفعلي بالدرج (${uiState.currencySymbol})*") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
                             modifier = Modifier
@@ -714,7 +718,7 @@ private fun ShiftReconciliationContent(
         // نتيجة المطابقة اللحظية (عجز / زيادة / مطابق)
         if (recon != null) {
             item {
-                ReconciliationResultCard(result = recon)
+                ReconciliationResultCard(result = recon, currencySymbol = uiState.currencySymbol)
             }
         }
 
@@ -730,7 +734,7 @@ private fun ShiftReconciliationContent(
         }
 
         items(cashShifts, key = { it.id }) { shift ->
-            ClosedShiftCard(shift = shift)
+            ClosedShiftCard(shift = shift, currencySymbol = uiState.currencySymbol)
         }
 
         if (cashShifts.isEmpty()) {
@@ -752,7 +756,7 @@ private fun ShiftReconciliationContent(
  * بطاقة نتيجة المطابقة المباشرة
  */
 @Composable
-private fun ReconciliationResultCard(result: CashReconciliationResult) {
+private fun ReconciliationResultCard(result: CashReconciliationResult, currencySymbol: String = "ر.س") {
     val bgColor: Color
     val textColor: Color
     val title: String
@@ -807,10 +811,10 @@ private fun ReconciliationResultCard(result: CashReconciliationResult) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(text = "الدفتر المتوقع: ${"%.2f".format(result.expectedCashInDrawer)} ر.س", fontSize = 12.sp, color = Color(0xFF475569))
-                Text(text = "المجرود الفعلي: ${"%.2f".format(result.actualPhysicalCash)} ر.س", fontSize = 12.sp, color = Color(0xFF475569))
+                Text(text = "الدفتر المتوقع: ${"%.2f".format(result.expectedCashInDrawer)} $currencySymbol", fontSize = 12.sp, color = Color(0xFF475569))
+                Text(text = "المجرود الفعلي: ${"%.2f".format(result.actualPhysicalCash)} $currencySymbol", fontSize = 12.sp, color = Color(0xFF475569))
                 Text(
-                    text = "الفارق: ${if (result.discrepancy >= 0) "+" else ""}${"%.2f".format(result.discrepancy)} ر.س",
+                    text = "الفارق: ${if (result.discrepancy >= 0) "+" else ""}${"%.2f".format(result.discrepancy)} $currencySymbol",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = textColor
@@ -832,7 +836,7 @@ private fun ReconciliationResultCard(result: CashReconciliationResult) {
  * بطاقة الشفت المغلق سابقاً
  */
 @Composable
-private fun ClosedShiftCard(shift: CashShiftEntity) {
+private fun ClosedShiftCard(shift: CashShiftEntity, currencySymbol: String = "ر.س") {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale.getDefault()) }
     val closedDateString = remember(shift.endTime) {
         shift.endTime?.let { dateFormat.format(Date(it)) } ?: "مفتوح"
@@ -887,13 +891,13 @@ private fun ClosedShiftCard(shift: CashShiftEntity) {
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "الفعلي: ${"%.2f".format(shift.actualPhysicalCash)} ر.س",
+                    text = "الفعلي: ${"%.2f".format(shift.actualPhysicalCash)} $currencySymbol",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = Color(0xFF0F172A)
                 )
                 Text(
-                    text = "المتوقع: ${"%.2f".format(shift.expectedCashInDrawer)} ر.س",
+                    text = "المتوقع: ${"%.2f".format(shift.expectedCashInDrawer)} $currencySymbol",
                     fontSize = 11.sp,
                     color = Color(0xFF64748B)
                 )

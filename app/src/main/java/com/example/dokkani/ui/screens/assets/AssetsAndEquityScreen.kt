@@ -139,7 +139,8 @@ fun AssetsAndEquityScreen(
     onDismissSellLeaseholdDialog: () -> Unit = {},
     onSellLeaseholdInputsChanged: (String, PaymentMethod) -> Unit = { _, _ -> },
     onSubmitSellLeasehold: () -> Unit = {},
-    onDeleteLeasehold: (Long) -> Unit = {}
+    onDeleteLeasehold: (Long) -> Unit = {},
+    currencySymbol: String = "ر.س"
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
 
@@ -205,13 +206,15 @@ fun AssetsAndEquityScreen(
         when (subTab) {
             0 -> CapitalAndEquityTabContent(
                 equityResult = equityResult,
-                onOpenOwnerTransDialog = onOpenOwnerTransDialog
+                onOpenOwnerTransDialog = onOpenOwnerTransDialog,
+                currencySymbol = currencySymbol
             )
             1 -> FixedAssetsTabContent(
                 fixedAssets = fixedAssets,
                 dateFormat = dateFormat,
                 onOpenAddAssetDialog = onOpenAddAssetDialog,
-                onDeleteAsset = onDeleteAsset
+                onDeleteAsset = onDeleteAsset,
+                currencySymbol = currencySymbol
             )
             2 -> LeaseholdRightsTabContent(
                 leaseholdRights = leaseholdRights,
@@ -219,13 +222,15 @@ fun AssetsAndEquityScreen(
                 onOpenAddLeaseholdDialog = onOpenAddLeaseholdDialog,
                 onOpenAmortizeLeaseholdDialog = onOpenAmortizeLeaseholdDialog,
                 onOpenSellLeaseholdDialog = onOpenSellLeaseholdDialog,
-                onDeleteLeasehold = onDeleteLeasehold
+                onDeleteLeasehold = onDeleteLeasehold,
+                currencySymbol = currencySymbol
             )
             3 -> OwnerTransactionsTabContent(
                 ownerTransactions = ownerTransactions,
                 dateFormat = dateFormat,
                 onOpenOwnerTransDialog = onOpenOwnerTransDialog,
-                onDeleteOwnerTrans = onDeleteOwnerTrans
+                onDeleteOwnerTrans = onDeleteOwnerTrans,
+                currencySymbol = currencySymbol
             )
         }
     }
@@ -242,7 +247,8 @@ fun AssetsAndEquityScreen(
             assetPaymentMethod = assetPaymentMethod,
             onInputsChanged = onAssetInputsChanged,
             onDismiss = onDismissAddAssetDialog,
-            onSubmit = onSubmitAddAsset
+            onSubmit = onSubmitAddAsset,
+            currencySymbol = currencySymbol
         )
     }
 
@@ -257,7 +263,8 @@ fun AssetsAndEquityScreen(
             paymentMethodInput = ownerTransPaymentMethod,
             onInputsChanged = onOwnerTransInputsChanged,
             onDismiss = onDismissOwnerTransDialog,
-            onSubmit = onSubmitOwnerTrans
+            onSubmit = onSubmitOwnerTrans,
+            currencySymbol = currencySymbol
         )
     }
 
@@ -270,7 +277,8 @@ fun AssetsAndEquityScreen(
             notes = leaseholdNotesInput,
             onInputsChanged = onLeaseholdInputsChanged,
             onDismiss = onDismissAddLeaseholdDialog,
-            onSubmit = onSubmitAddLeasehold
+            onSubmit = onSubmitAddLeasehold,
+            currencySymbol = currencySymbol
         )
     }
 
@@ -280,7 +288,8 @@ fun AssetsAndEquityScreen(
             amortizeAmountInput = leaseholdAmortizeAmountInput,
             onAmortizeAmountChanged = onAmortizeAmountChanged,
             onDismiss = onDismissAmortizeLeaseholdDialog,
-            onSubmit = onSubmitAmortizeLeasehold
+            onSubmit = onSubmitAmortizeLeasehold,
+            currencySymbol = currencySymbol
         )
     }
 
@@ -291,7 +300,8 @@ fun AssetsAndEquityScreen(
             paymentMethod = leaseholdSellPaymentMethod,
             onInputsChanged = onSellLeaseholdInputsChanged,
             onDismiss = onDismissSellLeaseholdDialog,
-            onSubmit = onSubmitSellLeasehold
+            onSubmit = onSubmitSellLeasehold,
+            currencySymbol = currencySymbol
         )
     }
 }
@@ -299,7 +309,8 @@ fun AssetsAndEquityScreen(
 @Composable
 private fun CapitalAndEquityTabContent(
     equityResult: EquityCalculationResult?,
-    onOpenOwnerTransDialog: (OwnerTransactionType) -> Unit
+    onOpenOwnerTransDialog: (OwnerTransactionType) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     val eq = equityResult ?: EquityCalculationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
@@ -316,7 +327,7 @@ private fun CapitalAndEquityTabContent(
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     title = "رأس المال الافتتاحي الآلي",
-                    value = "${"%.2f".format(eq.calculatedInitialCapital)} ر.س",
+                    value = "${"%.2f".format(eq.calculatedInitialCapital)} $currencySymbol",
                     subtitle = "(نقدية + بضاعة + ديون) - التزامات",
                     color = Color(0xFF1E3A8A),
                     icon = Icons.Default.Calculate
@@ -324,7 +335,7 @@ private fun CapitalAndEquityTabContent(
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     title = "صافي حقوق الملكية الإجمالي",
-                    value = "${"%.2f".format(eq.netTotalEquity)} ر.س",
+                    value = "${"%.2f".format(eq.netTotalEquity)} $currencySymbol",
                     subtitle = "رأس المال + أصول + أرباح - مسحوبات",
                     color = Color(0xFF15803D),
                     icon = Icons.Default.AccountBalance
@@ -340,7 +351,7 @@ private fun CapitalAndEquityTabContent(
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     title = "إجمالي الأصول الثابتة",
-                    value = "${"%.2f".format(eq.totalFixedAssetsValue)} ر.س",
+                    value = "${"%.2f".format(eq.totalFixedAssetsValue)} $currencySymbol",
                     subtitle = "ثلاجات، أرفف، وموازين",
                     color = Color(0xFF0369A1),
                     icon = Icons.Default.Store
@@ -348,7 +359,7 @@ private fun CapitalAndEquityTabContent(
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     title = "نقل القدم / خلو المحل",
-                    value = "${"%.2f".format(eq.totalLeaseholdGoodwillValue)} ر.س",
+                    value = "${"%.2f".format(eq.totalLeaseholdGoodwillValue)} $currencySymbol",
                     subtitle = "أصل غير ملموس تأسيسي",
                     color = Color(0xFF7C3AED),
                     icon = Icons.Default.CorporateFare
@@ -356,7 +367,7 @@ private fun CapitalAndEquityTabContent(
                 KpiCard(
                     modifier = Modifier.weight(1f),
                     title = "مسحوبات المالك الشخصية",
-                    value = "${"%.2f".format(eq.totalOwnerDrawings)} ر.س",
+                    value = "${"%.2f".format(eq.totalOwnerDrawings)} $currencySymbol",
                     subtitle = "نقدية وبضاعة بسعر التكلفة",
                     color = Color(0xFFB91C1C),
                     icon = Icons.Default.MoneyOff
@@ -430,7 +441,7 @@ private fun CapitalAndEquityTabContent(
                             color = Color(0xFF1E3A8A)
                         )
                         Text(
-                            text = "${"%.2f".format(eq.calculatedInitialCapital)} ر.س",
+                            text = "${"%.2f".format(eq.calculatedInitialCapital)} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = Color(0xFF1E3A8A)
@@ -501,7 +512,8 @@ private fun FixedAssetsTabContent(
     fixedAssets: List<FixedAssetEntity>,
     dateFormat: SimpleDateFormat,
     onOpenAddAssetDialog: () -> Unit,
-    onDeleteAsset: (Long) -> Unit
+    onDeleteAsset: (Long) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -601,7 +613,7 @@ private fun FixedAssetsTabContent(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = "${"%.2f".format(asset.currentValue)} ر.س",
+                                    text = "${"%.2f".format(asset.currentValue)} $currencySymbol",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
                                     color = Color(0xFF15803D)
@@ -629,7 +641,8 @@ private fun OwnerTransactionsTabContent(
     ownerTransactions: List<OwnerTransactionEntity>,
     dateFormat: SimpleDateFormat,
     onOpenOwnerTransDialog: (OwnerTransactionType) -> Unit,
-    onDeleteOwnerTrans: (Long) -> Unit
+    onDeleteOwnerTrans: (Long) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -725,7 +738,7 @@ private fun OwnerTransactionsTabContent(
 
                                 if (trans.type == OwnerTransactionType.GOODS_DRAWING && trans.quantity > 0) {
                                     Text(
-                                        text = "الكمية المسحوبة: ${trans.quantity} بسعر تكلفة الوحدة: ${trans.unitCost} ر.س",
+                                        text = "الكمية المسحوبة: ${trans.quantity} بسعر تكلفة الوحدة: ${trans.unitCost} $currencySymbol",
                                         fontSize = 11.sp,
                                         color = Color(0xFFD97706),
                                         fontWeight = FontWeight.Bold
@@ -735,7 +748,7 @@ private fun OwnerTransactionsTabContent(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = "${"%.2f".format(trans.amount)} ر.س",
+                                    text = "${"%.2f".format(trans.amount)} $currencySymbol",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
                                     color = badgeColor
@@ -789,7 +802,8 @@ private fun KpiCard(
 private fun EquationRow(
     label: String,
     amount: Double,
-    isPositive: Boolean
+    isPositive: Boolean,
+    currencySymbol: String = "ر.س"
 ) {
     Row(
         modifier = Modifier
@@ -803,7 +817,7 @@ private fun EquationRow(
             color = if (isPositive) Color(0xFF1E293B) else Color(0xFFB91C1C)
         )
         Text(
-            text = "${if (isPositive) "+" else "-"}${"%.2f".format(amount)} ر.س",
+            text = "${if (isPositive) "+" else "-"}${"%.2f".format(amount)} $currencySymbol",
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
             color = if (isPositive) Color(0xFF15803D) else Color(0xFFB91C1C)
@@ -823,7 +837,8 @@ private fun AddAssetDialog(
     assetPaymentMethod: PaymentMethod,
     onInputsChanged: (String, String, String, String, String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     var categoryExpanded by remember { mutableStateOf(false) }
 
@@ -877,7 +892,7 @@ private fun AddAssetDialog(
                     OutlinedTextField(
                         value = assetCostInput,
                         onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, assetCategoryInput, it, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
-                        label = { Text("تكلفة الشراء (ر.س)*") },
+                        label = { Text("تكلفة الشراء (${currencySymbol})*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true
@@ -955,7 +970,8 @@ private fun AddOwnerTransactionDialog(
     paymentMethodInput: PaymentMethod,
     onInputsChanged: (OwnerTransactionType, String, Long?, String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     var productExpanded by remember { mutableStateOf(false) }
     val selectedProduct = products.find { it.product.id == productIdInput }
@@ -991,7 +1007,7 @@ private fun AddOwnerTransactionDialog(
                                 DropdownMenuItem(
                                     text = {
                                         val baseCost = pwu.units.firstOrNull { it.isBaseUnit }?.costPrice ?: 0.0
-                                        Text("${pwu.product.name} (التكلفة: $baseCost ر.س)")
+                                        Text("${pwu.product.name} (التكلفة: $baseCost $currencySymbol)")
                                     },
                                     onClick = {
                                         onInputsChanged(type, amountInput, pwu.product.id, quantityInput, detailsInput, paymentMethodInput)
@@ -1014,7 +1030,7 @@ private fun AddOwnerTransactionDialog(
                     OutlinedTextField(
                         value = amountInput,
                         onValueChange = { onInputsChanged(type, it, productIdInput, quantityInput, detailsInput, paymentMethodInput) },
-                        label = { Text("المبلغ النقدي (ر.س)*") },
+                        label = { Text("المبلغ النقدي (${currencySymbol})*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -1059,7 +1075,8 @@ private fun LeaseholdRightsTabContent(
     onOpenAddLeaseholdDialog: () -> Unit,
     onOpenAmortizeLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
     onOpenSellLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
-    onDeleteLeasehold: (Long) -> Unit
+    onDeleteLeasehold: (Long) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -1179,8 +1196,8 @@ private fun LeaseholdRightsTabContent(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("التكلفة الافتتاحية الأصلي: ${"%.2f".format(item.initialCost)} ر.س", fontSize = 12.sp, color = Color(0xFF475569))
-                                    Text("مجمع الإطفاء المتراكم: ${"%.2f".format(item.accumulatedAmortization)} ر.س", fontSize = 12.sp, color = Color(0xFFB91C1C))
+                                    Text("التكلفة الافتتاحية الأصلي: ${"%.2f".format(item.initialCost)} $currencySymbol", fontSize = 12.sp, color = Color(0xFF475569))
+                                    Text("مجمع الإطفاء المتراكم: ${"%.2f".format(item.accumulatedAmortization)} $currencySymbol", fontSize = 12.sp, color = Color(0xFFB91C1C))
                                     Text("مدة عقد الإيجار: ${item.contractDurationYears} سنوات", fontSize = 12.sp, color = Color(0xFF475569))
                                     if (item.notes.isNotEmpty()) {
                                         Text("ملاحظات: ${item.notes}", fontSize = 11.sp, color = Color(0xFF64748B))
@@ -1190,7 +1207,7 @@ private fun LeaseholdRightsTabContent(
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text("القيمة الدفترية الحالية:", fontSize = 10.sp, color = Color.Gray)
                                     Text(
-                                        text = "${"%.2f".format(item.currentBookValue)} ر.س",
+                                        text = "${"%.2f".format(item.currentBookValue)} $currencySymbol",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
                                         color = Color(0xFF7C3AED)
@@ -1248,7 +1265,8 @@ private fun AddLeaseholdDialog(
     notes: String,
     onInputsChanged: (String, String, String, String, String) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1270,7 +1288,7 @@ private fun AddLeaseholdDialog(
                     OutlinedTextField(
                         value = cost,
                         onValueChange = { onInputsChanged(code, name, it, years, notes) },
-                        label = { Text("مبلغ الخلو المدفوع (ر.س)*") },
+                        label = { Text("مبلغ الخلو المدفوع (${currencySymbol})*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true
@@ -1344,7 +1362,8 @@ private fun AmortizeLeaseholdDialog(
     amortizeAmountInput: String,
     onAmortizeAmountChanged: (String) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1360,7 +1379,7 @@ private fun AmortizeLeaseholdDialog(
                     fontSize = 13.sp
                 )
                 Text(
-                    text = "القيمة الدفترية الحالية: ${"%.2f".format(item.currentBookValue)} ر.س",
+                    text = "القيمة الدفترية الحالية: ${"%.2f".format(item.currentBookValue)} $currencySymbol",
                     fontSize = 12.sp,
                     color = Color(0xFF64748B)
                 )
@@ -1368,7 +1387,7 @@ private fun AmortizeLeaseholdDialog(
                 OutlinedTextField(
                     value = amortizeAmountInput,
                     onValueChange = onAmortizeAmountChanged,
-                    label = { Text("قسط الإطفاء المراد خصمه (ر.س)*") },
+                    label = { Text("قسط الإطفاء المراد خصمه (${currencySymbol})*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -1418,7 +1437,8 @@ private fun SellLeaseholdDialog(
     paymentMethod: PaymentMethod,
     onInputsChanged: (String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     var paymentExpanded by remember { mutableStateOf(false) }
     val sellPrice = sellPriceInput.toDoubleOrNull() ?: 0.0
@@ -1439,7 +1459,7 @@ private fun SellLeaseholdDialog(
                     fontSize = 13.sp
                 )
                 Text(
-                    text = "القيمة الدفترية المتبقية: ${"%.2f".format(currentBook)} ر.س",
+                    text = "القيمة الدفترية المتبقية: ${"%.2f".format(currentBook)} $currencySymbol",
                     fontSize = 12.sp,
                     color = Color(0xFF64748B)
                 )
@@ -1447,7 +1467,7 @@ private fun SellLeaseholdDialog(
                 OutlinedTextField(
                     value = sellPriceInput,
                     onValueChange = { onInputsChanged(it, paymentMethod) },
-                    label = { Text("سعر البيع / قيمة التنازل المتفق عليها (ر.س)*") },
+                    label = { Text("سعر البيع / قيمة التنازل المتفق عليها (${currencySymbol})*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -1507,9 +1527,9 @@ private fun SellLeaseholdDialog(
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
                             text = if (gainOrLoss >= 0)
-                                "النتيجة: ربح رأسمالي قدره ${"%.2f".format(gainOrLoss)} ر.س"
+                                "النتيجة: ربح رأسمالي قدره ${"%.2f".format(gainOrLoss)} $currencySymbol"
                             else
-                                "النتيجة: خسارة رأسمالية قدرها ${"%.2f".format(kotlin.math.abs(gainOrLoss))} ر.س",
+                                "النتيجة: خسارة رأسمالية قدرها ${"%.2f".format(kotlin.math.abs(gainOrLoss))} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = if (gainOrLoss >= 0) Color(0xFF15803D) else Color(0xFFB91C1C)

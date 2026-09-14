@@ -385,7 +385,8 @@ fun AddEditUnitDialog(
 fun AddEditPartyDialog(
     initialParty: PartyEntity? = null,
     onSaveParty: (PartyEntity) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     var name by remember { mutableStateOf(initialParty?.name ?: "") }
     var phone by remember { mutableStateOf(initialParty?.phone ?: "") }
@@ -446,7 +447,7 @@ fun AddEditPartyDialog(
                 OutlinedTextField(
                     value = creditLimit,
                     onValueChange = { creditLimit = it },
-                    label = { Text("سقف الدين المسموح به (ر.س)") },
+                    label = { Text("سقف الدين المسموح به (${currencySymbol})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)

@@ -133,7 +133,7 @@ fun CreditLedgerScreen(
             ) {
                 CreditKpiCard(
                     title = "إجمالي الديون المستحقة",
-                    value = "${"%.2f".format(totalDebtAmount)} ر.س",
+                    value = "${"%.2f".format(totalDebtAmount)} ${uiState.currencySymbol}",
                     subtitle = "في ذمة العملاء",
                     backgroundColor = Color(0xFFFEF2F2),
                     textColor = Color(0xFFDC2626),
@@ -149,7 +149,7 @@ fun CreditLedgerScreen(
                 )
                 CreditKpiCard(
                     title = "أعلى مديونية",
-                    value = if (topDebtor != null && topDebtor.currentBalance > 0) "${"%.2f".format(topDebtor.currentBalance)} ر.س" else "0.00",
+                    value = if (topDebtor != null && topDebtor.currentBalance > 0) "${"%.2f".format(topDebtor.currentBalance)} ${uiState.currencySymbol}" else "0.00",
                     subtitle = topDebtor?.name ?: "لا يوجد",
                     backgroundColor = Color(0xFFF0FDF4),
                     textColor = Color(0xFF16A34A),
@@ -190,7 +190,8 @@ fun CreditLedgerScreen(
                     onAddPayment = { onOpenPaymentVoucherDialog(it) },
                     onDeleteInvoice = { deletingInvoiceId = it },
                     onDeleteVoucher = { deletingVoucherId = it },
-                    onSendWhatsApp = { phone, text -> onSendWhatsAppReminder(context, phone, text) }
+                    onSendWhatsApp = { phone, text -> onSendWhatsAppReminder(context, phone, text) },
+                    currencySymbol = uiState.currencySymbol
                 )
             } else {
                 // قائمة العملاء المسجلين
@@ -213,7 +214,8 @@ fun CreditLedgerScreen(
                                     storeName = "تموينات دكاني"
                                 )
                                 onSendWhatsAppReminder(context, customer.phone, text)
-                            }
+                            },
+                            currencySymbol = uiState.currencySymbol
                         )
                     }
 
@@ -297,7 +299,8 @@ fun CreditLedgerScreen(
             isSubmitting = uiState.isSubmittingVoucher,
             onInputsChanged = onVoucherInputsChanged,
             onDismiss = onDismissPaymentVoucherDialog,
-            onSubmit = onSubmitPaymentVoucher
+            onSubmit = onSubmitPaymentVoucher,
+            currencySymbol = uiState.currencySymbol
         )
     }
 }
@@ -338,7 +341,8 @@ private fun CustomerLedgerItemCard(
     onQuickPay: () -> Unit,
     onEditParty: () -> Unit,
     onDeleteParty: () -> Unit,
-    onSendWhatsApp: () -> Unit
+    onSendWhatsApp: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     val hasDebt = customer.currentBalance > 0.001
     val isOverLimit = customer.creditLimit > 0 && customer.currentBalance > customer.creditLimit
@@ -402,7 +406,7 @@ private fun CustomerLedgerItemCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "${"%.2f".format(customer.currentBalance)} ر.س",
+                            text = "${"%.2f".format(customer.currentBalance)} ${currencySymbol}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = if (hasDebt) Color(0xFFDC2626) else Color(0xFF16A34A)
@@ -463,7 +467,7 @@ private fun CustomerLedgerItemCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "تجاوز السقف الائتماني (${"%.2f".format(customer.creditLimit)} ر.س)",
+                            text = "تجاوز السقف الائتماني (${"%.2f".format(customer.creditLimit)} $currencySymbol)",
                             fontSize = 11.sp,
                             color = Color(0xFFC2410C),
                             fontWeight = FontWeight.Bold
@@ -527,7 +531,8 @@ private fun CustomerStatementView(
     onAddPayment: (Long) -> Unit,
     onDeleteInvoice: (Long) -> Unit,
     onDeleteVoucher: (Long) -> Unit,
-    onSendWhatsApp: (String, String) -> Unit
+    onSendWhatsApp: (String, String) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     if (isLoading || statement == null) {
         Box(
@@ -561,7 +566,7 @@ private fun CustomerStatementView(
                     color = Color(0xFF1E293B)
                 )
                 Text(
-                    text = "جوال: ${party.phone.ifBlank { "غير مسجل" }} | السقف: ${if (party.creditLimit > 0) "${party.creditLimit} ر.س" else "مفتوح"}",
+                    text = "جوال: ${party.phone.ifBlank { "غير مسجل" }} | السقف: ${if (party.creditLimit > 0) "${party.creditLimit} $currencySymbol" else "مفتوح"}",
                     fontSize = 12.sp,
                     color = Color(0xFF64748B)
                 )
@@ -585,7 +590,7 @@ private fun CustomerStatementView(
                     Column {
                         Text("الرصيد القائم المستحق حالياً", fontSize = 12.sp, color = Color(0xFFD1E7DD))
                         Text(
-                            text = "${"%.2f".format(statement.currentBalance)} ر.س",
+                            text = "${"%.2f".format(statement.currentBalance)} $currencySymbol",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -622,12 +627,12 @@ private fun CustomerStatementView(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "إجمالي المشتريات بالآجل: ${"%.2f".format(statement.totalPurchasesOnCredit)} ر.س",
+                        text = "إجمالي المشتريات بالآجل: ${"%.2f".format(statement.totalPurchasesOnCredit)} $currencySymbol",
                         fontSize = 11.sp,
                         color = Color(0xFFE2E8F0)
                     )
                     Text(
-                        text = "إجمالي المسدد: ${"%.2f".format(statement.totalPayments)} ر.س",
+                        text = "إجمالي المسدد: ${"%.2f".format(statement.totalPayments)} $currencySymbol",
                         fontSize = 11.sp,
                         color = Color(0xFF86EFAC)
                     )
@@ -654,7 +659,8 @@ private fun CustomerStatementView(
                     item = item,
                     isAdmin = isAdmin,
                     onDeleteInvoice = onDeleteInvoice,
-                    onDeleteVoucher = onDeleteVoucher
+                    onDeleteVoucher = onDeleteVoucher,
+                    currencySymbol = currencySymbol
                 )
             }
 
@@ -682,7 +688,8 @@ private fun StatementRowCard(
     item: StatementItem,
     isAdmin: Boolean,
     onDeleteInvoice: (Long) -> Unit,
-    onDeleteVoucher: (Long) -> Unit
+    onDeleteVoucher: (Long) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     val isInvoice = item.type == StatementEntryType.SALE_INVOICE
 
@@ -750,14 +757,14 @@ private fun StatementRowCard(
                 Column(horizontalAlignment = Alignment.End) {
                     if (isInvoice) {
                         Text(
-                            text = "+${"%.2f".format(item.debit)} ر.س",
+                            text = "+${"%.2f".format(item.debit)} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = Color(0xFFDC2626)
                         )
                     } else {
                         Text(
-                            text = "-${"%.2f".format(item.credit)} ر.س",
+                            text = "-${"%.2f".format(item.credit)} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = Color(0xFF16A34A)
@@ -804,7 +811,8 @@ private fun PaymentVoucherDialog(
     isSubmitting: Boolean,
     onInputsChanged: (String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -843,7 +851,7 @@ private fun PaymentVoucherDialog(
                         ) {
                             Text("الرصيد المتبقي الحالي:", fontSize = 12.sp, color = Color(0xFF475569))
                             Text(
-                                text = "${"%.2f".format(party.currentBalance)} ر.س",
+                                text = "${"%.2f".format(party.currentBalance)} $currencySymbol",
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFDC2626)
                             )
@@ -855,7 +863,7 @@ private fun PaymentVoucherDialog(
                 OutlinedTextField(
                     value = amountInput,
                     onValueChange = { onInputsChanged(it, notesInput, selectedMethod) },
-                    label = { Text("المبلغ المستلم (ر.س)*") },
+                    label = { Text("المبلغ المستلم (${currencySymbol})*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("voucher_amount_field")

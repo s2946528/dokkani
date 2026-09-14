@@ -57,7 +57,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun PosOpenPriceDialog(
     onConfirm: (name: String, price: Double, quantity: Double, isWeighted: Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     var name by remember { mutableStateOf("صنف بسعر حر") }
     var priceInput by remember { mutableStateOf("5.00") }
@@ -100,7 +101,7 @@ fun PosOpenPriceDialog(
                 OutlinedTextField(
                     value = priceInput,
                     onValueChange = { priceInput = it },
-                    label = { Text("السعر (ر.س)") },
+                    label = { Text("السعر (${currencySymbol})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

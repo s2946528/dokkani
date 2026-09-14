@@ -126,6 +126,7 @@ fun PosQuickTilesGrid(
 fun QuickTileCard(
     tile: QuickTileItem,
     onClick: () -> Unit,
+    currencySymbol: String = "ر.س",
     modifier: Modifier = Modifier
 ) {
     val (icon, bgCol, iconCol) = getIconAndColors(tile.iconType)
@@ -227,7 +228,7 @@ fun QuickTileCard(
                 else MaterialTheme.colorScheme.secondaryContainer
             ) {
                 Text(
-                    text = if (tile.isOpenPrice) "سعر حر" else "%.2f ر.س".format(tile.price),
+                    text = if (tile.isOpenPrice) "سعر حر" else "%.2f %s".format(tile.price, currencySymbol),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (tile.isOpenPrice) MaterialTheme.colorScheme.primary

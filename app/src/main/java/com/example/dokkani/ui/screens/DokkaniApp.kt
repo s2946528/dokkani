@@ -150,6 +150,7 @@ fun DokkaniApp(
                             ProductsAndUnitsScreen(
                                 productsWithUnits = uiState.products,
                                 currentUserRole = currentUserRole,
+                                currencySymbol = uiState.currencySymbol,
                                 onSaveProduct = viewModel::saveProduct,
                                 onDeleteProduct = viewModel::deleteProduct,
                                 onSaveUnit = viewModel::saveProductUnit,
@@ -157,7 +158,10 @@ fun DokkaniApp(
                             )
                         }
                         "التكلفة والخضار" -> {
-                            CostingEngineScreen(productsWithUnits = uiState.products)
+                            CostingEngineScreen(
+                                productsWithUnits = uiState.products,
+                                currencySymbol = uiState.currencySymbol
+                            )
                         }
                         "الخزينة والمصروفات" -> {
                             CashAndExpensesScreen(
@@ -202,6 +206,7 @@ fun DokkaniApp(
                                 ownerTransactions = uiState.ownerTransactions,
                                 products = uiState.products,
                                 subTab = uiState.assetsSubTab,
+                                currencySymbol = uiState.currencySymbol,
                                 showAddAssetDialog = uiState.showAddAssetDialog,
                                 showOwnerTransDialog = uiState.showOwnerTransDialog,
                                 ownerTransType = uiState.ownerTransTypeInput,

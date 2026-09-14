@@ -1658,7 +1658,7 @@ private fun PosInvoiceSectionOld(
                                 } else if (p.currentBalance < 0) {
                                     "دائن له: %.2f ر.س".format(-p.currentBalance)
                                 } else {
-                                    "الرصيد: 0.00 ر.س"
+                                    "الرصيد: 0.00 %s".format(uiState.currencySymbol)
                                 }
                                 Text(balText, fontSize = 10.sp, color = if (p.currentBalance > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32))
                             }
@@ -1702,7 +1702,7 @@ private fun PosInvoiceSectionOld(
                                         Text(party.name, fontWeight = FontWeight.Bold)
                                         Text(
                                             if (party.currentBalance > 0) "مدين: %.2f ر.س".format(party.currentBalance)
-                                            else if (party.currentBalance < 0) "دائن: %.2f ر.س".format(-party.currentBalance)
+                                            else if (party.currentBalance < 0) "دائن: %.2f ر.س".format(-party.currentBalance, uiState.currencySymbol)
                                             else "رصيد صفر",
                                             fontSize = 10.sp,
                                             color = Color.Gray
@@ -1754,7 +1754,7 @@ private fun PosInvoiceSectionOld(
                                     Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        "%.2f × %.2f = %.2f ر.س".format(item.unitPrice, item.quantity, item.totalPrice),
+                                        "%.2f × %.2f = %.2f %s".format(item.unitPrice, item.quantity, item.totalPrice, uiState.currencySymbol),
                                         fontSize = 11.sp,
                                         color = Color.DarkGray
                                     )
@@ -1831,14 +1831,14 @@ private fun PosInvoiceSectionOld(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("المجموع قبل الضريبة:", fontSize = 12.sp, color = Color.Gray)
-                    Text("%.2f ر.س".format(uiState.cartSummary.taxableAmount), fontSize = 12.sp)
+                    Text("%.2f %s".format(uiState.cartSummary.taxableAmount, uiState.currencySymbol), fontSize = 12.sp)
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("الضريبة المضافة (15%):", fontSize = 12.sp, color = Color.Gray)
-                    Text("%.2f ر.س".format(uiState.cartSummary.taxAmount), fontSize = 12.sp)
+                    Text("%.2f %s".format(uiState.cartSummary.taxAmount, uiState.currencySymbol), fontSize = 12.sp)
                 }
 
                 Row(
@@ -1848,7 +1848,7 @@ private fun PosInvoiceSectionOld(
                 ) {
                     Text("المبلغ الإجمالي الصافي:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text(
-                        "%.2f ر.س".format(uiState.cartSummary.finalTotal),
+                        "%.2f %s".format(uiState.cartSummary.finalTotal, uiState.currencySymbol),
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         color = when (uiState.activeOperation) {
@@ -1977,7 +1977,7 @@ private fun PosVoucherSection(
                             Icon(Icons.Default.PointOfSale, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "نقدية الصندوق: %.2f ر.س".format(uiState.cashInDrawer),
+                                text = "نقدية الصندوق: %.2f %s".format(uiState.cashInDrawer, uiState.currencySymbol),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1B5E20)
@@ -2019,7 +2019,7 @@ private fun PosVoucherSection(
                         ) {
                             OutlinedTextField(
                                 value = uiState.voucherParty?.let { p ->
-                                    "${p.name} - ${if (p.currentBalance > 0) "مدين لنا: %.2f".format(p.currentBalance) else if (p.currentBalance < 0) "دائن: %.2f".format(-p.currentBalance) else "خالص"} ر.س"
+                                    "${p.name} - ${if (p.currentBalance > 0) "مدين لنا: %.2f".format(p.currentBalance) else if (p.currentBalance < 0) "دائن: %.2f".format(-p.currentBalance) else "خالص"} ${uiState.currencySymbol}"
                                 } ?: if (isReceipt) "اختر العميل المسدد..." else "اختر المورد (أو اتركه لمصروف عام)...",
                                 onValueChange = {},
                                 readOnly = true,
@@ -2054,9 +2054,9 @@ private fun PosVoucherSection(
                                             Column {
                                                 Text(party.name, fontWeight = FontWeight.Bold)
                                                 Text(
-                                                    if (party.currentBalance > 0) "مدين لنا: %.2f ر.س".format(party.currentBalance)
-                                                    else if (party.currentBalance < 0) "دائن له: %.2f ر.س".format(-party.currentBalance)
-                                                    else "الرصيد: 0.00 ر.س",
+                                                    if (party.currentBalance > 0) "مدين لنا: %.2f %s".format(party.currentBalance, uiState.currencySymbol)
+                                                    else if (party.currentBalance < 0) "دائن له: %.2f ر.س".format(-party.currentBalance, uiState.currencySymbol)
+                                                    else "الرصيد: 0.00 %s".format(uiState.currencySymbol),
                                                     fontSize = 11.sp,
                                                     color = Color.Gray
                                                 )
@@ -2081,7 +2081,7 @@ private fun PosVoucherSection(
                             onValueChange = { viewModel.updateVoucherAmount(it) },
                             modifier = Modifier.fillMaxWidth(),
                             placeholder = { Text("0.00") },
-                            suffix = { Text("ر.س", fontWeight = FontWeight.Bold, color = primaryColor) },
+                            suffix = { Text(uiState.currencySymbol, fontWeight = FontWeight.Bold, color = primaryColor) },
                             leadingIcon = { Icon(Icons.Default.Payments, contentDescription = null, tint = primaryColor) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true
@@ -2218,15 +2218,15 @@ private fun PosVoucherSection(
                                     val currentBal = uiState.voucherParty.currentBalance
                                     val newBal = if (isReceipt) currentBal - parsedAmount else currentBal + parsedAmount
                                     Text(
-                                        text = "رصيد الحساب الحالي: %.2f ر.س ➔ الرصيد بعد السند: %.2f ر.س".format(currentBal, newBal),
+                                        text = "رصيد الحساب الحالي: %.2f %s ➔ الرصيد بعد السند: %.2f %s".format(currentBal, uiState.currencySymbol, newBal, uiState.currencySymbol),
                                         fontSize = 11.sp,
                                         color = Color.DarkGray
                                     )
                                 }
                                 if (uiState.voucherPaymentMethod == PaymentMethod.CASH) {
                                     Text(
-                                        text = if (isReceipt) "سيتم إضافة %.2f ر.س لدرج الكاشير".format(parsedAmount)
-                                        else "سيتم خصم %.2f ر.س من درج الكاشير".format(parsedAmount),
+                                        text = if (isReceipt) "سيتم إضافة %.2f %s لدرج الكاشير".format(parsedAmount, uiState.currencySymbol)
+                                        else "سيتم خصم %.2f %s من درج الكاشير".format(parsedAmount, uiState.currencySymbol),
                                         fontSize = 10.sp,
                                         color = if (isReceipt) Color(0xFF1B5E20) else Color(0xFFC62828),
                                         fontWeight = FontWeight.Bold
@@ -2235,7 +2235,7 @@ private fun PosVoucherSection(
                             }
 
                             Text(
-                                text = "المبلغ: %.2f ر.س".format(parsedAmount),
+                                text = "المبلغ: %.2f %s".format(parsedAmount, uiState.currencySymbol),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = primaryColor
@@ -2501,7 +2501,7 @@ private fun PosBottomHistorySection(
                                         modifier = Modifier.weight(1.2f)
                                     ) {
                                         Text(
-                                            text = "%.2f ر.س".format(record.amount),
+                                            text = "%.2f %s".format(record.amount, uiState.currencySymbol),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
                                             color = when (record.operation) {
@@ -2551,7 +2551,7 @@ private fun PosBottomHistorySection(
             text = {
                 Column {
                     Text(
-                        text = "هل أنت متأكد من حذف العملية (${deleteCandidate!!.id}) بمبلغ %.2f ر.س؟".format(deleteCandidate!!.amount),
+                        text = "هل أنت متأكد من حذف العملية (${deleteCandidate!!.id}) بمبلغ %.2f %s؟".format(deleteCandidate!!.amount, uiState.currencySymbol),
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(6.dp))
@@ -2666,7 +2666,7 @@ private fun SelectInvoiceForReturnDialog(
 
                                     Column(horizontalAlignment = Alignment.End) {
                                         Text(
-                                            "%.2f ر.س".format(inv.total),
+                                            "%.2f %s".format(inv.total, uiState.currencySymbol),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp,
                                             color = Color(0xFF1B5E20)
@@ -2973,7 +2973,7 @@ private fun PosHistoryDialog(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text(
-                                                "%.2f ر.س".format(record.amount),
+                                                "%.2f %s".format(record.amount, uiState.currencySymbol),
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 13.sp,
                                                 color = when (record.operation) {
@@ -3078,28 +3078,28 @@ fun PosShiftCloseDialog(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("العهدة الافتتاحية:", color = Color.White, fontSize = 12.sp)
-                            Text("${"%.2f".format(recon?.openingCash ?: 0.0)} ر.س", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("${"%.2f".format(recon?.openingCash ?: 0.0)} ${uiState.currencySymbol}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("+ المبيعات النقدية:", color = Color(0xFF86EFAC), fontSize = 12.sp)
-                            Text("+${"%.2f".format(recon?.totalCashSales ?: 0.0)} ر.س", color = Color(0xFF86EFAC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("+${"%.2f".format(recon?.totalCashSales ?: 0.0)} ${uiState.currencySymbol}", color = Color(0xFF86EFAC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("+ سندات القبض (الديون):", color = Color(0xFF86EFAC), fontSize = 12.sp)
-                            Text("+${"%.2f".format(recon?.totalCashCollections ?: 0.0)} ر.س", color = Color(0xFF86EFAC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("+${"%.2f".format(recon?.totalCashCollections ?: 0.0)} ${uiState.currencySymbol}", color = Color(0xFF86EFAC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("- سندات الصرف (المصروفات):", color = Color(0xFFFCA5A5), fontSize = 12.sp)
-                            Text("-${"%.2f".format(recon?.totalCashExpenses ?: 0.0)} ر.س", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("-${"%.2f".format(recon?.totalCashExpenses ?: 0.0)} ${uiState.currencySymbol}", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Color(0xFF2E7D32))
@@ -3110,7 +3110,7 @@ fun PosShiftCloseDialog(
                         ) {
                             Text("النقدية المتوقعة بالدرج:", color = Color(0xFFFFD54F), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             Text(
-                                "${"%.2f".format(recon?.expectedCashInDrawer ?: 0.0)} ر.س",
+                                "${"%.2f".format(recon?.expectedCashInDrawer ?: 0.0)} ${uiState.currencySymbol}",
                                 color = Color(0xFFFFD54F),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
@@ -3123,7 +3123,7 @@ fun PosShiftCloseDialog(
                 OutlinedTextField(
                     value = uiState.shiftActualCashInput,
                     onValueChange = { viewModel.updateShiftActualCashInput(it) },
-                    label = { Text("النقدية الفعلية المجرودة باليد في الدرج (ر.س)*") },
+                    label = { Text("النقدية الفعلية المجرودة باليد في الدرج (${uiState.currencySymbol})*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -3155,7 +3155,7 @@ fun PosShiftCloseDialog(
                                 fontSize = 13.sp
                             )
                             Text(
-                                text = "الفرق: ${"%.2f".format(r.discrepancy)} ر.س",
+                                text = "الفرق: ${"%.2f".format(r.discrepancy)} ${uiState.currencySymbol}",
                                 color = statusColor,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp

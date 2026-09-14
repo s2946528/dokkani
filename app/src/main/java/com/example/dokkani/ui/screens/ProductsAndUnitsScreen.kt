@@ -42,6 +42,7 @@ fun ProductsAndUnitsScreen(
     onSaveUnit: (ProductUnitEntity) -> Unit = {},
     onDeleteUnit: (ProductUnitEntity) -> Unit = {},
     onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null,
+    currencySymbol: String = "ر.س",
     modifier: Modifier = Modifier
 ) {
     var showAddProductDialog by remember { mutableStateOf(false) }
@@ -240,7 +241,8 @@ fun ProductsAndUnitsScreen(
                                 isAdmin = isAdmin,
                                 onEditUnit = { editingUnit = it },
                                 onDeleteUnit = { deletingUnit = it },
-                                onPrintLabel = onPrintLabel
+                                onPrintLabel = onPrintLabel,
+                                currencySymbol = currencySymbol
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                         }
@@ -312,7 +314,8 @@ private fun UnitItemRow(
     isAdmin: Boolean,
     onEditUnit: (ProductUnitEntity) -> Unit,
     onDeleteUnit: (ProductUnitEntity) -> Unit,
-    onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null
+    onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null,
+    currencySymbol: String = "ر.س"
 ) {
     Surface(
         shape = RoundedCornerShape(6.dp),
@@ -371,7 +374,7 @@ private fun UnitItemRow(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "%.2f ر.س".format(unit.sellingPrice),
+                    text = "%.2f %s".format(unit.sellingPrice, currencySymbol),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0F5132)

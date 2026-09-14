@@ -164,7 +164,8 @@ fun ReportsDashboardScreen(
 private fun ProfitAndLossView(
     report: ProfitAndLossReport?,
     selectedMethod: CostValuationMethod,
-    onSelectMethod: (CostValuationMethod) -> Unit
+    onSelectMethod: (CostValuationMethod) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     if (report == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -251,7 +252,7 @@ private fun ProfitAndLossView(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "${if (isProfitable) "+" else ""}${"%.2f".format(report.netOperatingProfit)} ر.س",
+                            text = "${if (isProfitable) "+" else ""}${"%.2f".format(report.netOperatingProfit)} $currencySymbol",
                             fontSize = 26.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -281,7 +282,7 @@ private fun ProfitAndLossView(
                         Column {
                             Text("مجمل الربح التجاري", fontSize = 11.sp, color = Color(0xFFD1E7DD))
                             Text(
-                                text = "${"%.2f".format(report.grossProfit)} ر.س (${"%.1f".format(report.grossProfitMarginPercent)}%)",
+                                text = "${"%.2f".format(report.grossProfit)} $currencySymbol (${"%.1f".format(report.grossProfitMarginPercent)}%)",
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF86EFAC),
                                 fontSize = 13.sp
@@ -290,7 +291,7 @@ private fun ProfitAndLossView(
                         Column(horizontalAlignment = Alignment.End) {
                             Text("إجمالي المصروفات", fontSize = 11.sp, color = Color(0xFFD1E7DD))
                             Text(
-                                text = "-${"%.2f".format(report.totalOperatingExpenses)} ر.س",
+                                text = "-${"%.2f".format(report.totalOperatingExpenses)} $currencySymbol",
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFCA5A5),
                                 fontSize = 13.sp
@@ -318,17 +319,17 @@ private fun ProfitAndLossView(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    PnlLineItem("إجمالي المبيعات (Gross Sales)", "${"%.2f".format(report.grossSales)} ر.س", Color(0xFF0F172A), isBold = true)
-                    PnlLineItem("الخصومات الممنوحة للعملاء", "-${"%.2f".format(report.totalDiscounts)} ر.س", Color(0xFFDC2626))
-                    PnlLineItem("صافي الإيرادات (Net Revenue)", "${"%.2f".format(report.netSalesRevenue)} ر.س", Color(0xFF0F5132), isBold = true)
+                    PnlLineItem("إجمالي المبيعات (Gross Sales)", "${"%.2f".format(report.grossSales)} $currencySymbol", Color(0xFF0F172A), isBold = true)
+                    PnlLineItem("الخصومات الممنوحة للعملاء", "-${"%.2f".format(report.totalDiscounts)} $currencySymbol", Color(0xFFDC2626))
+                    PnlLineItem("صافي الإيرادات (Net Revenue)", "${"%.2f".format(report.netSalesRevenue)} $currencySymbol", Color(0xFF0F5132), isBold = true)
                     HorizontalDivider(color = Color(0xFFF1F5F9), modifier = Modifier.padding(vertical = 4.dp))
 
-                    PnlLineItem("تكلفة البضاعة المباعة (COGS) [${report.valuationMethodUsed.name}]", "-${"%.2f".format(report.cogs)} ر.س", Color(0xFFDC2626))
-                    PnlLineItem("مجمل الربح التجاري (Gross Profit)", "${"%.2f".format(report.grossProfit)} ر.س", Color(0xFF16A34A), isBold = true)
+                    PnlLineItem("تكلفة البضاعة المباعة (COGS) [${report.valuationMethodUsed.name}]", "-${"%.2f".format(report.cogs)} $currencySymbol", Color(0xFFDC2626))
+                    PnlLineItem("مجمل الربح التجاري (Gross Profit)", "${"%.2f".format(report.grossProfit)} $currencySymbol", Color(0xFF16A34A), isBold = true)
                     HorizontalDivider(color = Color(0xFFF1F5F9), modifier = Modifier.padding(vertical = 4.dp))
 
-                    PnlLineItem("المصروفات والنثريات التشغيلية", "-${"%.2f".format(report.totalOperatingExpenses)} ر.س", Color(0xFFDC2626))
-                    PnlLineItem("صافي الربح التشغيلي النهائي", "${"%.2f".format(report.netOperatingProfit)} ر.س", if (isProfitable) Color(0xFF16A34A) else Color(0xFFDC2626), isBold = true)
+                    PnlLineItem("المصروفات والنثريات التشغيلية", "-${"%.2f".format(report.totalOperatingExpenses)} $currencySymbol", Color(0xFFDC2626))
+                    PnlLineItem("صافي الربح التشغيلي النهائي", "${"%.2f".format(report.netOperatingProfit)} $currencySymbol", if (isProfitable) Color(0xFF16A34A) else Color(0xFFDC2626), isBold = true)
                 }
             }
         }
@@ -348,9 +349,9 @@ private fun ProfitAndLossView(
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text("توزيع المبيعات:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF334155))
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("• نقداً (كاش): ${"%.2f".format(report.totalCashSales)} ر.س", fontSize = 11.sp, color = Color(0xFF475569))
-                        Text("• مدى وبطاقات: ${"%.2f".format(report.totalMadaSales)} ر.س", fontSize = 11.sp, color = Color(0xFF475569))
-                        Text("• آجل وشكك: ${"%.2f".format(report.totalCreditSales)} ر.س", fontSize = 11.sp, color = Color(0xFFDC2626))
+                        Text("• نقداً (كاش): ${"%.2f".format(report.totalCashSales)} $currencySymbol", fontSize = 11.sp, color = Color(0xFF475569))
+                        Text("• مدى وبطاقات: ${"%.2f".format(report.totalMadaSales)} $currencySymbol", fontSize = 11.sp, color = Color(0xFF475569))
+                        Text("• آجل وشكك: ${"%.2f".format(report.totalCreditSales)} $currencySymbol", fontSize = 11.sp, color = Color(0xFFDC2626))
                     }
                 }
 
@@ -367,7 +368,7 @@ private fun ProfitAndLossView(
                             Text("لا توجد مصروفات", fontSize = 11.sp, color = Color(0xFF94A3B8))
                         } else {
                             report.expensesByCategory.entries.take(4).forEach { (cat, amt) ->
-                                Text("• $cat: ${"%.2f".format(amt)} ر.س", fontSize = 11.sp, color = Color(0xFF475569))
+                                Text("• $cat: ${"%.2f".format(amt)} $currencySymbol", fontSize = 11.sp, color = Color(0xFF475569))
                             }
                         }
                     }
@@ -394,7 +395,7 @@ private fun PnlLineItem(label: String, value: String, color: Color, isBold: Bool
  * تبويب تقرير الأصناف الأكثر حركة والأعلى ربحية
  */
 @Composable
-private fun TopProductsView(report: TopProductsReport?) {
+private fun TopProductsView(report: TopProductsReport?, currencySymbol: String = "ر.س") {
     if (report == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("لا تتوفر مبيعات سابقة لحساب ربحية وحركة الأصناف", color = Color(0xFF64748B))
@@ -432,7 +433,7 @@ private fun TopProductsView(report: TopProductsReport?) {
                     Column {
                         Text(text = item.productName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0F172A))
                         Text(
-                            text = "إجمالي المبيعات: ${"%.2f".format(item.totalRevenue)} ر.س",
+                            text = "إجمالي المبيعات: ${"%.2f".format(item.totalRevenue)} $currencySymbol",
                             fontSize = 11.sp,
                             color = Color(0xFF64748B)
                         )
@@ -446,7 +447,7 @@ private fun TopProductsView(report: TopProductsReport?) {
                             color = Color(0xFF0F5132)
                         )
                         Text(
-                            text = "ربح: ${"%.2f".format(item.grossProfit)} ر.س",
+                            text = "ربح: ${"%.2f".format(item.grossProfit)} $currencySymbol",
                             fontSize = 11.sp,
                             color = Color(0xFF16A34A)
                         )
@@ -482,7 +483,7 @@ private fun TopProductsView(report: TopProductsReport?) {
                     Column {
                         Text(text = item.productName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0F172A))
                         Text(
-                            text = "مبيعات: ${"%.2f".format(item.totalRevenue)} ر.س | كمية: ${"%.1f".format(item.totalQuantitySold)}",
+                            text = "مبيعات: ${"%.2f".format(item.totalRevenue)} $currencySymbol | كمية: ${"%.1f".format(item.totalQuantitySold)}",
                             fontSize = 11.sp,
                             color = Color(0xFF64748B)
                         )
@@ -490,7 +491,7 @@ private fun TopProductsView(report: TopProductsReport?) {
 
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "+${"%.2f".format(item.grossProfit)} ر.س",
+                            text = "+${"%.2f".format(item.grossProfit)} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = Color(0xFF16A34A)

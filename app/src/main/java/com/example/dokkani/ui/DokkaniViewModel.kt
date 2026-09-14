@@ -173,7 +173,11 @@ data class DokkaniUiState(
     val leaseholdAmortizeAmountInput: String = "",
     val leaseholdSellPriceInput: String = "",
     val leaseholdSellPaymentMethod: PaymentMethod = PaymentMethod.CASH
-)
+) {
+    val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.س"
+    val currencyName: String get() = baseCurrency?.name ?: "الريال السعودي"
+    val currencyId: Long get() = baseCurrency?.id ?: 1L
+}
 
 class DokkaniViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -1179,7 +1183,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                                 unitCost = unitCost,
                                 paymentMethod = PaymentMethod.CASH,
                                 date = now,
-                                details = "سحب بضاعة: ${pwu.product.name} (كمية $qty بسعر تكلفة $unitCost ر.س)",
+                                details = "سحب بضاعة: ${pwu.product.name} (كمية $qty بسعر تكلفة $unitCost ${_uiState.value.currencySymbol})",
                                 recordedBy = "المدير العام"
                             )
                         )
@@ -1386,15 +1390,15 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 val updatedItem = item.copy(
                     currentBookValue = 0.0,
                     status = "SOLD_TRANSFERRED",
-                    notes = item.notes + " | تم التنازل/إعادة البيع بسعر $salePrice ر.س بتاريخ ${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(now)}"
+                    notes = item.notes + " | تم التنازل/إعادة البيع بسعر $salePrice ${_uiState.value.currencySymbol} بتاريخ ${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(now)}"
                 )
                 db.leaseholdRightDao().updateLeaseholdRight(updatedItem)
 
                 // 2. إدراج سند إيداع/قبض للمالك بتفاصيل بيع الخلو والأرباح/الخسائر الرأسمالية
                 val gainLossDetails = if (gainOrLoss >= 0) {
-                    "ربح رأسمالي قدره ${String.format(java.util.Locale.US, "%.2f", gainOrLoss)} ر.س"
+                    "ربح رأسمالي قدره ${String.format(java.util.Locale.US, "%.2f", gainOrLoss)} ${_uiState.value.currencySymbol}"
                 } else {
-                    "خسارة رأسمالية قدرها ${String.format(java.util.Locale.US, "%.2f", kotlin.math.abs(gainOrLoss))} ر.س"
+                    "خسارة رأسمالية قدرها ${String.format(java.util.Locale.US, "%.2f", kotlin.math.abs(gainOrLoss))} ${_uiState.value.currencySymbol}"
                 }
 
                 db.ownerTransactionDao().insertTransaction(

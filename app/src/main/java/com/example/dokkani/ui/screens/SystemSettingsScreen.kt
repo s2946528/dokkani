@@ -61,6 +61,7 @@ fun SystemSettingsScreen(
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     val isAdmin = currentUserRole == UserRole.ADMIN
+    val baseCurr = remember(currencies) { currencies.find { it.isBaseCurrency } ?: currencies.firstOrNull() }
 
     var showAddCurrencyDialog by remember { mutableStateOf(false) }
     var editingCurrency by remember { mutableStateOf<CurrencyEntity?>(null) }
@@ -247,8 +248,6 @@ fun SystemSettingsScreen(
 
             // جدول العملات وأسعار الصرف
             item {
-                val baseCurr = currencies.find { it.isBaseCurrency } ?: currencies.firstOrNull()
-
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -495,7 +494,7 @@ fun SystemSettingsScreen(
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "الرصيد: %.2f ر.س".format(p.currentBalance),
+                                        text = "الرصيد: %.2f %s".format(p.currentBalance, baseCurr?.symbol ?: "ر.س"),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                         color = if (p.currentBalance >= 0) Color(0xFF0F5132) else Color(0xFFDC3545)
@@ -589,7 +588,7 @@ fun SystemSettingsScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text(
-                                                text = "%.2f ر.س".format(i.total),
+                                                text = "%.2f %s".format(i.total, baseCurr?.symbol ?: "ر.س"),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF0F5132)

@@ -91,7 +91,12 @@ data class PurchaseUiState(
     val showEditPurchaseDialog: Boolean = false,
     val editPurchaseNotes: String = "",
     val editPurchasePaymentMethod: PaymentMethod = PaymentMethod.CASH,
-    val isBottomHistoryExpanded: Boolean = true
+    val isBottomHistoryExpanded: Boolean = true,
+
+    // العملة الأساسية
+    val currencySymbol: String = "ر.س",
+    val currencyName: String = "الريال السعودي",
+    val baseCurrencyId: Long = 1L
 ) {
     val subtotal: Double get() = items.sumOf { it.totalCost }
     val taxableAmount: Double get() = (subtotal - discount).coerceAtLeast(0.0)
@@ -137,6 +142,20 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
             invoiceDao.getAllInvoices().collectLatest { invoices ->
                 val purchases = invoices.filter { it.type == InvoiceType.PURCHASE || it.type == InvoiceType.PURCHASE_RETURN }
                 _uiState.update { it.copy(purchaseInvoices = purchases) }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.currencyDao().getBaseCurrencyFlow().collectLatest { baseCurrency ->
+                if (baseCurrency != null) {
+                    _uiState.update { state ->
+                        state.copy(
+                            currencySymbol = baseCurrency.symbol,
+                            currencyName = baseCurrency.name,
+                            baseCurrencyId = baseCurrency.id
+                        )
+                    }
+                }
             }
         }
     }
@@ -296,7 +315,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                             type = InvoiceType.PURCHASE,
                             partyId = state.selectedSupplier?.id,
                             date = timestamp,
-                            currencyId = 1,
+                            currencyId = state.baseCurrencyId,
                             exchangeRate = 1.0,
                             subtotal = state.subtotal,
                             discount = state.discount,

@@ -96,6 +96,7 @@ fun ProduceQuickInventoryScreen(
     onAuditInputsChanged: (begQty: String?, begCost: String?, purQty: String?, purCost: String?, endingQty: String?, wasteQty: String?, posSold: String?, posRev: String?) -> Unit,
     onCommitSilentAdjustments: () -> Unit,
     onNavigateToBarcodePrinter: (Long) -> Unit,
+    currencySymbol: String = "ر.س",
 
     // حالة حاسبة سحارة الخضار المشكل القديمة
     grossWeightInput: String,
@@ -169,7 +170,8 @@ fun ProduceQuickInventoryScreen(
                 onSelectProduceProduct = onSelectProduceProduct,
                 onAuditInputsChanged = onAuditInputsChanged,
                 onCommitSilentAdjustments = onCommitSilentAdjustments,
-                onNavigateToBarcodePrinter = onNavigateToBarcodePrinter
+                onNavigateToBarcodePrinter = onNavigateToBarcodePrinter,
+                currencySymbol = currencySymbol
             )
         } else {
             // ==========================================
@@ -187,7 +189,8 @@ fun ProduceQuickInventoryScreen(
                 historicalBatches = historicalBatches,
                 dateFormat = dateFormat,
                 onInputsChanged = onCrateInputsChanged,
-                onSaveBatch = onSaveCrateBatch
+                onSaveBatch = onSaveCrateBatch,
+                currencySymbol = currencySymbol
             )
         }
     }
@@ -214,7 +217,8 @@ private fun DailyProduceAuditView(
     onSelectProduceProduct: (Long) -> Unit,
     onAuditInputsChanged: (begQty: String?, begCost: String?, purQty: String?, purCost: String?, endingQty: String?, wasteQty: String?, posSold: String?, posRev: String?) -> Unit,
     onCommitSilentAdjustments: () -> Unit,
-    onNavigateToBarcodePrinter: (Long) -> Unit
+    onNavigateToBarcodePrinter: (Long) -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     val weightedProducts = remember(productsWithUnits) {
         productsWithUnits.filter { it.product.isWeighted || it.product.category.contains("خضار") || it.product.category.contains("فاكهة") || it.product.category.contains("ورقيات") }
@@ -366,7 +370,7 @@ private fun DailyProduceAuditView(
                         OutlinedTextField(
                             value = auditBeginningCost,
                             onValueChange = { onAuditInputsChanged(null, it, null, null, null, null, null, null) },
-                            label = { Text("تكلفة أول المدة (ر.س)") },
+                            label = { Text("تكلفة أول المدة (${currencySymbol})") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -390,7 +394,7 @@ private fun DailyProduceAuditView(
                         OutlinedTextField(
                             value = auditPurchasesCost,
                             onValueChange = { onAuditInputsChanged(null, null, null, it, null, null, null, null) },
-                            label = { Text("تكلفة المشتريات (ر.س)") },
+                            label = { Text("تكلفة المشتريات (${currencySymbol})") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -449,7 +453,7 @@ private fun DailyProduceAuditView(
                         OutlinedTextField(
                             value = auditPosRevenue,
                             onValueChange = { onAuditInputsChanged(null, null, null, null, null, null, null, it) },
-                            label = { Text("إيراد الكاشير (ر.س)") },
+                            label = { Text("إيراد الكاشير (${currencySymbol})") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -524,25 +528,25 @@ private fun DailyProduceAuditView(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("المتاح للبيع", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                                 Text("%.1f كجم".format(auditResult.goodsAvailableQty), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("%.2f ر.س".format(auditResult.goodsAvailableCost), style = MaterialTheme.typography.labelSmall, color = Color(0xFF388E3C))
+                                Text("%.2f %s".format(auditResult.goodsAvailableCost, currencySymbol), style = MaterialTheme.typography.labelSmall, color = Color(0xFF388E3C))
                             }
                             Text("-", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.align(Alignment.CenterVertically))
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("الرف المتبقي", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                                 Text("%.1f كجم".format(auditResult.endingInventoryQty), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("%.2f ر.س".format(auditResult.endingInventoryCost), style = MaterialTheme.typography.labelSmall, color = Color(0xFF1976D2))
+                                Text("%.2f %s".format(auditResult.endingInventoryCost, currencySymbol), style = MaterialTheme.typography.labelSmall, color = Color(0xFF1976D2))
                             }
                             Text("-", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.align(Alignment.CenterVertically))
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("التوالف والهالك", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                                 Text("%.1f كجم".format(auditResult.wasteQty), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.Red)
-                                Text("%.2f ر.س".format(auditResult.wasteCost), style = MaterialTheme.typography.labelSmall, color = Color.Red)
+                                Text("%.2f %s".format(auditResult.wasteCost, currencySymbol), style = MaterialTheme.typography.labelSmall, color = Color.Red)
                             }
                             Text("=", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.align(Alignment.CenterVertically))
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("COGS المحسوب", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1B5E20), fontWeight = FontWeight.Bold)
                                 Text("%.1f كجم".format(auditResult.cogsCalculatedQty), fontWeight = FontWeight.Black, fontSize = 15.sp, color = Color(0xFF1B5E20))
-                                Text("%.2f ر.س".format(auditResult.cogsCalculatedCost), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1B5E20))
+                                Text("%.2f %s".format(auditResult.cogsCalculatedCost, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1B5E20))
                             }
                         }
 
@@ -557,7 +561,7 @@ private fun DailyProduceAuditView(
                         ) {
                             Column {
                                 Text("متوسط تكلفة الكيلو المتاح:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.2f ر.س / كجم".format(auditResult.averageCostPerUnit), fontWeight = FontWeight.Bold)
+                                Text("%.2f %s / كجم".format(auditResult.averageCostPerUnit, currencySymbol), fontWeight = FontWeight.Bold)
                             }
                             Column {
                                 Text("نسبة الهالك والتوالف:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
@@ -565,7 +569,7 @@ private fun DailyProduceAuditView(
                             }
                             Column {
                                 Text("مجمل الربح المحقق:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.2f ر.س (%.1f%%)".format(auditResult.grossProfit, auditResult.grossProfitMarginPercent), fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                Text("%.2f %s (%.1f%%)".format(auditResult.grossProfit, currencySymbol, auditResult.grossProfitMarginPercent), fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                             }
                         }
 
@@ -591,7 +595,7 @@ private fun DailyProduceAuditView(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = if (isDeficit)
-                                            "فارق بين الجرد ومبيعات الكاشير: عجز قدره %.2f كجم (بقيمة تكلفة %.2f ر.س) سيتم استيعابه بالقيود الصامتة."
+                                            "فارق بين الجرد ومبيعات الكاشير: عجز قدره %.2f كجم (بقيمة تكلفة %.2f %s) سيتم استيعابه بالقيود الصامتة."
                                                 .format(auditResult.shrinkageDiscrepancyQty, auditResult.shrinkageDiscrepancyCost)
                                         else
                                             "فارق بين الجرد ومبيعات الكاشير: زيادة قدرها %.2f كجم عن المسجل دفترياً."
@@ -672,7 +676,7 @@ private fun DailyProduceAuditView(
                                                 fontSize = 13.sp
                                             )
                                             Text(
-                                                text = "المرجع: ${adj.referenceNumber} | تكلفة الوحدة: %.2f ر.س".format(adj.unitCost),
+                                                text = "المرجع: ${adj.referenceNumber} | تكلفة الوحدة: %.2f %s".format(adj.unitCost, currencySymbol),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = Color.Gray,
                                                 fontFamily = FontFamily.Monospace
@@ -745,7 +749,8 @@ private fun MixedProduceCrateCalculatorView(
     historicalBatches: List<BatchWithYields>,
     dateFormat: SimpleDateFormat,
     onInputsChanged: (gross: String?, cost: String?, expense: String?, waste: String?, margin: String?, desc: String?) -> Unit,
-    onSaveBatch: () -> Unit
+    onSaveBatch: () -> Unit,
+    currencySymbol: String = "ر.س"
 ) {
     LazyColumn(
         modifier = Modifier
@@ -777,7 +782,7 @@ private fun MixedProduceCrateCalculatorView(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "عند شراء سحارة خضار جملة (مثل 25 كجم بـ 90 ر.س مع 10 ر.س نقل) وهدر 3 كجم تالف، يقوم المحرك برمي التكلفة على الوزن الصافي (22 كجم) ورفع تكلفة الكيلو الصافي واقتراح سعر بيع بهامش ربح فوري.",
+                        text = "عند شراء سحارة خضار جملة (مثل 25 كجم بـ 90 $currencySymbol مع 10 $currencySymbol نقل) وهدر 3 كجم تالف، يقوم المحرك برمي التكلفة على الوزن الصافي (22 كجم) ورفع تكلفة الكيلو الصافي واقتراح سعر بيع بهامش ربح فوري.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFC8E6C9)
                     )
@@ -825,7 +830,7 @@ private fun MixedProduceCrateCalculatorView(
                         OutlinedTextField(
                             value = costInput,
                             onValueChange = { onInputsChanged(null, it, null, null, null, null) },
-                            label = { Text("سعر الشراء (ر.س)") },
+                            label = { Text("سعر الشراء (${currencySymbol})") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -840,7 +845,7 @@ private fun MixedProduceCrateCalculatorView(
                         OutlinedTextField(
                             value = expenseInput,
                             onValueChange = { onInputsChanged(null, null, it, null, null, null) },
-                            label = { Text("مصاريف النقل (ر.س)") },
+                            label = { Text("مصاريف النقل (${currencySymbol})") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -892,7 +897,7 @@ private fun MixedProduceCrateCalculatorView(
                         ) {
                             Column {
                                 Text("إجمالي التكلفة مع النقل", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.2f ر.س".format(calcSummary.totalEffectiveInvestedCost), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text("%.2f %s".format(calcSummary.totalEffectiveInvestedCost, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             }
                             Column {
                                 Text("الوزن الصافي القابل للبيع", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
@@ -915,15 +920,15 @@ private fun MixedProduceCrateCalculatorView(
                             val initialCostPerKg = if (calcSummary.grossWeightKg > 0) calcSummary.totalCrateCost / calcSummary.grossWeightKg else 0.0
                             Column {
                                 Text("تكلفة الكيلو الإجمالي القديمة", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.2f ر.س / كجم".format(initialCostPerKg), fontWeight = FontWeight.Medium, color = Color.Gray)
+                                Text("%.2f %s / كجم".format(initialCostPerKg, currencySymbol), fontWeight = FontWeight.Medium, color = Color.Gray)
                             }
                             Column {
                                 Text("تكلفة الكيلو الصافي بعد الهدر", style = MaterialTheme.typography.labelSmall, color = Color.Black)
-                                Text("%.2f ر.س / كجم".format(calcSummary.effectiveCostPerSalableKg), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFD32F2F))
+                                Text("%.2f %s / كجم".format(calcSummary.effectiveCostPerSalableKg, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFD32F2F))
                             }
                             Column {
                                 Text("سعر البيع المقترح للكيلو", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1B5E20))
-                                Text("%.2f ر.س / كجم".format(calcSummary.suggestedSalePricePerKg), fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color(0xFF1B5E20))
+                                Text("%.2f %s / كجم".format(calcSummary.suggestedSalePricePerKg, currencySymbol), fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color(0xFF1B5E20))
                             }
                         }
 
@@ -1000,7 +1005,7 @@ private fun MixedProduceCrateCalculatorView(
                             Text("الوزن: %.1f كجم".format(b.totalGrossWeightKg), style = MaterialTheme.typography.bodySmall)
                             Text("التالف: %.1f كجم".format(b.wasteWeightKg), style = MaterialTheme.typography.bodySmall, color = Color.Red)
                             Text("الصافي: %.1f كجم".format(b.netSalableWeightKg), style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32))
-                            Text("التكلفة: %.2f ر.س".format(b.effectiveCostPerKg), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            Text("التكلفة: %.2f %s".format(b.effectiveCostPerKg, currencySymbol), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

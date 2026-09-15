@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -81,14 +82,16 @@ fun OnboardingWizardScreen(
         var openingItems by remember {
             mutableStateOf(
                 listOf(
-                    OpeningBalanceItem("أرز بسمتي 5 كجم", "خردوات وتموينات", 15.0, 32.0, 42.0),
-                    OpeningBalanceItem("سكر الأسرة 2 كجم", "تموينات وسكريات", 20.0, 7.5, 9.5),
-                    OpeningBalanceItem("زيت دوار الشمس 1.5 لتر", "زيوت ودهون", 12.0, 14.0, 18.0)
+                    OpeningBalanceItem("أرز بسمتي 5 كجم", "خردوات وتموينات", 15.0, 32.0, 42.0, "6281007010015", "كيس"),
+                    OpeningBalanceItem("سكر الأسرة 2 كجم", "تموينات وسكريات", 20.0, 7.5, 9.5, "6281007010022", "حبة/قطعة"),
+                    OpeningBalanceItem("زيت دوار الشمس 1.5 لتر", "زيوت ودهون", 12.0, 14.0, 18.0, "6281007010039", "حبة/قطعة")
                 )
             )
         }
         var newProdName by remember { mutableStateOf("") }
         var newProdCategory by remember { mutableStateOf("تموينات عامة") }
+        var newProdBarcode by remember { mutableStateOf("") }
+        var newProdUnit by remember { mutableStateOf("حبة/قطعة") }
         var newProdQty by remember { mutableStateOf("") }
         var newProdCost by remember { mutableStateOf("") }
         var newProdPrice by remember { mutableStateOf("") }
@@ -332,6 +335,10 @@ fun OnboardingWizardScreen(
                                         onNewProdNameChange = { newProdName = it },
                                         newProdCategory = newProdCategory,
                                         onNewProdCategoryChange = { newProdCategory = it },
+                                        newProdBarcode = newProdBarcode,
+                                        onNewProdBarcodeChange = { newProdBarcode = it },
+                                        newProdUnit = newProdUnit,
+                                        onNewProdUnitChange = { newProdUnit = it },
                                         newProdQty = newProdQty,
                                         onNewProdQtyChange = { newProdQty = it },
                                         newProdCost = newProdCost,
@@ -344,13 +351,17 @@ fun OnboardingWizardScreen(
                                             val price = newProdPrice.toDoubleOrNull() ?: cost
                                             if (newProdName.isNotBlank() && qty > 0.0) {
                                                 openingItems = openingItems + OpeningBalanceItem(
-                                                    newProdName,
-                                                    newProdCategory,
-                                                    qty,
-                                                    cost,
-                                                    price
+                                                    name = newProdName.trim(),
+                                                    category = newProdCategory.trim(),
+                                                    quantity = qty,
+                                                    costPrice = cost,
+                                                    sellingPrice = price,
+                                                    barcode = newProdBarcode.trim(),
+                                                    unitName = newProdUnit.trim().ifBlank { "حبة/قطعة" }
                                                 )
                                                 newProdName = ""
+                                                newProdBarcode = ""
+                                                newProdUnit = "حبة/قطعة"
                                                 newProdQty = ""
                                                 newProdCost = ""
                                                 newProdPrice = ""
@@ -989,6 +1000,10 @@ private fun StepOpeningStock(
     onNewProdNameChange: (String) -> Unit,
     newProdCategory: String,
     onNewProdCategoryChange: (String) -> Unit,
+    newProdBarcode: String,
+    onNewProdBarcodeChange: (String) -> Unit,
+    newProdUnit: String,
+    onNewProdUnitChange: (String) -> Unit,
     newProdQty: String,
     onNewProdQtyChange: (String) -> Unit,
     newProdCost: String,
@@ -999,6 +1014,8 @@ private fun StepOpeningStock(
     onRemoveItem: (OpeningBalanceItem) -> Unit,
     currencySymbol: String = "ر.س"
 ) {
+    val commonUnits = listOf("حبة/قطعة", "كرتون", "درزن", "كيلو", "كيس", "حزمة", "صندوق", "شدة")
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1011,7 +1028,7 @@ private fun StepOpeningStock(
                 color = Color(0xFF1B5E20)
             )
             Text(
-                text = "أدخل الأصناف الموجودة فعلياً على الرفوف لتوليد قيود مخزون افتتاحية:",
+                text = "أدخل الأصناف الموجودة فعلياً على الرفوف مع الباركود والوحدة لتوليد قيود مخزون افتتاحية:",
                 fontSize = 12.sp,
                 color = Color(0xFF666666)
             )
@@ -1025,17 +1042,16 @@ private fun StepOpeningStock(
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE0E0E0))
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("إضافة صنف جرد سريع:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("إضافة صنف جرد سريع مع الباركود والوحدة:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    var tempBarcode by remember { mutableStateOf("") }
                     com.example.dokkani.ui.components.BarcodeTextField(
-                        value = tempBarcode,
-                        onValueChange = { tempBarcode = it },
-                        label = "مسح باركود المنتج (اختياري)",
-                        placeholder = "امسح الباركود بالكاميرا لتعبئة الصنف...",
+                        value = newProdBarcode,
+                        onValueChange = onNewProdBarcodeChange,
+                        label = "مسح باركود المنتج (بالكاميرا أو يدوياً)",
+                        placeholder = "امسح الباركود بالكاميرا لحفظه مع الصنف...",
                         onBarcodeScanned = { scannedCode ->
-                            tempBarcode = scannedCode
+                            onNewProdBarcodeChange(scannedCode)
                             if (newProdName.isBlank()) {
                                 onNewProdNameChange("صنف باركود $scannedCode")
                             }
@@ -1048,7 +1064,34 @@ private fun StepOpeningStock(
                     OutlinedTextField(
                         value = newProdName,
                         onValueChange = onNewProdNameChange,
-                        label = { Text("اسم الصنف / المنتج*") },
+                        label = { Text("اسم الصنف / المنتج *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // اختيار وحدة الصنف
+                    Text("وحدة القياس / العبوة:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF333333))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(commonUnits) { u ->
+                            FilterChip(
+                                selected = newProdUnit == u,
+                                onClick = { onNewProdUnitChange(u) },
+                                label = { Text(u, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = newProdUnit,
+                        onValueChange = onNewProdUnitChange,
+                        label = { Text("أو اكتب وحدة مخصصة (مثال: جالون، ربطة...)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -1059,7 +1102,7 @@ private fun StepOpeningStock(
                         OutlinedTextField(
                             value = newProdQty,
                             onValueChange = onNewProdQtyChange,
-                            label = { Text("الكمية") },
+                            label = { Text("الكمية ($newProdUnit)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -1120,10 +1163,34 @@ private fun StepOpeningStock(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(item.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(item.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFE8F5E9)
+                            ) {
+                                Text(
+                                    text = item.unitName,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        if (item.barcode.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color(0xFF1976D2))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("الباركود: ${item.barcode}", fontSize = 11.sp, color = Color(0xFF1976D2), fontWeight = FontWeight.Medium)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            "الكمية: ${item.quantity} | التكلفة: ${item.costPrice} $currencySymbol | البيع: ${item.sellingPrice} $currencySymbol",
+                            "الكمية: ${item.quantity} ${item.unitName} | التكلفة: ${item.costPrice} $currencySymbol | البيع: ${item.sellingPrice} $currencySymbol",
                             fontSize = 11.sp,
                             color = Color(0xFF666666)
                         )

@@ -63,7 +63,9 @@ data class OpeningBalanceItem(
     val category: String,
     val quantity: Double,
     val costPrice: Double,
-    val sellingPrice: Double
+    val sellingPrice: Double,
+    val barcode: String = "",
+    val unitName: String = "حبة/قطعة"
 )
 
 data class OpeningBalanceCustomer(
@@ -892,12 +894,14 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                                 minStockAlert = 5.0
                             )
                         )
+                        val itemBarcode = if (item.barcode.isNotBlank()) item.barcode.trim() else "628${(System.currentTimeMillis() + index).toString().takeLast(9)}"
+                        val itemUnitName = if (item.unitName.isNotBlank()) item.unitName.trim() else "حبة/قطعة"
                         val unitId = db.productDao().insertUnit(
                             ProductUnitEntity(
                                 productId = prodId,
-                                unitName = "حبة/قطعة",
+                                unitName = itemUnitName,
                                 conversionFactor = 1.0,
-                                barcode = "628${System.currentTimeMillis().toString().takeLast(9)}",
+                                barcode = itemBarcode,
                                 costPrice = item.costPrice,
                                 sellingPrice = item.sellingPrice,
                                 isBaseUnit = true

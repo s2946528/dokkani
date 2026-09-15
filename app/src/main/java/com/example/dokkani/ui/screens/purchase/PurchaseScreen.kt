@@ -698,8 +698,7 @@ private fun PurchaseBottomHistorySection(
                             onValueChange = { viewModel.setInvoiceSearchQuery(it) },
                             placeholder = { Text("بحث برقم الفاتورة أو المورد...", fontSize = 11.sp) },
                             modifier = Modifier
-                                .width(240.dp)
-                                .height(40.dp),
+                                .widthIn(max = 240.dp),
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp)) }
                         )

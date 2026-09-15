@@ -173,16 +173,42 @@ fun AddEditProductDialog(
                 if (initialProduct == null) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     Text(
-                        text = "بيانات الوحدة الأساسية للصنف:",
+                        text = "الوحدة الأساسية للصنف:",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
 
+                    val popularUnits = listOf("حبة", "كرتون", "درزن", "كيلو", "كيس", "صندوق", "شدة", "علبة")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        popularUnits.take(4).forEach { u ->
+                            FilterChip(
+                                selected = baseUnitName == u,
+                                onClick = { baseUnitName = u },
+                                label = { Text(u, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        popularUnits.drop(4).forEach { u ->
+                            FilterChip(
+                                selected = baseUnitName == u,
+                                onClick = { baseUnitName = u },
+                                label = { Text(u, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
                     OutlinedTextField(
                         value = baseUnitName,
                         onValueChange = { baseUnitName = it },
-                        label = { Text("اسم الوحدة الأساسية (حبة، كيلو، كرتون)") },
+                        label = { Text("اسم الوحدة الأساسية (حبة، كيلو، كرتون، ...)") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp)
                     )
@@ -296,6 +322,32 @@ fun AddEditUnitDialog(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val commonUnitSuggestions = listOf("كرتون", "درزن", "كيلو", "كيس", "صندوق", "شدة", "علبة", "باكيت")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    commonUnitSuggestions.take(4).forEach { u ->
+                        FilterChip(
+                            selected = unitName == u,
+                            onClick = { unitName = u },
+                            label = { Text(u, fontSize = 11.sp) }
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    commonUnitSuggestions.drop(4).forEach { u ->
+                        FilterChip(
+                            selected = unitName == u,
+                            onClick = { unitName = u },
+                            label = { Text(u, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
                 OutlinedTextField(
                     value = unitName,
                     onValueChange = { unitName = it },

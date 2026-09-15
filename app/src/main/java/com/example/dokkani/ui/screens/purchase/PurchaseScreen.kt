@@ -454,7 +454,7 @@ fun PurchaseScreen(
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("المجموع قبل الضريبة: %.2f %s".format(uiState.subtotal, uiState.currencySymbol), fontSize = 12.sp, color = Color.DarkGray)
                                 if (uiState.isTaxApplied) {
-                                    Text("ضريبة 15%: %.2f %s".format(uiState.taxAmount, uiState.currencySymbol), fontSize = 12.sp, color = Color.DarkGray)
+                                    Text("ضريبة 15%: ${"%.2f".format(uiState.taxAmount)} ${uiState.currencySymbol}", fontSize = 12.sp, color = Color.DarkGray)
                                 }
                                 Text(
                                     "الصافي الإجمالي: %.2f %s".format(uiState.finalTotal, uiState.currencySymbol),

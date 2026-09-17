@@ -805,7 +805,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         remainingAmount = remaining,
                         customerOldBalance = partyOldBal,
                         customerNewBalance = partyNewBal,
-                        currencySymbol = "ر.س"
+                        currencySymbol = state.currencySymbol
                     )
 
                     val result = PosCheckoutResult(

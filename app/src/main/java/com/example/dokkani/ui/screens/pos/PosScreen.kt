@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.example.dokkani.ui.components.BarcodeTextField
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.PartyEntity
@@ -274,9 +275,16 @@ fun PosScreen(
 
         // نافذة معاينة الإيصال بعد إتمام الفاتورة
         if (uiState.showReceiptDialog && uiState.lastCheckoutResult != null) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
             PosReceiptDialog(
                 checkoutResult = uiState.lastCheckoutResult!!,
-                onPrintAgain = {},
+                onPrintAgain = {
+                    scope.launch {
+                        com.example.dokkani.domain.hardware.BluetoothPrinterManager(context)
+                            .printReceipt(uiState.lastCheckoutResult!!.receiptData)
+                    }
+                },
                 onDismiss = { viewModel.dismissReceiptDialog() }
             )
         }
@@ -316,7 +324,7 @@ fun PosScreen(
                             OutlinedTextField(
                                 value = newPartyLimit,
                                 onValueChange = { newPartyLimit = it },
-                                label = { Text("سقف الدين المسموح به (ر.س)") },
+                                label = { Text("سقف الدين المسموح به (${uiState.currencySymbol})") },
                                 modifier = Modifier.fillMaxWidth(),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true
@@ -1361,8 +1369,9 @@ private fun PosInvoiceSectionOld(
                                         color = Color(0xFF1B5E20)
                                     )
                                     Text(
-                                        text = "الإجمالي: %.2f ر.س | طريقة الدفع: %s".format(
+                                        text = "الإجمالي: %.2f %s | طريقة الدفع: %s".format(
                                             uiState.originalInvoiceForReturn.total,
+                                            uiState.currencySymbol,
                                             uiState.originalInvoiceForReturn.paymentMethod.labelArabic
                                         ),
                                         fontSize = 10.sp,
@@ -1515,7 +1524,7 @@ private fun PosInvoiceSectionOld(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "%.2f ر.س".format(displayPrice),
+                                        text = "%.2f %s".format(displayPrice, uiState.currencySymbol),
                                         color = when (uiState.activeOperation) {
                                             PosOperation.PURCHASE -> Color(0xFF1976D2)
                                             PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
@@ -1629,9 +1638,9 @@ private fun PosInvoiceSectionOld(
                             )
                             uiState.selectedParty?.let { p ->
                                 val balText = if (p.currentBalance > 0) {
-                                    "مدين لنا: %.2f ر.س".format(p.currentBalance)
+                                    "مدين لنا: %.2f %s".format(p.currentBalance, uiState.currencySymbol)
                                 } else if (p.currentBalance < 0) {
-                                    "دائن له: %.2f ر.س".format(-p.currentBalance)
+                                    "دائن له: %.2f %s".format(-p.currentBalance, uiState.currencySymbol)
                                 } else {
                                     "الرصيد: 0.00 %s".format(uiState.currencySymbol)
                                 }
@@ -1676,8 +1685,8 @@ private fun PosInvoiceSectionOld(
                                     Column {
                                         Text(party.name, fontWeight = FontWeight.Bold)
                                         Text(
-                                            if (party.currentBalance > 0) "مدين: %.2f ر.س".format(party.currentBalance)
-                                            else if (party.currentBalance < 0) "دائن: %.2f ر.س".format(-party.currentBalance, uiState.currencySymbol)
+                                            if (party.currentBalance > 0) "مدين: %.2f %s".format(party.currentBalance, uiState.currencySymbol)
+                                            else if (party.currentBalance < 0) "دائن: %.2f %s".format(-party.currentBalance, uiState.currencySymbol)
                                             else "رصيد صفر",
                                             fontSize = 10.sp,
                                             color = Color.Gray
@@ -2033,7 +2042,7 @@ private fun PosVoucherSection(
                                                 Text(party.name, fontWeight = FontWeight.Bold)
                                                 Text(
                                                     if (party.currentBalance > 0) "مدين لنا: %.2f %s".format(party.currentBalance, uiState.currencySymbol)
-                                                    else if (party.currentBalance < 0) "دائن له: %.2f ر.س".format(-party.currentBalance, uiState.currencySymbol)
+                                                    else if (party.currentBalance < 0) "دائن له: %.2f %s".format(-party.currentBalance, uiState.currencySymbol)
                                                     else "الرصيد: 0.00 %s".format(uiState.currencySymbol),
                                                     fontSize = 11.sp,
                                                     color = Color.Gray

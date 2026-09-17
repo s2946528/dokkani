@@ -61,6 +61,7 @@ import com.example.dokkani.domain.barcode.ScaleBarcodeResult
 fun PosScaleBarcodeDialog(
     detectedBarcode: ScaleBarcodeResult,
     availableProducts: List<ProductWithUnits>,
+    currencySymbol: String = "ر.س",
     onConfirmProduct: (ProductWithUnits) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -168,7 +169,7 @@ fun PosScaleBarcodeDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("السعر المضمن:", style = MaterialTheme.typography.bodySmall)
-                                Text("%.2f ر.س".format(detectedBarcode.embeddedPrice), fontWeight = FontWeight.Bold)
+                                Text("%.2f %s".format(detectedBarcode.embeddedPrice, currencySymbol), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -254,11 +255,11 @@ fun PosScaleBarcodeDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "حساب السطر: (%.3f كجم × %.2f ر.س)".format(weight, pricePerKg),
+                                text = "حساب السطر: (%.3f كجم × %.2f %s)".format(weight, pricePerKg, currencySymbol),
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Text(
-                                text = "%.2f ر.س".format(lineTotal),
+                                text = "%.2f %s".format(lineTotal, currencySymbol),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.primary

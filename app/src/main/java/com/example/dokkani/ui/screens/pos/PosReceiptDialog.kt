@@ -194,8 +194,8 @@ fun PosReceiptDialog(
                         ) {
                             Text("الصنف", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             Text("الكمية", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                            Text("السعر", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                            Text("الإجمالي", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text("السعر (${receipt.currencySymbol})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text("الإجمالي (${receipt.currencySymbol})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         }
 
                         Divider(modifier = Modifier.padding(vertical = 4.dp), color = Color.LightGray)
@@ -336,7 +336,7 @@ fun PosReceiptDialog(
             ) {
                 Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("إعادة طباعة")
+                Text("طباعة الفاتورة")
             }
         },
         dismissButton = {

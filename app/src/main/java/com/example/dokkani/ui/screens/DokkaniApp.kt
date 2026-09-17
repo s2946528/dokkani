@@ -111,8 +111,9 @@ fun DokkaniApp(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.primary
                 )
             )
         }
@@ -125,7 +126,9 @@ fun DokkaniApp(
             if (allowedTabs.isNotEmpty()) {
                 ScrollableTabRow(
                     selectedTabIndex = currentTabIndex,
-                    edgePadding = 8.dp
+                    edgePadding = 8.dp,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary
                 ) {
                     allowedTabs.forEachIndexed { index, tab ->
                         Tab(
@@ -294,6 +297,7 @@ fun DokkaniApp(
                                 currentUserRole = currentUserRole,
                                 onUpdateValuationMethod = viewModel::selectValuationMethod,
                                 onUpdateEnableNegativeStock = viewModel::updateEnableNegativeStock,
+                                onUpdateTaxSettings = viewModel::updateTaxSettings,
                                 onSaveCurrency = viewModel::saveCurrency,
                                 onSetBaseCurrency = viewModel::setAsBaseCurrency,
                                 onDeleteCurrency = viewModel::deleteCurrency,

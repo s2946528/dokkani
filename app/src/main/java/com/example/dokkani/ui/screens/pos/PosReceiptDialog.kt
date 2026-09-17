@@ -245,7 +245,10 @@ fun PosReceiptDialog(
                         if (receipt.discount > 0.0) {
                             ReceiptRow("الخصم:", "-%.2f %s".format(receipt.discount, receipt.currencySymbol))
                         }
-                        ReceiptRow("ضريبة القيمة المضافة (15%):", "%.2f %s".format(receipt.taxAmount, receipt.currencySymbol))
+                        if (receipt.taxRatePercent > 0.0) {
+                            val rateStr = if (receipt.taxRatePercent % 1.0 == 0.0) "${receipt.taxRatePercent.toInt()}%" else "%.1f%%".format(receipt.taxRatePercent)
+                            ReceiptRow("ضريبة القيمة المضافة ($rateStr):", "%.2f %s".format(receipt.taxAmount, receipt.currencySymbol))
+                        }
 
                         ReceiptDashedSeparator()
 

@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,6 +53,7 @@ fun SystemSettingsScreen(
     currentUserRole: UserRole = UserRole.ADMIN,
     onUpdateValuationMethod: (CostValuationMethod) -> Unit = {},
     onUpdateEnableNegativeStock: (Boolean) -> Unit = {},
+    onUpdateTaxSettings: (Boolean, Double) -> Unit = { _, _ -> },
     onSaveCurrency: (CurrencyEntity) -> Unit = {},
     onSetBaseCurrency: (Long) -> Unit = {},
     onDeleteCurrency: (CurrencyEntity) -> Unit = {},
@@ -149,6 +152,145 @@ fun SystemSettingsScreen(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // بطاقة التحكم في ضريبة القيمة المضافة (Tax & VAT Settings)
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth().testTag("tax_settings_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "تفعيل / إلغاء ضريبة القيمة المضافة (Tax Control)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "التحكم في إظهار حسابات الضريبة ونسبتها المئوية في المبيعات والفواتير المطبوعة",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Switch(
+                                checked = settings?.isTaxEnabled ?: true,
+                                onCheckedChange = { isChecked ->
+                                    if (isAdmin) {
+                                        val rawRate = settings?.defaultTaxRate ?: 0.15
+                                        onUpdateTaxSettings(isChecked, rawRate)
+                                    }
+                                },
+                                enabled = isAdmin,
+                                modifier = Modifier.testTag("tax_enable_switch")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // حقل إدخال نسبة الضريبة اليدوية
+                        val currentRate = settings?.defaultTaxRate ?: 0.15
+                        val pctValue = if (currentRate <= 1.0) currentRate * 100.0 else currentRate
+                        var taxRateText by remember(settings?.defaultTaxRate) {
+                            mutableStateOf(if (pctValue % 1.0 == 0.0) pctValue.toInt().toString() else "%.1f".format(pctValue))
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = taxRateText,
+                                onValueChange = { input ->
+                                    if (input.isEmpty() || input.matches(Regex("""^\d*\.?\d*$"""))) {
+                                        taxRateText = input
+                                        val parsed = input.toDoubleOrNull()
+                                        if (parsed != null && parsed >= 0.0 && isAdmin) {
+                                            val rateToSave = parsed / 100.0
+                                            val isEnabled = settings?.isTaxEnabled ?: true
+                                            onUpdateTaxSettings(isEnabled, rateToSave)
+                                        }
+                                    }
+                                },
+                                label = { Text("نسبة الضريبة المئوية (%)") },
+                                suffix = { Text("%") },
+                                enabled = isAdmin && (settings?.isTaxEnabled ?: true),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("tax_rate_input")
+                            )
+
+                            Button(
+                                onClick = {
+                                    val parsed = taxRateText.toDoubleOrNull() ?: 15.0
+                                    val rateToSave = parsed / 100.0
+                                    val isEnabled = settings?.isTaxEnabled ?: true
+                                    onUpdateTaxSettings(isEnabled, rateToSave)
+                                },
+                                enabled = isAdmin && (settings?.isTaxEnabled ?: true),
+                                modifier = Modifier.testTag("save_tax_rate_button")
+                            ) {
+                                Text("حفظ النسبة")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // صندوق الحالة التوضيحي
+                        val isTaxActive = settings?.isTaxEnabled ?: true
+                        val activeRate = settings?.defaultTaxRate ?: 0.15
+                        val displayPct = if (activeRate <= 1.0) activeRate * 100.0 else activeRate
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isTaxActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isTaxActive) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = if (isTaxActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isTaxActive)
+                                        "الضريبة مفعلة بنسبة ${if (displayPct % 1.0 == 0.0) displayPct.toInt().toString() else "%.1f".format(displayPct)}%: يتم احتساب الضريبة تلقائياً وإدراجها في خلاصة السلة والإجمالي النهائي وطباعتها بالفواتير."
+                                    else
+                                        "الضريبة معطلة: تم إخفاء جميع صفوف وحسابات الضريبة من شاشة المبيعات والفواتير، والإجمالي النهائي يساوي المجموع الفرعي.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isTaxActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
                         }
                     }

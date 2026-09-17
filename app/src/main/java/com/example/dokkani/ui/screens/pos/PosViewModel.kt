@@ -195,10 +195,16 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // 4. مراقبة إعدادات النظام وسياسة المخزون
+        // 4. مراقبة إعدادات النظام وسياسة المخزون وحسابات الضريبة
         viewModelScope.launch(Dispatchers.IO) {
             settingsDao.getSettings().collectLatest { settings ->
-                _uiState.update { it.copy(systemSettings = settings) }
+                _uiState.update { state ->
+                    val newSummary = recalculateSummary(state.cartItems, state.discount, settings)
+                    state.copy(
+                        systemSettings = settings,
+                        cartSummary = newSummary
+                    )
+                }
             }
         }
 
@@ -322,6 +328,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     // --- إدارة السلة (للعمليات الأربع: بيع، شراء، مردود بيع، مردود شراء) ---
     fun addToCart(product: ProductEntity, unit: ProductUnitEntity, quantity: Double = 1.0) {
         _uiState.update { state ->
+            val productUnits = state.productsWithUnits.find { it.product.id == product.id }?.units ?: listOf(unit)
             val existingIndex = state.cartItems.indexOfFirst {
                 it.productId == product.id && it.unitId == unit.id
             }
@@ -329,7 +336,10 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             val updatedItems = state.cartItems.toMutableList()
             if (existingIndex >= 0) {
                 val existing = updatedItems[existingIndex]
-                updatedItems[existingIndex] = existing.copy(quantity = existing.quantity + quantity)
+                updatedItems[existingIndex] = existing.copy(
+                    quantity = existing.quantity + quantity,
+                    availableUnits = if (existing.availableUnits.isEmpty()) productUnits else existing.availableUnits
+                )
             } else {
                 val price = when (state.activeOperation) {
                     PosOperation.PURCHASE, PosOperation.PURCHASE_RETURN -> unit.costPrice
@@ -346,11 +356,61 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         unitPrice = price,
                         costPrice = unit.costPrice,
                         quantity = quantity,
-                        isWeighted = product.isWeighted
+                        isWeighted = product.isWeighted,
+                        availableUnits = productUnits
                     )
                 )
             }
 
+            state.copy(
+                cartItems = updatedItems,
+                cartSummary = recalculateSummary(updatedItems, state.discount)
+            )
+        }
+    }
+
+    fun changeCartItemUnit(cartItemId: String, targetUnit: ProductUnitEntity) {
+        _uiState.update { state ->
+            val updatedItems = state.cartItems.map { item ->
+                if (item.cartItemId == cartItemId) {
+                    val newPrice = when (state.activeOperation) {
+                        PosOperation.PURCHASE, PosOperation.PURCHASE_RETURN -> targetUnit.costPrice
+                        else -> targetUnit.sellingPrice
+                    }
+                    item.copy(
+                        unitId = targetUnit.id,
+                        unitName = targetUnit.unitName,
+                        conversionFactor = targetUnit.conversionFactor,
+                        unitPrice = newPrice,
+                        costPrice = targetUnit.costPrice
+                    )
+                } else item
+            }
+            state.copy(
+                cartItems = updatedItems,
+                cartSummary = recalculateSummary(updatedItems, state.discount)
+            )
+        }
+    }
+
+    fun updateCartItemNote(cartItemId: String, note: String) {
+        _uiState.update { state ->
+            val updatedItems = state.cartItems.map { item ->
+                if (item.cartItemId == cartItemId) {
+                    item.copy(notes = note)
+                } else item
+            }
+            state.copy(cartItems = updatedItems)
+        }
+    }
+
+    fun updateCartItemPrice(cartItemId: String, newPrice: Double) {
+        _uiState.update { state ->
+            val updatedItems = state.cartItems.map { item ->
+                if (item.cartItemId == cartItemId) {
+                    item.copy(unitPrice = newPrice.coerceAtLeast(0.0))
+                } else item
+            }
             state.copy(
                 cartItems = updatedItems,
                 cartSummary = recalculateSummary(updatedItems, state.discount)
@@ -439,14 +499,21 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(selectedCategory = category) }
     }
 
-    private fun recalculateSummary(items: List<PosCartItem>, discount: Double): CartSummary {
+    private fun recalculateSummary(
+        items: List<PosCartItem>,
+        discount: Double,
+        settings: SystemSettingsEntity? = _uiState.value.systemSettings
+    ): CartSummary {
         val totalQty = items.sumOf { it.quantity }
         val subtotal = items.sumOf { it.quantity * it.unitPrice }
         val itemsDiscount = items.sumOf { it.discount }
         val totalDiscount = itemsDiscount + discount
         val taxable = (subtotal - totalDiscount).coerceAtLeast(0.0)
-        val taxRate = 15.0
-        val taxAmount = taxable * (taxRate / 100.0)
+
+        val isTaxEnabled = settings?.isTaxEnabled ?: true
+        val rawRate = settings?.defaultTaxRate ?: 0.15
+        val taxRatePercent = if (!isTaxEnabled) 0.0 else if (rawRate <= 1.0 && rawRate > 0.0) rawRate * 100.0 else rawRate
+        val taxAmount = if (isTaxEnabled) taxable * (taxRatePercent / 100.0) else 0.0
         val finalTotal = taxable + taxAmount
 
         return CartSummary(
@@ -455,7 +522,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             subtotal = subtotal,
             discount = totalDiscount,
             taxableAmount = taxable,
-            taxRatePercent = taxRate,
+            taxRatePercent = taxRatePercent,
             taxAmount = taxAmount,
             finalTotal = finalTotal
         )
@@ -540,6 +607,11 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
                     val returnNotePart = state.originalInvoiceForReturn?.let { " - مرتبط بالفاتورة رقم: ${it.invoiceNumber}" } ?: ""
 
+                    val isTaxEnabled = state.systemSettings?.isTaxEnabled ?: true
+                    val rawRate = state.systemSettings?.defaultTaxRate ?: 0.15
+                    val currentTaxRateDecimal = if (isTaxEnabled) (if (rawRate <= 1.0 && rawRate > 0.0) rawRate else rawRate / 100.0) else 0.0
+                    val currentTaxAmount = if (isTaxEnabled) state.cartSummary.taxAmount else 0.0
+
                     // 1. إنشاء وحفظ رأس الفاتورة
                     val invoiceId = invoiceDao.insertInvoice(
                         InvoiceEntity(
@@ -551,8 +623,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             exchangeRate = 1.0,
                             subtotal = state.cartSummary.subtotal,
                             discount = state.cartSummary.discount,
-                            taxRate = 0.15,
-                            taxAmount = state.cartSummary.taxAmount,
+                            taxRate = currentTaxRateDecimal,
+                            taxAmount = currentTaxAmount,
                             total = state.cartSummary.finalTotal,
                             paidAmount = paid,
                             remainingAmount = remaining,
@@ -577,7 +649,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                 unitCostPrice = item.costPrice,
                                 unitSellingPrice = item.unitPrice,
                                 discount = item.discount,
-                                taxRate = 0.15,
+                                taxRate = currentTaxRateDecimal,
                                 totalPrice = item.totalPrice
                             )
                         )

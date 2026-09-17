@@ -29,4 +29,7 @@ interface SystemSettingsDao {
 
     @Query("UPDATE system_settings SET enableNegativeStock = :enable, lastUpdated = :timestamp WHERE id = 1")
     suspend fun updateEnableNegativeStock(enable: Boolean, timestamp: Long = System.currentTimeMillis())
+
+    @Query("UPDATE system_settings SET isTaxEnabled = :enabled, defaultTaxRate = :taxRate, lastUpdated = :timestamp WHERE id = 1")
+    suspend fun updateTaxSettings(enabled: Boolean, taxRate: Double, timestamp: Long = System.currentTimeMillis())
 }

@@ -188,8 +188,11 @@ object EscPosHelper {
         if (data.discount > 0.0) {
             stream.write(formatTwoColumns("الخصم:", "-%.2f %s".format(data.discount, data.currencySymbol), cols).toByteArray(charset))
         }
-        val taxLabel = "ضريبة القيمة المضافة (%.0f%%):".format(data.taxRatePercent)
-        stream.write(formatTwoColumns(taxLabel, "%.2f %s".format(data.taxAmount, data.currencySymbol), cols).toByteArray(charset))
+        if (data.taxRatePercent > 0.0) {
+            val rateStr = if (data.taxRatePercent % 1.0 == 0.0) "${data.taxRatePercent.toInt()}%" else "%.1f%%".format(data.taxRatePercent)
+            val taxLabel = "ضريبة القيمة المضافة ($rateStr):"
+            stream.write(formatTwoColumns(taxLabel, "%.2f %s".format(data.taxAmount, data.currencySymbol), cols).toByteArray(charset))
+        }
 
         stream.write(createSeparator(cols, '-').toByteArray(charset))
 

@@ -1025,56 +1025,15 @@ private fun PosCartPanel(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(uiState.cartItems) { item ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFFF0F4F8))
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    "%.2f × %.2f = %.2f %s".format(item.unitPrice, item.quantity, item.totalPrice, uiState.currencySymbol),
-                                    fontSize = 11.sp,
-                                    color = Color.DarkGray
-                                )
-                            }
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(
-                                    onClick = { viewModel.updateCartQuantity(item.cartItemId, item.quantity - 1.0) },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, tint = Color.Gray)
-                                }
-
-                                Text(
-                                    text = item.quantityFormatted,
-                                    modifier = Modifier.padding(horizontal = 4.dp),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                IconButton(
-                                    onClick = { viewModel.updateCartQuantity(item.cartItemId, item.quantity + 1.0) },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(Icons.Default.AddCircleOutline, contentDescription = null, tint = Color(0xFF1B5E20))
-                                }
-
-                                IconButton(
-                                    onClick = { viewModel.removeCartItem(item.cartItemId) },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color.Red, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        }
+                    items(uiState.cartItems, key = { it.cartItemId }) { item ->
+                        PosCartItemRow(
+                            item = item,
+                            currencySymbol = uiState.currencySymbol,
+                            onQuantityChange = { newQty -> viewModel.updateCartQuantity(item.cartItemId, newQty) },
+                            onUnitChange = { newUnit -> viewModel.changeCartItemUnit(item.cartItemId, newUnit) },
+                            onNoteChange = { note -> viewModel.updateCartItemNote(item.cartItemId, note) },
+                            onRemove = { viewModel.removeCartItem(item.cartItemId) }
+                        )
                     }
                 }
             }
@@ -1111,19 +1070,22 @@ private fun PosCartPanel(
             Spacer(modifier = Modifier.height(4.dp))
 
             // تفاصيل الإجمالي
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("المجموع قبل الضريبة:", fontSize = 11.sp, color = Color.Gray)
-                Text("%.2f %s".format(uiState.cartSummary.taxableAmount, uiState.currencySymbol), fontSize = 11.sp)
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("الضريبة المضافة (15%):", fontSize = 11.sp, color = Color.Gray)
-                Text("%.2f %s".format(uiState.cartSummary.taxAmount, uiState.currencySymbol), fontSize = 11.sp)
+            if (uiState.cartSummary.taxRatePercent > 0.0) {
+                val rateStr = if (uiState.cartSummary.taxRatePercent % 1.0 == 0.0) "${uiState.cartSummary.taxRatePercent.toInt()}%" else "%.1f%%".format(uiState.cartSummary.taxRatePercent)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("المجموع قبل الضريبة:", fontSize = 11.sp, color = Color.Gray)
+                    Text("%.2f %s".format(uiState.cartSummary.taxableAmount, uiState.currencySymbol), fontSize = 11.sp)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("الضريبة المضافة ($rateStr):", fontSize = 11.sp, color = Color.Gray)
+                    Text("%.2f %s".format(uiState.cartSummary.taxAmount, uiState.currencySymbol), fontSize = 11.sp)
+                }
             }
 
             Row(
@@ -1839,19 +1801,22 @@ private fun PosInvoiceSectionOld(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 // تفاصيل الإجمالي
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("المجموع قبل الضريبة:", fontSize = 12.sp, color = Color.Gray)
-                    Text("%.2f %s".format(uiState.cartSummary.taxableAmount, uiState.currencySymbol), fontSize = 12.sp)
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("الضريبة المضافة (15%):", fontSize = 12.sp, color = Color.Gray)
-                    Text("%.2f %s".format(uiState.cartSummary.taxAmount, uiState.currencySymbol), fontSize = 12.sp)
+                if (uiState.cartSummary.taxRatePercent > 0.0) {
+                    val rateStr = if (uiState.cartSummary.taxRatePercent % 1.0 == 0.0) "${uiState.cartSummary.taxRatePercent.toInt()}%" else "%.1f%%".format(uiState.cartSummary.taxRatePercent)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("المجموع قبل الضريبة:", fontSize = 12.sp, color = Color.Gray)
+                        Text("%.2f %s".format(uiState.cartSummary.taxableAmount, uiState.currencySymbol), fontSize = 12.sp)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("الضريبة المضافة ($rateStr):", fontSize = 12.sp, color = Color.Gray)
+                        Text("%.2f %s".format(uiState.cartSummary.taxAmount, uiState.currencySymbol), fontSize = 12.sp)
+                    }
                 }
 
                 Row(

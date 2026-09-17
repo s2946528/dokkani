@@ -359,7 +359,10 @@ class BluetoothPrinterManager(private val context: Context) {
         if (data.discount > 0.0) {
             sb.appendLine(twoCols("الخصم:", "-%.2f %s".format(data.discount, data.currencySymbol), cols))
         }
-        sb.appendLine(twoCols("الضريبة (%.0f%%):".format(data.taxRatePercent), "%.2f %s".format(data.taxAmount, data.currencySymbol), cols))
+        if (data.taxRatePercent > 0.0) {
+            val rateStr = if (data.taxRatePercent % 1.0 == 0.0) "${data.taxRatePercent.toInt()}%" else "%.1f%%".format(data.taxRatePercent)
+            sb.appendLine(twoCols("الضريبة ($rateStr):", "%.2f %s".format(data.taxAmount, data.currencySymbol), cols))
+        }
         sb.appendLine(sepSingle)
         sb.appendLine(twoCols("الإجمالي المستحق:", "%.2f %s".format(data.total, data.currencySymbol), cols))
         sb.appendLine(twoCols("المدفوع:", "%.2f %s".format(data.paidAmount, data.currencySymbol), cols))

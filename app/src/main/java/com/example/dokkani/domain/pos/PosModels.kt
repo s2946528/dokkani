@@ -1,6 +1,7 @@
 package com.example.dokkani.domain.pos
 
 import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.data.local.entities.ProductUnitEntity
 import java.util.UUID
 
 /**
@@ -20,7 +21,9 @@ data class PosCartItem(
     val isWeighted: Boolean = false,
     val isCustomOpenPrice: Boolean = false,
     val discount: Double = 0.0,
-    val scaleBarcodeRaw: String? = null
+    val scaleBarcodeRaw: String? = null,
+    val notes: String = "",
+    val availableUnits: List<ProductUnitEntity> = emptyList()
 ) {
     val totalPrice: Double
         get() = ((quantity * unitPrice) - discount).coerceAtLeast(0.0)

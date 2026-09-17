@@ -70,7 +70,7 @@ import kotlinx.coroutines.launch
         OwnerTransactionEntity::class,
         LeaseholdRightEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -185,7 +185,8 @@ abstract class DokkaniDatabase : RoomDatabase() {
                     storeName = "متجري",
                     costValuationMethod = CostValuationMethod.WAC,
                     defaultCurrencyCode = "YER",
-                    defaultTaxRate = 0.0,
+                    isTaxEnabled = true,
+                    defaultTaxRate = 0.15,
                     enableProduceShrinkageTracking = false,
                     enableNegativeStock = false,
                     invoiceFooterText = "شكراً لزيارتكم!"

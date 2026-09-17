@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
+import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceStatus
@@ -17,6 +18,7 @@ import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
+import com.example.dokkani.data.local.entities.UserRole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +31,14 @@ import java.util.Date
 import java.util.Locale
 
 /**
+ * إجراء يتطلب صلاحيات مدير النظام
+ */
+sealed class PendingAdminAction {
+    data class DeleteInvoice(val invoice: InvoiceEntity) : PendingAdminAction()
+    data class EditInvoice(val invoice: InvoiceEntity) : PendingAdminAction()
+}
+
+/**
  * بند شراء بضاعة في فاتورة التوريد
  */
 data class PurchaseLineItem(
@@ -39,7 +49,7 @@ data class PurchaseLineItem(
     val unitName: String,
     val conversionFactor: Double,
     val quantity: Double,
-    val costPrice: Double,         // سعر الشراء والتكلفة للوحدة المحددة
+    val costPrice: Double,         // سعر الشراء والتكلفة للوحدة بالعملة المحددة
     val oldCostPrice: Double,      // سعر التكلفة الحالي المسجل قبل الشراء
     val sellingPrice: Double,      // سعر البيع الحالي
     val newSellingPrice: Double? = null // سعر البيع الجديد المقترح (اختياري)
@@ -82,6 +92,15 @@ data class PurchaseUiState(
     val feedbackMessage: String? = null,
     val isError: Boolean = false,
 
+    // العملة وسعر الصرف
+    val availableCurrencies: List<CurrencyEntity> = emptyList(),
+    val selectedCurrency: CurrencyEntity? = null,
+    val exchangeRate: Double = 1.0,
+    val currencySymbol: String = "ر.س",
+    val currencyName: String = "الريال السعودي",
+    val baseCurrencyId: Long = 1L,
+    val baseCurrencySymbol: String = "ر.س",
+
     // استعراض فواتير الشراء والتعديل والحذف
     val purchaseInvoices: List<InvoiceEntity> = emptyList(),
     val invoiceSearchQuery: String = "",
@@ -91,18 +110,27 @@ data class PurchaseUiState(
     val showEditPurchaseDialog: Boolean = false,
     val editPurchaseNotes: String = "",
     val editPurchasePaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val editPurchaseSupplier: PartyEntity? = null,
+    val editPurchaseCurrency: CurrencyEntity? = null,
+    val editPurchaseExchangeRate: Double = 1.0,
+    val editPurchaseItems: List<PurchaseLineItem> = emptyList(),
     val isBottomHistoryExpanded: Boolean = true,
 
-    // العملة الأساسية
-    val currencySymbol: String = "ر.س",
-    val currencyName: String = "الريال السعودي",
-    val baseCurrencyId: Long = 1L
+    // حماية وصلاحيات مدير النظام
+    val showAdminPinDialog: Boolean = false,
+    val pendingAdminAction: PendingAdminAction? = null,
+    val adminPinError: String? = null
 ) {
     val subtotal: Double get() = items.sumOf { it.totalCost }
     val taxableAmount: Double get() = (subtotal - discount).coerceAtLeast(0.0)
     val taxAmount: Double get() = if (isTaxApplied) taxableAmount * 0.15 else 0.0
     val finalTotal: Double get() = taxableAmount + taxAmount
     val totalQuantity: Double get() = items.sumOf { it.quantity }
+
+    // المعادلة بالعملة المحلية الأساسية
+    val subtotalBaseCurrency: Double get() = subtotal * exchangeRate
+    val taxAmountBaseCurrency: Double get() = taxAmount * exchangeRate
+    val finalTotalBaseCurrency: Double get() = finalTotal * exchangeRate
 }
 
 class PurchaseViewModel(application: Application) : AndroidViewModel(application) {
@@ -146,18 +174,38 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            db.currencyDao().getBaseCurrencyFlow().collectLatest { baseCurrency ->
-                if (baseCurrency != null) {
-                    _uiState.update { state ->
-                        state.copy(
-                            currencySymbol = baseCurrency.symbol,
-                            currencyName = baseCurrency.name,
-                            baseCurrencyId = baseCurrency.id
-                        )
-                    }
+            db.currencyDao().getAllCurrencies().collectLatest { currencies ->
+                val base = currencies.find { it.isBaseCurrency } ?: currencies.firstOrNull()
+                _uiState.update { state ->
+                    val selCurr = state.selectedCurrency ?: base
+                    state.copy(
+                        availableCurrencies = currencies,
+                        selectedCurrency = selCurr,
+                        currencySymbol = selCurr?.symbol ?: "ر.س",
+                        currencyName = selCurr?.name ?: "الريال السعودي",
+                        exchangeRate = selCurr?.exchangeRateToBase ?: 1.0,
+                        baseCurrencyId = base?.id ?: 1L,
+                        baseCurrencySymbol = base?.symbol ?: "ر.س"
+                    )
                 }
             }
         }
+    }
+
+    fun selectCurrency(currency: CurrencyEntity) {
+        _uiState.update { state ->
+            state.copy(
+                selectedCurrency = currency,
+                currencySymbol = currency.symbol,
+                currencyName = currency.name,
+                exchangeRate = currency.exchangeRateToBase
+            )
+        }
+    }
+
+    fun setExchangeRate(rate: Double) {
+        if (rate <= 0.0) return
+        _uiState.update { it.copy(exchangeRate = rate) }
     }
 
     fun selectSupplier(supplier: PartyEntity?) {
@@ -280,7 +328,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * تنفيذ واعتماد فاتورة الشراء وتطبيق دالة WAC لحساب التكلفة الجديدة وتحديث المخزون
+     * تنفيذ واعتماد فاتورة الشراء وتطبيق دالة WAC لحساب التكلفة الجديدة بالعملة المحلية وتحويلات الصرف
      */
     fun executePurchaseTransaction() {
         val state = _uiState.value
@@ -304,38 +352,45 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                     val totalCount = invoiceDao.countInvoices() + 1
                     val invoiceNumber = "PUR-2026-%04d".format(totalCount)
 
-                    val isCredit = state.paymentMethod == PaymentMethod.CREDIT
-                    val paid = if (isCredit) 0.0 else state.finalTotal
-                    val remaining = if (isCredit) state.finalTotal else 0.0
+                    val rate = state.exchangeRate
+                    val selectedCurrencyId = state.selectedCurrency?.id ?: state.baseCurrencyId
 
-                    // 1. إدخال فاتورة الشراء في جدول Invoices
+                    val isCredit = state.paymentMethod == PaymentMethod.CREDIT
+                    val finalTotalLocal = state.finalTotalBaseCurrency
+                    val paidLocal = if (isCredit) 0.0 else finalTotalLocal
+                    val remainingLocal = if (isCredit) finalTotalLocal else 0.0
+
+                    // 1. إدخال فاتورة الشراء بالقيم المترجمة للعملة الأساسية
                     val invoiceId = invoiceDao.insertInvoice(
                         InvoiceEntity(
                             invoiceNumber = invoiceNumber,
                             type = InvoiceType.PURCHASE,
                             partyId = state.selectedSupplier?.id,
                             date = timestamp,
-                            currencyId = state.baseCurrencyId,
-                            exchangeRate = 1.0,
-                            subtotal = state.subtotal,
-                            discount = state.discount,
+                            currencyId = selectedCurrencyId,
+                            exchangeRate = rate,
+                            subtotal = state.subtotalBaseCurrency,
+                            discount = state.discount * rate,
                             taxRate = if (state.isTaxApplied) 0.15 else 0.0,
-                            taxAmount = state.taxAmount,
-                            total = state.finalTotal,
-                            paidAmount = paid,
-                            remainingAmount = remaining,
+                            taxAmount = state.taxAmountBaseCurrency,
+                            total = finalTotalLocal,
+                            paidAmount = paidLocal,
+                            remainingAmount = remainingLocal,
                             paymentMethod = state.paymentMethod,
                             status = InvoiceStatus.COMPLETED,
                             notes = "فاتورة شراء مورد رقم: ${state.supplierInvoiceNumber.ifEmpty { "غير محدد" }} - ${state.notes}"
                         )
                     )
 
-                    // 2. بنود الفاتورة وحركات المخزون وحساب WAC
+                    // 2. بنود الفاتورة وحركات المخزون وحساب WAC بالعملة المحلية
                     val itemsToInsert = mutableListOf<InvoiceItemEntity>()
                     val movementsToInsert = mutableListOf<StockMovementEntity>()
                     val wacSummaries = mutableListOf<WacCalculationSummary>()
 
                     state.items.forEach { item ->
+                        val itemCostPriceLocal = item.costPrice * rate
+                        val itemTotalCostLocal = item.totalCost * rate
+
                         itemsToInsert.add(
                             InvoiceItemEntity(
                                 invoiceId = invoiceId,
@@ -343,16 +398,16 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                                 productUnitId = item.unitId,
                                 quantity = item.quantity,
                                 unitConversionFactor = item.conversionFactor,
-                                unitCostPrice = item.costPrice,
+                                unitCostPrice = itemCostPriceLocal,
                                 unitSellingPrice = item.newSellingPrice ?: item.sellingPrice,
                                 discount = 0.0,
                                 taxRate = if (state.isTaxApplied) 0.15 else 0.0,
-                                totalPrice = item.totalCost
+                                totalPrice = itemTotalCostLocal
                             )
                         )
 
                         val baseQtyPurchased = item.quantity * item.conversionFactor
-                        val unitCostBasePurchased = item.costPrice / item.conversionFactor
+                        val unitCostBasePurchasedLocal = itemCostPriceLocal / item.conversionFactor
 
                         // إضافة حركة مخزون PURCHASE_IN
                         movementsToInsert.add(
@@ -362,28 +417,27 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                                 movementType = MovementType.PURCHASE_IN,
                                 quantityBaseUnit = baseQtyPurchased,
                                 remainingQuantityForFifo = baseQtyPurchased,
-                                unitCostPriceBase = unitCostBasePurchased,
+                                unitCostPriceBase = unitCostBasePurchasedLocal,
                                 timestamp = timestamp,
                                 referenceNumber = invoiceNumber
                             )
                         )
 
                         // 3. تطبيق دالة المتوسط المرجح WAC:
-                        // قانون WAC = ((الكمية الحالية بالمخزن * التكلفة الحالية) + (الكمية المشتراة * تكلفة الشراء الجديدة)) / (الكمية الإجمالية الجديدة)
                         val existingStockBase = stockMovementDao.getTotalStockQuantity(item.productId)
-                        val oldUnitCostBase = item.oldCostPrice / item.conversionFactor
+                        val oldUnitCostBaseLocal = item.oldCostPrice / item.conversionFactor
 
-                        val newWacCostBase = if (existingStockBase > 0.001) {
-                            val currentInventoryValue = existingStockBase * oldUnitCostBase
-                            val incomingValue = baseQtyPurchased * unitCostBasePurchased
+                        val newWacCostBaseLocal = if (existingStockBase > 0.001) {
+                            val currentInventoryValue = existingStockBase * oldUnitCostBaseLocal
+                            val incomingValue = baseQtyPurchased * unitCostBasePurchasedLocal
                             (currentInventoryValue + incomingValue) / (existingStockBase + baseQtyPurchased)
                         } else {
-                            unitCostBasePurchased
+                            unitCostBasePurchasedLocal
                         }
 
                         val unitEntity = productDao.getUnitById(item.unitId)
                         if (unitEntity != null) {
-                            val updatedCostForThisUnit = newWacCostBase * unitEntity.conversionFactor
+                            val updatedCostForThisUnit = newWacCostBaseLocal * unitEntity.conversionFactor
                             val updatedSellingPrice = item.newSellingPrice ?: unitEntity.sellingPrice
                             productDao.updateUnit(
                                 unitEntity.copy(
@@ -398,7 +452,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                                     unitName = item.unitName,
                                     oldCost = item.oldCostPrice,
                                     purchaseCost = item.costPrice,
-                                    newWacCost = updatedCostForThisUnit,
+                                    newWacCost = updatedCostForThisUnit / rate,
                                     oldStock = existingStockBase,
                                     newStock = existingStockBase + baseQtyPurchased
                                 )
@@ -411,8 +465,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                     // 4. تحديث رصيد المورد إذا كان الدفع آجلاً
                     if (isCredit && state.selectedSupplier != null) {
-                        // بالسالب لأن دكاني يعتمد رصيد المورد بالسالب = له عندنا / دائن
-                        partyDao.updateBalance(state.selectedSupplier.id, -state.finalTotal)
+                        partyDao.updateBalance(state.selectedSupplier.id, -finalTotalLocal)
                     }
 
                     // 5. خصم المبلغ من الصندوق إذا كان الشراء نقداً
@@ -421,8 +474,8 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         if (openShift != null) {
                             shiftDao.updateShift(
                                 openShift.copy(
-                                    totalCashExpenses = openShift.totalCashExpenses + state.finalTotal,
-                                    expectedCashInDrawer = openShift.expectedCashInDrawer - state.finalTotal
+                                    totalCashExpenses = openShift.totalCashExpenses + finalTotalLocal,
+                                    expectedCashInDrawer = openShift.expectedCashInDrawer - finalTotalLocal
                                 )
                             )
                         }
@@ -475,41 +528,83 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // --- استعراض فواتير الشراء والتعديل والحذف لمدير النظام ---
+    // --- حماية وصلاحيات مدير النظام Admin Security PIN ---
+    fun openAdminPinDialog(action: PendingAdminAction) {
+        _uiState.update {
+            it.copy(
+                showAdminPinDialog = true,
+                pendingAdminAction = action,
+                adminPinError = null
+            )
+        }
+    }
+
+    fun dismissAdminPinDialog() {
+        _uiState.update {
+            it.copy(
+                showAdminPinDialog = false,
+                pendingAdminAction = null,
+                adminPinError = null
+            )
+        }
+    }
+
+    fun verifyAdminPin(pin: String, onVerified: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val userDao = db.userDao()
+            val user = userDao.getUserByPin(pin)
+            if (user != null && user.role == UserRole.ADMIN) {
+                _uiState.update { it.copy(showAdminPinDialog = false, pendingAdminAction = null, adminPinError = null) }
+                launch(Dispatchers.Main) { onVerified() }
+            } else {
+                _uiState.update {
+                    it.copy(adminPinError = "رمز مدير النظام غير صحيح أو لا يملك صلاحية مدير")
+                }
+            }
+        }
+    }
+
+    // --- استعراض فواتير الشراء والتعديل والحذف مع إعادة احتساب WAC ورصيد المورد والمخزون ---
     fun deletePurchaseInvoice(invoiceId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 db.withTransaction {
                     val inv = invoiceDao.getInvoiceById(invoiceId) ?: return@withTransaction
+                    val items = invoiceDao.getInvoiceItems(invoiceId)
 
-                    // 1. عكس حركات المخزون
+                    // 1. حذف حركات المخزون الخاصة بالفاتورة
                     stockMovementDao.deleteMovementsByReferenceNumber(inv.invoiceNumber)
 
-                    // 2. عكس رصيد المورد إذا كانت العملية آجلة
+                    // 2. إعادة احتساب WAC وتكاليف الوحدات لكل الأقسام والصنوف المتأثرة
+                    val affectedProductIds = items.map { it.productId }.distinct()
+                    for (productId in affectedProductIds) {
+                        recalculateProductWacAndStock(productId)
+                    }
+
+                    // 3. عكس رصيد المورد إذا كانت العملية آجلة
                     if (inv.partyId != null && inv.paymentMethod == PaymentMethod.CREDIT) {
                         val party = partyDao.getPartyById(inv.partyId)
                         if (party != null) {
-                            val newBal = if (inv.type == InvoiceType.PURCHASE) party.currentBalance + inv.total else party.currentBalance - inv.total
-                            partyDao.updateParty(party.copy(currentBalance = newBal))
+                            partyDao.updateParty(party.copy(currentBalance = party.currentBalance + inv.total))
                         }
                     }
 
-                    // 3. عكس نقدية الصندوق للشفت المفتوح إذا كان الدفع نقداً
+                    // 4. عكس نقدية الصندوق للشفت المفتوح إذا كان الدفع نقداً
                     if (inv.paymentMethod == PaymentMethod.CASH) {
-                        val shifts = shiftDao.getAllShiftsSync()
-                        val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
-                        if (currentShift != null && inv.type == InvoiceType.PURCHASE) {
-                            val newExp = (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
-                            shiftDao.updateExpenses(currentShift.id, newExp)
+                        val openShift = shiftDao.getOpenShift()
+                        if (openShift != null) {
+                            val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                            shiftDao.updateShift(openShift.copy(totalCashExpenses = newExp))
                         }
                     }
 
-                    // 4. حذف الفاتورة
+                    // 5. حذف بنود الفاتورة والفاتورة نفسها
+                    invoiceDao.deleteInvoiceItemsByInvoiceId(invoiceId)
                     invoiceDao.deleteInvoice(inv)
                 }
                 _uiState.update {
                     it.copy(
-                        feedbackMessage = "تم حذف فاتورة الشراء وعكس حركات المخزون ورصيد المورد بنجاح.",
+                        feedbackMessage = "تم حذف فاتورة الشراء وعكس حركات المخزون واحتساب WAC بنجاح.",
                         isError = false
                     )
                 }
@@ -521,6 +616,28 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                     )
                 }
             }
+        }
+    }
+
+    private suspend fun recalculateProductWacAndStock(productId: Long) {
+        val remainingLots = stockMovementDao.getActiveStockLotsForWac(productId)
+        val currentStockQty = stockMovementDao.getTotalStockQuantity(productId)
+
+        val newWacCostBase = if (remainingLots.isNotEmpty() && currentStockQty > 0.0001) {
+            val totalVal = remainingLots.sumOf { it.remainingQuantityForFifo * it.unitCostPriceBase }
+            totalVal / remainingLots.sumOf { it.remainingQuantityForFifo }
+        } else {
+            val lastMvt = stockMovementDao.getLastPurchaseMovement(productId)
+            lastMvt?.unitCostPriceBase ?: 0.0
+        }
+
+        val units = productDao.getUnitsForProductSync(productId)
+        for (unit in units) {
+            productDao.updateUnit(
+                unit.copy(
+                    costPrice = newWacCostBase * unit.conversionFactor
+                )
+            )
         }
     }
 
@@ -548,13 +665,65 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun openEditPurchaseDialog(invoice: InvoiceEntity) {
-        _uiState.update {
-            it.copy(
-                selectedInvoice = invoice,
-                editPurchaseNotes = invoice.notes,
-                editPurchasePaymentMethod = invoice.paymentMethod,
-                showEditPurchaseDialog = true
-            )
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = invoiceDao.getInvoiceItems(invoice.id)
+            val currencies = db.currencyDao().getAllCurrenciesSync()
+            val curr = currencies.find { it.id == invoice.currencyId } ?: currencies.firstOrNull()
+            val party = invoice.partyId?.let { partyDao.getPartyById(it) }
+            val rate = if (invoice.exchangeRate > 0) invoice.exchangeRate else (curr?.exchangeRateToBase ?: 1.0)
+
+            val editableItems = items.mapNotNull { item ->
+                val prod = productDao.getProductById(item.productId) ?: return@mapNotNull null
+                val unit = productDao.getUnitById(item.productUnitId) ?: return@mapNotNull null
+                val costInInvoiceCurr = if (rate > 0) item.unitCostPrice / rate else item.unitCostPrice
+                PurchaseLineItem(
+                    productId = item.productId,
+                    productName = prod.name,
+                    productCode = prod.code,
+                    unitId = unit.id,
+                    unitName = unit.unitName,
+                    conversionFactor = item.unitConversionFactor,
+                    quantity = item.quantity,
+                    costPrice = costInInvoiceCurr,
+                    oldCostPrice = unit.costPrice,
+                    sellingPrice = item.unitSellingPrice
+                )
+            }
+
+            _uiState.update {
+                it.copy(
+                    selectedInvoice = invoice,
+                    editPurchaseNotes = invoice.notes,
+                    editPurchasePaymentMethod = invoice.paymentMethod,
+                    editPurchaseSupplier = party,
+                    editPurchaseCurrency = curr,
+                    editPurchaseExchangeRate = rate,
+                    editPurchaseItems = editableItems,
+                    showEditPurchaseDialog = true
+                )
+            }
+        }
+    }
+
+    fun updateEditPurchaseItemQty(productId: Long, unitId: Long, newQty: Double) {
+        _uiState.update { state ->
+            val updated = if (newQty <= 0.001) {
+                state.editPurchaseItems.filterNot { it.productId == productId && it.unitId == unitId }
+            } else {
+                state.editPurchaseItems.map {
+                    if (it.productId == productId && it.unitId == unitId) it.copy(quantity = newQty) else it
+                }
+            }
+            state.copy(editPurchaseItems = updated)
+        }
+    }
+
+    fun updateEditPurchaseItemCost(productId: Long, unitId: Long, newCost: Double) {
+        _uiState.update { state ->
+            val updated = state.editPurchaseItems.map {
+                if (it.productId == productId && it.unitId == unitId) it.copy(costPrice = newCost) else it
+            }
+            state.copy(editPurchaseItems = updated)
         }
     }
 
@@ -567,31 +736,151 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun saveEditedPurchaseInvoice(notes: String, method: PaymentMethod) {
+    fun saveEditedPurchaseInvoice(
+        notes: String,
+        method: PaymentMethod,
+        supplier: PartyEntity?,
+        currency: CurrencyEntity?,
+        rate: Double
+    ) {
         val inv = _uiState.value.selectedInvoice ?: return
+        val editedItems = _uiState.value.editPurchaseItems
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 db.withTransaction {
-                    val oldMethod = inv.paymentMethod
-                    val updated = inv.copy(notes = notes, paymentMethod = method)
-                    invoiceDao.updateInvoice(updated)
+                    val timestamp = inv.date
+                    val oldInvoiceItems = invoiceDao.getInvoiceItems(inv.id)
 
-                    if (oldMethod != method && inv.partyId != null) {
+                    // 1. إلغاء حركات المخزون للنسخة القديمة من الفاتورة
+                    stockMovementDao.deleteMovementsByReferenceNumber(inv.invoiceNumber)
+
+                    // 2. إعادة احتساب التكلفة للنسخة القديمة لتصحيح WAC
+                    val oldProductIds = oldInvoiceItems.map { it.productId }.distinct()
+                    for (pId in oldProductIds) {
+                        recalculateProductWacAndStock(pId)
+                    }
+
+                    // 3. عكس رصيد المورد القديم
+                    if (inv.partyId != null && inv.paymentMethod == PaymentMethod.CREDIT) {
                         val party = partyDao.getPartyById(inv.partyId)
                         if (party != null) {
-                            if (oldMethod == PaymentMethod.CREDIT && method != PaymentMethod.CREDIT) {
-                                partyDao.updateParty(party.copy(currentBalance = party.currentBalance + inv.total))
-                            } else if (oldMethod != PaymentMethod.CREDIT && method == PaymentMethod.CREDIT) {
-                                partyDao.updateParty(party.copy(currentBalance = party.currentBalance - inv.total))
-                            }
+                            partyDao.updateParty(party.copy(currentBalance = party.currentBalance + inv.total))
+                        }
+                    }
+
+                    // 4. عكس منصرفات الصندوق القديمة
+                    if (inv.paymentMethod == PaymentMethod.CASH) {
+                        val openShift = shiftDao.getOpenShift()
+                        if (openShift != null) {
+                            val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                            shiftDao.updateShift(openShift.copy(totalCashExpenses = newExp))
+                        }
+                    }
+
+                    // 5. بناء التعديلات الجديدة وتطبيق سعر الصرف
+                    val activeRate = if (rate > 0) rate else 1.0
+                    val subtotalCurr = editedItems.sumOf { it.totalCost }
+                    val taxCurr = subtotalCurr * 0.15
+                    val totalCurr = subtotalCurr + taxCurr
+
+                    val totalLocal = totalCurr * activeRate
+                    val taxLocal = taxCurr * activeRate
+                    val subtotalLocal = subtotalCurr * activeRate
+
+                    val isCredit = method == PaymentMethod.CREDIT
+                    val paidLocal = if (isCredit) 0.0 else totalLocal
+                    val remainingLocal = if (isCredit) totalLocal else 0.0
+
+                    val updatedInv = inv.copy(
+                        partyId = supplier?.id,
+                        currencyId = currency?.id ?: inv.currencyId,
+                        exchangeRate = activeRate,
+                        subtotal = subtotalLocal,
+                        taxAmount = taxLocal,
+                        total = totalLocal,
+                        paidAmount = paidLocal,
+                        remainingAmount = remainingLocal,
+                        paymentMethod = method,
+                        notes = notes
+                    )
+
+                    invoiceDao.updateInvoice(updatedInv)
+                    invoiceDao.deleteInvoiceItemsByInvoiceId(inv.id)
+
+                    val newItemsToInsert = mutableListOf<InvoiceItemEntity>()
+                    val newMovementsToInsert = mutableListOf<StockMovementEntity>()
+
+                    editedItems.forEach { item ->
+                        val itemCostPriceLocal = item.costPrice * activeRate
+                        val itemTotalCostLocal = item.totalCost * activeRate
+
+                        newItemsToInsert.add(
+                            InvoiceItemEntity(
+                                invoiceId = inv.id,
+                                productId = item.productId,
+                                productUnitId = item.unitId,
+                                quantity = item.quantity,
+                                unitConversionFactor = item.conversionFactor,
+                                unitCostPrice = itemCostPriceLocal,
+                                unitSellingPrice = item.sellingPrice,
+                                discount = 0.0,
+                                taxRate = 0.15,
+                                totalPrice = itemTotalCostLocal
+                            )
+                        )
+
+                        val baseQtyPurchased = item.quantity * item.conversionFactor
+                        val unitCostBasePurchasedLocal = itemCostPriceLocal / item.conversionFactor
+
+                        newMovementsToInsert.add(
+                            StockMovementEntity(
+                                productId = item.productId,
+                                productUnitId = item.unitId,
+                                movementType = MovementType.PURCHASE_IN,
+                                quantityBaseUnit = baseQtyPurchased,
+                                remainingQuantityForFifo = baseQtyPurchased,
+                                unitCostPriceBase = unitCostBasePurchasedLocal,
+                                timestamp = timestamp,
+                                referenceNumber = inv.invoiceNumber
+                            )
+                        )
+                    }
+
+                    invoiceDao.insertInvoiceItems(newItemsToInsert)
+                    stockMovementDao.insertMovements(newMovementsToInsert)
+
+                    // 6. إعادة احتساب WAC للصنوف المعدلة
+                    val newProductIds = editedItems.map { it.productId }.distinct()
+                    val allAffectedIds = (oldProductIds + newProductIds).distinct()
+                    for (pId in allAffectedIds) {
+                        recalculateProductWacAndStock(pId)
+                    }
+
+                    // 7. تطبيق رصيد المورد الجديد
+                    if (isCredit && supplier != null) {
+                        partyDao.updateBalance(supplier.id, -totalLocal)
+                    }
+
+                    // 8. تطبيق منصرفات الصندوق الجديدة
+                    if (method == PaymentMethod.CASH) {
+                        val openShift = shiftDao.getOpenShift()
+                        if (openShift != null) {
+                            shiftDao.updateShift(
+                                openShift.copy(
+                                    totalCashExpenses = openShift.totalCashExpenses + totalLocal,
+                                    expectedCashInDrawer = openShift.expectedCashInDrawer - totalLocal
+                                )
+                            )
                         }
                     }
                 }
+
                 _uiState.update {
                     it.copy(
                         showEditPurchaseDialog = false,
                         selectedInvoice = null,
-                        feedbackMessage = "تم حفظ تعديلات فاتورة الشراء بنجاح.",
+                        feedbackMessage = "تم حفظ تعديلات فاتورة الشراء واحتساب WAC بنجاح.",
                         isError = false
                     )
                 }
@@ -614,3 +903,4 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(isBottomHistoryExpanded = !it.isBottomHistoryExpanded) }
     }
 }
+

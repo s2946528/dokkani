@@ -45,6 +45,9 @@ interface InvoiceDao {
     @Query("SELECT * FROM invoice_items WHERE invoiceId = :invoiceId")
     suspend fun getInvoiceItems(invoiceId: Long): List<InvoiceItemEntity>
 
+    @Query("DELETE FROM invoice_items WHERE invoiceId = :invoiceId")
+    suspend fun deleteInvoiceItemsByInvoiceId(invoiceId: Long)
+
     @Query("SELECT * FROM invoice_items")
     suspend fun getAllInvoiceItemsSync(): List<InvoiceItemEntity>
 

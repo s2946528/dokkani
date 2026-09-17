@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.dokkani.ui.components.BarcodeTextField
+import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.PartyEntity
@@ -125,46 +126,114 @@ fun PurchaseScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // اختيار المورد
-                        var supplierDropdownExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = supplierDropdownExpanded,
-                            onExpandedChange = { supplierDropdownExpanded = it },
-                            modifier = Modifier.fillMaxWidth()
+                        // اختيار المورد والعملة
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedTextField(
-                                value = uiState.selectedSupplier?.let { "${it.name} (${if (it.currentBalance < 0) "دائن: %.2f".format(-it.currentBalance) else "رصيد: %.2f".format(it.currentBalance)} ${uiState.currencySymbol})" } ?: "اختر المورد...",
-                                onValueChange = {},
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = supplierDropdownExpanded) },
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth(),
-                                label = { Text("المورد") }
-                            )
-
-                            ExposedDropdownMenu(
+                            var supplierDropdownExpanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
                                 expanded = supplierDropdownExpanded,
-                                onDismissRequest = { supplierDropdownExpanded = false }
+                                onExpandedChange = { supplierDropdownExpanded = it },
+                                modifier = Modifier.weight(1.2f)
                             ) {
-                                uiState.suppliers.forEach { supplier ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text(supplier.name, fontWeight = FontWeight.Bold)
-                                                Text(
-                                                    text = if (supplier.currentBalance < 0) "مستحق له (دائن): %.2f %s".format(-supplier.currentBalance, uiState.currencySymbol) else "رصيده: %.2f %s".format(supplier.currentBalance, uiState.currencySymbol),
-                                                    fontSize = 11.sp,
-                                                    color = if (supplier.currentBalance < 0) Color(0xFFD32F2F) else Color.Gray
-                                                )
+                                OutlinedTextField(
+                                    value = uiState.selectedSupplier?.let { "${it.name} (${if (it.currentBalance < 0) "دائن: %.2f".format(-it.currentBalance) else "رصيد: %.2f".format(it.currentBalance)} ${uiState.currencySymbol})" } ?: "اختر المورد...",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = supplierDropdownExpanded) },
+                                    modifier = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth(),
+                                    label = { Text("المورد") }
+                                )
+
+                                ExposedDropdownMenu(
+                                    expanded = supplierDropdownExpanded,
+                                    onDismissRequest = { supplierDropdownExpanded = false }
+                                ) {
+                                    uiState.suppliers.forEach { supplier ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(supplier.name, fontWeight = FontWeight.Bold)
+                                                    Text(
+                                                        text = if (supplier.currentBalance < 0) "مستحق له (دائن): %.2f %s".format(-supplier.currentBalance, uiState.currencySymbol) else "رصيده: %.2f %s".format(supplier.currentBalance, uiState.currencySymbol),
+                                                        fontSize = 11.sp,
+                                                        color = if (supplier.currentBalance < 0) Color(0xFFD32F2F) else Color.Gray
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                viewModel.selectSupplier(supplier)
+                                                supplierDropdownExpanded = false
                                             }
-                                        },
-                                        onClick = {
-                                            viewModel.selectSupplier(supplier)
-                                            supplierDropdownExpanded = false
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
+                            }
+
+                            // اختيار عملة الفاتورة
+                            var currencyDropdownExpanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = currencyDropdownExpanded,
+                                onExpandedChange = { currencyDropdownExpanded = it },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                OutlinedTextField(
+                                    value = uiState.selectedCurrency?.let { "${it.name} (${it.symbol})" } ?: "العملة",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyDropdownExpanded) },
+                                    modifier = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth(),
+                                    label = { Text("عملة الشراء") }
+                                )
+
+                                ExposedDropdownMenu(
+                                    expanded = currencyDropdownExpanded,
+                                    onDismissRequest = { currencyDropdownExpanded = false }
+                                ) {
+                                    uiState.availableCurrencies.forEach { curr ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("${curr.name} (${curr.symbol})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                    Text("1 = %.2f %s".format(curr.exchangeRateToBase, uiState.baseCurrencySymbol), fontSize = 10.sp, color = Color.Gray)
+                                                }
+                                            },
+                                            onClick = {
+                                                viewModel.selectCurrency(curr)
+                                                currencyDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (uiState.selectedCurrency != null && !uiState.selectedCurrency!!.isBaseCurrency) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("سعر الصرف لعملة ${uiState.currencyName}:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+                                OutlinedTextField(
+                                    value = "%.4f".format(uiState.exchangeRate),
+                                    onValueChange = { str ->
+                                        str.toDoubleOrNull()?.let { viewModel.setExchangeRate(it) }
+                                    },
+                                    label = { Text("1 ${uiState.selectedCurrency?.code} = بالـ (${uiState.baseCurrencySymbol})") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.width(180.dp),
+                                    singleLine = true
+                                )
                             }
                         }
 
@@ -620,7 +689,9 @@ fun PurchaseScreen(
                 products = uiState.productsWithUnits,
                 parties = uiState.suppliers,
                 onDismiss = { viewModel.dismissInvoiceDetails() },
-                currencySymbol = uiState.currencySymbol
+                currencySymbol = uiState.currencySymbol,
+                currencies = uiState.availableCurrencies,
+                baseCurrencySymbol = uiState.baseCurrencySymbol
             )
         }
 
@@ -630,8 +701,35 @@ fun PurchaseScreen(
                 invoice = uiState.selectedInvoice!!,
                 initialNotes = uiState.editPurchaseNotes,
                 initialPaymentMethod = uiState.editPurchasePaymentMethod,
+                initialSupplier = uiState.editPurchaseSupplier,
+                initialCurrency = uiState.editPurchaseCurrency,
+                initialExchangeRate = uiState.editPurchaseExchangeRate,
+                items = uiState.editPurchaseItems,
+                suppliers = uiState.suppliers,
+                availableCurrencies = uiState.availableCurrencies,
+                baseCurrencySymbol = uiState.baseCurrencySymbol,
+                onUpdateItemQty = { pId, uId, qty -> viewModel.updateEditPurchaseItemQty(pId, uId, qty) },
+                onUpdateItemCost = { pId, uId, cost -> viewModel.updateEditPurchaseItemCost(pId, uId, cost) },
                 onDismiss = { viewModel.dismissEditPurchaseDialog() },
-                onSave = { notes: String, method: PaymentMethod -> viewModel.saveEditedPurchaseInvoice(notes, method) }
+                onSave = { notes, method, supplier, currency, rate ->
+                    viewModel.saveEditedPurchaseInvoice(notes, method, supplier, currency, rate)
+                }
+            )
+        }
+
+        // نافذة إدخال رمز مدير النظام للتحقق أماناً Admin PIN
+        if (uiState.showAdminPinDialog) {
+            AdminPinVerificationDialog(
+                uiState = uiState,
+                onDismiss = { viewModel.dismissAdminPinDialog() },
+                onVerify = { pin ->
+                    viewModel.verifyAdminPin(pin) {
+                        val pending = uiState.pendingAdminAction
+                        if (pending is PendingAdminAction.EditInvoice) {
+                            viewModel.openEditPurchaseDialog(pending.invoice)
+                        }
+                    }
+                }
             )
         }
     }
@@ -756,7 +854,7 @@ private fun PurchaseBottomHistorySection(
 
                             Card(
                                 modifier = Modifier
-                                    .width(260.dp)
+                                    .width(270.dp)
                                     .clickable { viewModel.openInvoiceDetails(inv) },
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
                                 border = CardDefaults.outlinedCardBorder()
@@ -815,19 +913,29 @@ private fun PurchaseBottomHistorySection(
                                                 Text("تفاصيل", fontSize = 10.sp)
                                             }
 
-                                            if (currentUserRole == UserRole.ADMIN) {
-                                                IconButton(
-                                                    onClick = { viewModel.openEditPurchaseDialog(inv) },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color(0xFF1976D2), modifier = Modifier.size(14.dp))
-                                                }
-                                                IconButton(
-                                                    onClick = { deleteCandidate = inv },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color(0xFFD32F2F), modifier = Modifier.size(14.dp))
-                                                }
+                                            IconButton(
+                                                onClick = {
+                                                    if (currentUserRole == UserRole.ADMIN) {
+                                                        viewModel.openEditPurchaseDialog(inv)
+                                                    } else {
+                                                        viewModel.openAdminPinDialog(PendingAdminAction.EditInvoice(inv))
+                                                    }
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color(0xFF1976D2), modifier = Modifier.size(14.dp))
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    if (currentUserRole == UserRole.ADMIN) {
+                                                        deleteCandidate = inv
+                                                    } else {
+                                                        viewModel.openAdminPinDialog(PendingAdminAction.DeleteInvoice(inv))
+                                                    }
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color(0xFFD32F2F), modifier = Modifier.size(14.dp))
                                             }
                                         }
                                     }
@@ -858,9 +966,9 @@ private fun PurchaseBottomHistorySection(
                     ) {
                         Column(modifier = Modifier.padding(8.dp)) {
                             Text("تنبيه محاسبي مهم لمدير النظام:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFFC62828))
-                            Text("• سيتم إلغاء حركات المخزون وخصم الكميات الواردة من رصيد الصنف.", fontSize = 10.sp, color = Color(0xFFB71C1C))
-                            Text("• في حال الفاتورة الآجلة سيتم خصم المبلغ من مستحقات المورد.", fontSize = 10.sp, color = Color(0xFFB71C1C))
-                            Text("• في حال الفاتورة النقدية سيتم تعديل منصرفات الصندوق والشفت المفتوح.", fontSize = 10.sp, color = Color(0xFFB71C1C))
+                            Text("• سيتم إلغاء حركات المخزون وخصم الكميات الواردة وإعادة احتساب WAC تلقائياً.", fontSize = 10.sp, color = Color(0xFFB71C1C))
+                            Text("• في حال الفاتورة الآجلة سيتم تعديل رصيد ومستحقات المورد.", fontSize = 10.sp, color = Color(0xFFB71C1C))
+                            Text("• في حال الفاتورة النقدية سيتم خصم منصرفات الصندوق للشفت الحالى.", fontSize = 10.sp, color = Color(0xFFB71C1C))
                         }
                     }
                 }
@@ -874,7 +982,7 @@ private fun PurchaseBottomHistorySection(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
                 ) {
-                    Text("حذف نهائي وعكس القيود")
+                    Text("حذف نهائي وعكس القيود و WAC")
                 }
             },
             dismissButton = {
@@ -887,6 +995,60 @@ private fun PurchaseBottomHistorySection(
 }
 
 /**
+ * نافذة التحقق من رمز مدير النظام
+ */
+@Composable
+private fun AdminPinVerificationDialog(
+    uiState: PurchaseUiState,
+    onDismiss: () -> Unit,
+    onVerify: (pin: String) -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF1976D2)) },
+        title = { Text("التحقق من رمز مدير النظام", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "هذا الإجراء يتطلب صلاحيات مدير النظام (مدير النظام). يرجى إدخال رمز PIN الخاص بالمدير لتأكيد العملية:",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { if (it.length <= 8) pin = it },
+                    label = { Text("رمز PIN للمدير") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = uiState.adminPinError != null
+                )
+                if (uiState.adminPinError != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(uiState.adminPinError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onVerify(pin) },
+                enabled = pin.isNotBlank()
+            ) {
+                Text("تأكيد")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
+}
+
+/**
  * نافذة استعراض تفاصيل فاتورة الشراء وبنودها
  */
 @Composable
@@ -896,11 +1058,17 @@ private fun PurchaseInvoiceDetailsDialog(
     products: List<ProductWithUnits>,
     parties: List<PartyEntity>,
     onDismiss: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.س",
+    currencies: List<CurrencyEntity> = emptyList(),
+    baseCurrencySymbol: String = "ر.س"
 ) {
     val supplierName = invoice.partyId?.let { pId ->
         parties.find { it.id == pId }?.name
     } ?: "مورد نقدي عام"
+
+    val currency = currencies.find { it.id == invoice.currencyId }
+    val displayCurrencySymbol = currency?.symbol ?: currencySymbol
+    val rate = if (invoice.exchangeRate > 0) invoice.exchangeRate else 1.0
 
     val dateFormat = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
 
@@ -923,7 +1091,7 @@ private fun PurchaseInvoiceDetailsDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // بيانات التوريد والمورد
+                // بيانات التوريد والمورد والعملة
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F7FF))
@@ -937,10 +1105,16 @@ private fun PurchaseInvoiceDetailsDialog(
                         Column {
                             Text("المورد: $supplierName", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             Text("طريقة السداد: ${invoice.paymentMethod.labelArabic}", fontSize = 11.sp, color = Color.DarkGray)
+                            if (rate != 1.0) {
+                                Text("سعر الصرف: 1 ${currency?.code ?: ""} = %.2f %s".format(rate, baseCurrencySymbol), fontSize = 10.sp, color = Color(0xFFE65100))
+                            }
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("الإجمالي: %.2f %s".format(invoice.total, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1976D2))
-                            Text("الضريبة: %.2f %s".format(invoice.taxAmount, currencySymbol), fontSize = 11.sp, color = Color.Gray)
+                            val invTotalForeign = if (rate > 0) invoice.total / rate else invoice.total
+                            Text("الإجمالي: %.2f %s".format(invTotalForeign, displayCurrencySymbol), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1976D2))
+                            if (rate != 1.0) {
+                                Text("(ما يعادل %.2f %s)".format(invoice.total, baseCurrencySymbol), fontSize = 10.sp, color = Color.Gray)
+                            }
                         }
                     }
                 }
@@ -960,6 +1134,9 @@ private fun PurchaseInvoiceDetailsDialog(
                         val unit = prod?.units?.find { it.id == item.productUnitId }
                         val unitName = unit?.unitName ?: "وحدة"
 
+                        val itemUnitCostForeign = if (rate > 0) item.unitCostPrice / rate else item.unitCostPrice
+                        val itemTotalForeign = if (rate > 0) item.totalPrice / rate else item.totalPrice
+
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA))
@@ -973,14 +1150,19 @@ private fun PurchaseInvoiceDetailsDialog(
                             ) {
                                 Column {
                                     Text(prod?.product?.name ?: "صنف #${item.productId}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text("الكمية: %.2f %s × %.2f %s".format(item.quantity, unitName, item.unitSellingPrice, currencySymbol), fontSize = 11.sp, color = Color.DarkGray)
+                                    Text("الكمية: %.2f %s × %.2f %s".format(item.quantity, unitName, itemUnitCostForeign, displayCurrencySymbol), fontSize = 11.sp, color = Color.DarkGray)
                                 }
-                                Text(
-                                    "%.2f %s".format(item.totalPrice, currencySymbol),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF1976D2)
-                                )
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        "%.2f %s".format(itemTotalForeign, displayCurrencySymbol),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF1976D2)
+                                    )
+                                    if (rate != 1.0) {
+                                        Text("%.2f %s".format(item.totalPrice, baseCurrencySymbol), fontSize = 9.sp, color = Color.Gray)
+                                    }
+                                }
                             }
                         }
                     }
@@ -1001,18 +1183,31 @@ private fun PurchaseInvoiceDetailsDialog(
 }
 
 /**
- * نافذة تعديل فاتورة الشراء لمدير النظام
+ * نافذة تعديل فاتورة الشراء لمدير النظام مع دعم تعدد العملات وبنود الفاتورة
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditPurchaseInvoiceDialog(
     invoice: InvoiceEntity,
     initialNotes: String,
     initialPaymentMethod: PaymentMethod,
+    initialSupplier: PartyEntity?,
+    initialCurrency: CurrencyEntity?,
+    initialExchangeRate: Double,
+    items: List<PurchaseLineItem>,
+    suppliers: List<PartyEntity>,
+    availableCurrencies: List<CurrencyEntity>,
+    baseCurrencySymbol: String,
+    onUpdateItemQty: (productId: Long, unitId: Long, qty: Double) -> Unit,
+    onUpdateItemCost: (productId: Long, unitId: Long, cost: Double) -> Unit,
     onDismiss: () -> Unit,
-    onSave: (notes: String, method: PaymentMethod) -> Unit
+    onSave: (notes: String, method: PaymentMethod, supplier: PartyEntity?, currency: CurrencyEntity?, rate: Double) -> Unit
 ) {
     var notes by remember { mutableStateOf(initialNotes) }
     var selectedMethod by remember { mutableStateOf(initialPaymentMethod) }
+    var selectedSupplier by remember { mutableStateOf(initialSupplier) }
+    var selectedCurrency by remember { mutableStateOf(initialCurrency) }
+    var exchangeRate by remember { mutableStateOf(initialExchangeRate) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1020,42 +1215,151 @@ private fun EditPurchaseInvoiceDialog(
             Text("تعديل فاتورة الشراء: ${invoice.invoiceNumber}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text("طريقة السداد:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+            ) {
+                // اختيار المورد والعملة
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    var supplierDropdown by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = supplierDropdown,
+                        onExpandedChange = { supplierDropdown = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = selectedSupplier?.name ?: "مورد عام",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("المورد", fontSize = 11.sp) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = supplierDropdown) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(expanded = supplierDropdown, onDismissRequest = { supplierDropdown = false }) {
+                            suppliers.forEach { s ->
+                                DropdownMenuItem(
+                                    text = { Text(s.name, fontWeight = FontWeight.Bold) },
+                                    onClick = { selectedSupplier = s; supplierDropdown = false }
+                                )
+                            }
+                        }
+                    }
+
+                    var currencyDropdown by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = currencyDropdown,
+                        onExpandedChange = { currencyDropdown = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCurrency?.let { "${it.name} (${it.symbol})" } ?: "العملة",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("العملة", fontSize = 11.sp) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyDropdown) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(expanded = currencyDropdown, onDismissRequest = { currencyDropdown = false }) {
+                            availableCurrencies.forEach { c ->
+                                DropdownMenuItem(
+                                    text = { Text("${c.name} (${c.symbol})") },
+                                    onClick = {
+                                        selectedCurrency = c
+                                        exchangeRate = c.exchangeRateToBase
+                                        currencyDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // طريقة السداد
+                Text("طريقة السداد:", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(
                         selected = selectedMethod == PaymentMethod.CASH,
                         onClick = { selectedMethod = PaymentMethod.CASH },
-                        label = { Text("نقداً") }
+                        label = { Text("نقداً", fontSize = 11.sp) }
                     )
                     FilterChip(
                         selected = selectedMethod == PaymentMethod.CREDIT,
                         onClick = { selectedMethod = PaymentMethod.CREDIT },
-                        label = { Text("آجل / ذمم مورد") }
+                        label = { Text("آجل", fontSize = 11.sp) }
                     )
                     FilterChip(
                         selected = selectedMethod == PaymentMethod.BANK_TRANSFER,
                         onClick = { selectedMethod = PaymentMethod.BANK_TRANSFER },
-                        label = { Text("تحويل بنكي") }
+                        label = { Text("تحويل بنكي", fontSize = 11.sp) }
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("تعديل كميات وأسعار تكلفة الأصناف:", fontWeight = FontWeight.Bold, fontSize = 11.sp)
 
-                Text("الملاحظات والبيان:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(4.dp))
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(items) { item ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB))
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp)) {
+                                Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else item.quantity.toString(),
+                                        onValueChange = { str ->
+                                            str.toDoubleOrNull()?.let { onUpdateItemQty(item.productId, item.unitId, it) }
+                                        },
+                                        label = { Text("الكمية", fontSize = 10.sp) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = if (item.costPrice % 1.0 == 0.0) item.costPrice.toInt().toString() else item.costPrice.toString(),
+                                        onValueChange = { str ->
+                                            str.toDoubleOrNull()?.let { onUpdateItemCost(item.productId, item.unitId, it) }
+                                        },
+                                        label = { Text("التكلفة", fontSize = 10.sp) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3
+                    label = { Text("الملاحظات", fontSize = 11.sp) },
+                    singleLine = true
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(notes, selectedMethod) }) {
-                Text("حفظ التعديلات")
+            Button(onClick = { onSave(notes, selectedMethod, selectedSupplier, selectedCurrency, exchangeRate) }) {
+                Text("حفظ التعديلات وعكس القيود")
             }
         },
         dismissButton = {

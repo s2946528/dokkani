@@ -80,7 +80,7 @@ fun PosScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .background(Color(0xFFF4F6F8))
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 val isCompact = maxWidth < 700.dp
 
@@ -89,104 +89,110 @@ fun PosScreen(
                         .fillMaxSize()
                         .padding(if (isCompact) 6.dp else 8.dp)
                 ) {
-                    // 1. كرت إجمالي مبيعات الشفت وحالة صندوق الكاشير (متجاوب)
-                    PosShiftHeaderCard(
-                        uiState = uiState,
-                        isCompact = isCompact,
-                        onCloseShift = { viewModel.openShiftCloseDialog() },
-                        onOpenHistory = { viewModel.toggleHistoryDialog(true) }
-                    )
-
-                    // 2. شريط العمليات الست والتبديل السريع
-                    LazyRow(
+                    // 1. شريط ترويسة علوي مدمج وأنيق يوفر المساحة الرأسية الكاملة لقائمة البنود والسلة
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = if (isCompact) 6.dp else 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        item {
-                            FilterChip(
-                                selected = uiState.activeOperation == PosOperation.SALE,
-                                onClick = { viewModel.selectOperation(PosOperation.SALE) },
-                                label = { Text("فاتورة بيع", fontSize = if (isCompact) 11.sp else 12.sp) },
-                                leadingIcon = { Icon(Icons.Default.PointOfSale, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF1B5E20),
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
+                        // محدد نوع العملية الحالية (افتراضياً: فاتورة بيع)
+                        var opMenuExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            Surface(
+                                onClick = { opMenuExpanded = true },
+                                shape = RoundedCornerShape(8.dp),
+                                color = when (uiState.activeOperation) {
+                                    PosOperation.SALE -> Color(0xFF1B5E20)
+                                    PosOperation.PURCHASE -> Color(0xFF1976D2)
+                                    PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
+                                    PosOperation.RECEIPT -> Color(0xFF00796B)
+                                    PosOperation.EXPENSE -> Color(0xFFE65100)
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = when (uiState.activeOperation) {
+                                            PosOperation.SALE -> Icons.Default.PointOfSale
+                                            PosOperation.PURCHASE -> Icons.Default.ShoppingBag
+                                            PosOperation.SALE_RETURN -> Icons.Default.AssignmentReturn
+                                            PosOperation.PURCHASE_RETURN -> Icons.Default.RemoveShoppingCart
+                                            PosOperation.RECEIPT -> Icons.Default.ArrowDownward
+                                            PosOperation.EXPENSE -> Icons.Default.ArrowUpward
+                                        },
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = uiState.activeOperation.titleArabic,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = "تغيير نوع العملية",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = opMenuExpanded,
+                                onDismissRequest = { opMenuExpanded = false }
+                            ) {
+                                PosOperation.entries.forEach { op ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(op.titleArabic, fontWeight = if (uiState.activeOperation == op) FontWeight.Bold else FontWeight.Normal)
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.selectOperation(op)
+                                            opMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
                         }
-                        item {
-                            FilterChip(
-                                selected = uiState.activeOperation == PosOperation.PURCHASE,
-                                onClick = { viewModel.selectOperation(PosOperation.PURCHASE) },
-                                label = { Text("فاتورة شراء", fontSize = if (isCompact) 11.sp else 12.sp) },
-                                leadingIcon = { Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF1976D2),
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = uiState.activeOperation == PosOperation.SALE_RETURN,
-                                onClick = { viewModel.selectOperation(PosOperation.SALE_RETURN) },
-                                label = { Text("مردود بيع", fontSize = if (isCompact) 11.sp else 12.sp) },
-                                leadingIcon = { Icon(Icons.Default.AssignmentReturn, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFFD32F2F),
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = uiState.activeOperation == PosOperation.PURCHASE_RETURN,
-                                onClick = { viewModel.selectOperation(PosOperation.PURCHASE_RETURN) },
-                                label = { Text("مردود شراء", fontSize = if (isCompact) 11.sp else 12.sp) },
-                                leadingIcon = { Icon(Icons.Default.RemoveShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF7B1FA2),
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = uiState.activeOperation == PosOperation.RECEIPT,
-                                onClick = { viewModel.selectOperation(PosOperation.RECEIPT) },
-                                label = { Text("سند قبض", fontSize = if (isCompact) 11.sp else 12.sp) },
-                                leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF00796B),
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = uiState.activeOperation == PosOperation.EXPENSE,
-                                onClick = { viewModel.selectOperation(PosOperation.EXPENSE) },
-                                label = { Text("سند صرف", fontSize = if (isCompact) 11.sp else 12.sp) },
-                                leadingIcon = { Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFFE65100),
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
+
+                        // أزرار وصول سريع ملائمة: مطابقة/إغلاق الشفت والسجلات
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { viewModel.openShiftCloseDialog() },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.height(34.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("إغلاق الشفت", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            IconButton(
+                                onClick = { viewModel.toggleHistoryDialog(true) },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(Icons.Default.ReceiptLong, contentDescription = "سجل الحركات", tint = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
 
-                    // 3. جسم الشاشة الرئيسي: يعتمد على طبيعة العملية (فواتير/مردودات vs سندات مالية)
+                    // 2. جسم الشاشة الرئيسي: يستهلك المساحة المتاحة بالكامل دون قص أو اختفاء
                     if (uiState.activeOperation.isVoucher) {
-                        // --- وضع السندات المالية (قبض / صرف): نموذج محاسبي مخصص بالكامل بدون سلة ---
+                        // وضع السندات المالية (قبض / صرف)
                         PosVoucherSection(
                             uiState = uiState,
                             viewModel = viewModel,
@@ -197,7 +203,7 @@ fun PosScreen(
                                 .weight(1f)
                         )
                     } else {
-                        // --- وضع الفواتير والمردودات (بيع، شراء، مردود بيع، مردود شراء): متجاوب للشاشات الكبيرة والصغيرة ---
+                        // وضع الفواتير والمردودات (بيع، شراء، مردود بيع، مردود شراء)
                         PosInvoiceSection(
                             uiState = uiState,
                             viewModel = viewModel,
@@ -206,16 +212,6 @@ fun PosScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                        )
-                    }
-
-                    // 4. استعراض فواتير البيع والشراء والسندات أسفل الشاشة (في الشاشات الكبيرة)
-                    if (!isCompact) {
-                        PosBottomHistorySection(
-                            uiState = uiState,
-                            viewModel = viewModel,
-                            currentUserRole = currentUserRole,
-                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -524,7 +520,7 @@ private fun PosProductsPanel(
 ) {
     Card(
         modifier = modifier.fillMaxHeight(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -703,7 +699,7 @@ private fun PosProductsPanel(
                                         viewModel.addToCart(pw.product, baseUnit, 1.0)
                                     }
                                 },
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                             border = CardDefaults.outlinedCardBorder()
                         ) {
                             Column(
@@ -847,7 +843,7 @@ private fun PosCartPanel(
 ) {
     Card(
         modifier = modifier.fillMaxHeight(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column(
@@ -910,7 +906,7 @@ private fun PosCartPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFF0F4F8))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically

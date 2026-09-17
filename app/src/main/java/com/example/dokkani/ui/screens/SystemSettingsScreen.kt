@@ -54,6 +54,7 @@ fun SystemSettingsScreen(
     onUpdateValuationMethod: (CostValuationMethod) -> Unit = {},
     onUpdateEnableNegativeStock: (Boolean) -> Unit = {},
     onUpdateTaxSettings: (Boolean, Double) -> Unit = { _, _ -> },
+    onUpdatePurchaseTaxSettings: (Boolean, Double) -> Unit = { _, _ -> },
     onSaveCurrency: (CurrencyEntity) -> Unit = {},
     onSetBaseCurrency: (Long) -> Unit = {},
     onDeleteCurrency: (CurrencyEntity) -> Unit = {},
@@ -282,13 +283,150 @@ fun SystemSettingsScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(
+                                 Text(
                                     text = if (isTaxActive)
                                         "الضريبة مفعلة بنسبة ${if (displayPct % 1.0 == 0.0) displayPct.toInt().toString() else "%.1f".format(displayPct)}%: يتم احتساب الضريبة تلقائياً وإدراجها في خلاصة السلة والإجمالي النهائي وطباعتها بالفواتير."
                                     else
                                         "الضريبة معطلة: تم إخفاء جميع صفوف وحسابات الضريبة من شاشة المبيعات والفواتير، والإجمالي النهائي يساوي المجموع الفرعي.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (isTaxActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // بطاقة التحكم في ضريبة المشتريات المستقلة (Purchase Tax Control)
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth().testTag("purchase_tax_settings_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "ضريبة المشتريات المستقلة (Purchase Tax Control)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "تفعيل أو إلغاء حساب الضريبة على فواتير الشراء والتوريد بشكل مستقل عن المبيعات",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Switch(
+                                checked = settings?.isPurchaseTaxEnabled ?: true,
+                                onCheckedChange = { isChecked ->
+                                    if (isAdmin) {
+                                        val rawRate = settings?.purchaseTaxRate ?: 0.15
+                                        onUpdatePurchaseTaxSettings(isChecked, rawRate)
+                                    }
+                                },
+                                enabled = isAdmin,
+                                modifier = Modifier.testTag("purchase_tax_enable_switch")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        val currentPurRate = settings?.purchaseTaxRate ?: 0.15
+                        val pctPurValue = if (currentPurRate <= 1.0) currentPurRate * 100.0 else currentPurRate
+                        var purTaxRateText by remember(settings?.purchaseTaxRate) {
+                            mutableStateOf(if (pctPurValue % 1.0 == 0.0) pctPurValue.toInt().toString() else "%.1f".format(pctPurValue))
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = purTaxRateText,
+                                onValueChange = { input ->
+                                    if (input.isEmpty() || input.matches(Regex("""^\d*\.?\d*$"""))) {
+                                        purTaxRateText = input
+                                        val parsed = input.toDoubleOrNull()
+                                        if (parsed != null && parsed >= 0.0 && isAdmin) {
+                                            val rateToSave = parsed / 100.0
+                                            val isEnabled = settings?.isPurchaseTaxEnabled ?: true
+                                            onUpdatePurchaseTaxSettings(isEnabled, rateToSave)
+                                        }
+                                    }
+                                },
+                                label = { Text("نسبة ضريبة المشتريات (%)") },
+                                suffix = { Text("%") },
+                                enabled = isAdmin && (settings?.isPurchaseTaxEnabled ?: true),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("purchase_tax_rate_input")
+                            )
+
+                            Button(
+                                onClick = {
+                                    val parsed = purTaxRateText.toDoubleOrNull() ?: 15.0
+                                    val rateToSave = parsed / 100.0
+                                    val isEnabled = settings?.isPurchaseTaxEnabled ?: true
+                                    onUpdatePurchaseTaxSettings(isEnabled, rateToSave)
+                                },
+                                enabled = isAdmin && (settings?.isPurchaseTaxEnabled ?: true),
+                                modifier = Modifier.testTag("save_purchase_tax_rate_button")
+                            ) {
+                                Text("حفظ النسبة")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val isPurTaxActive = settings?.isPurchaseTaxEnabled ?: true
+                        val activePurRate = settings?.purchaseTaxRate ?: 0.15
+                        val displayPurPct = if (activePurRate <= 1.0) activePurRate * 100.0 else activePurRate
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isPurTaxActive) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isPurTaxActive) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = if (isPurTaxActive) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isPurTaxActive)
+                                        "ضريبة المشتريات مفعلة بنسبة ${if (displayPurPct % 1.0 == 0.0) displayPurPct.toInt().toString() else "%.1f".format(displayPurPct)}%: يتم احتساب قيمة الضريبة تلقائياً على فواتير التوريد بالشراء وإضافتها للإجمالي الإجمالي."
+                                    else
+                                        "ضريبة المشتريات معطلة: تم إخفاء ضريبة الشراء وتصفير قيمتها، والإجمالي النهائي لفاتورة الشراء يساوي المجموع الفرعي تماماً.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isPurTaxActive) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.Medium
                                 )
                             }

@@ -771,6 +771,18 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updatePurchaseTaxSettings(enabled: Boolean, taxRate: Double) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                isPurchaseTaxEnabled = enabled,
+                purchaseTaxRate = taxRate,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
     fun deleteInvoice(invoiceId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {

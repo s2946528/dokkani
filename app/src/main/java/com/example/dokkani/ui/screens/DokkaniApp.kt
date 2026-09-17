@@ -298,6 +298,7 @@ fun DokkaniApp(
                                 onUpdateValuationMethod = viewModel::selectValuationMethod,
                                 onUpdateEnableNegativeStock = viewModel::updateEnableNegativeStock,
                                 onUpdateTaxSettings = viewModel::updateTaxSettings,
+                                onUpdatePurchaseTaxSettings = viewModel::updatePurchaseTaxSettings,
                                 onSaveCurrency = viewModel::saveCurrency,
                                 onSetBaseCurrency = viewModel::setAsBaseCurrency,
                                 onDeleteCurrency = viewModel::deleteCurrency,

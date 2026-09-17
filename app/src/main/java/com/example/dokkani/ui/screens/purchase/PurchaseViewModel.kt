@@ -82,6 +82,7 @@ data class PurchaseUiState(
     val searchQuery: String = "",
     val items: List<PurchaseLineItem> = emptyList(),
     val isTaxApplied: Boolean = true,
+    val purchaseTaxRate: Double = 0.15,
     val discount: Double = 0.0,
     val notes: String = "",
     val isProcessing: Boolean = false,
@@ -123,7 +124,7 @@ data class PurchaseUiState(
 ) {
     val subtotal: Double get() = items.sumOf { it.totalCost }
     val taxableAmount: Double get() = (subtotal - discount).coerceAtLeast(0.0)
-    val taxAmount: Double get() = if (isTaxApplied) taxableAmount * 0.15 else 0.0
+    val taxAmount: Double get() = if (isTaxApplied) taxableAmount * purchaseTaxRate else 0.0
     val finalTotal: Double get() = taxableAmount + taxAmount
     val totalQuantity: Double get() = items.sumOf { it.quantity }
 
@@ -187,6 +188,19 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         baseCurrencyId = base?.id ?: 1L,
                         baseCurrencySymbol = base?.symbol ?: "ر.س"
                     )
+                }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.systemSettingsDao().getSettings().collectLatest { settings ->
+                if (settings != null) {
+                    _uiState.update { state ->
+                        state.copy(
+                            isTaxApplied = settings.isPurchaseTaxEnabled,
+                            purchaseTaxRate = settings.purchaseTaxRate
+                        )
+                    }
                 }
             }
         }

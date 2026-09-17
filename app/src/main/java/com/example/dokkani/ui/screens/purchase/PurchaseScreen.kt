@@ -528,6 +528,9 @@ fun PurchaseScreen(
                             Spacer(modifier = Modifier.height(6.dp))
 
                             // ملخص المبالغ
+                            val purPct = if (uiState.purchaseTaxRate <= 1.0) uiState.purchaseTaxRate * 100.0 else uiState.purchaseTaxRate
+                            val purPctLabel = if (purPct % 1.0 == 0.0) purPct.toInt().toString() else "%.1f".format(purPct)
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -537,13 +540,13 @@ fun PurchaseScreen(
                                         checked = uiState.isTaxApplied,
                                         onCheckedChange = { viewModel.setTaxApplied(it) }
                                     )
-                                    Text("تطبيق ضريبة القيمة المضافة (15%)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                                    Text("تطبيق ضريبة المشتريات ($purPctLabel%)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                                 }
 
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text("المجموع قبل الضريبة: %.2f %s".format(uiState.subtotal, uiState.currencySymbol), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (uiState.isTaxApplied) {
-                                        Text("ضريبة 15%: ${"%.2f".format(uiState.taxAmount)} ${uiState.currencySymbol}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("ضريبة المشتريات ($purPctLabel%): ${"%.2f".format(uiState.taxAmount)} ${uiState.currencySymbol}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Text(
                                         "الصافي الإجمالي: %.2f %s".format(uiState.finalTotal, uiState.currencySymbol),

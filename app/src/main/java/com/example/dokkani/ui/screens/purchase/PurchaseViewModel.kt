@@ -542,6 +542,82 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * إنشاء صنف جديد مع وحدته في قاعدة البيانات وإدراجه فوراً إلى بنود فاتورة الشراء الحالية
+     */
+    fun createAndAddProduct(
+        name: String,
+        category: String,
+        unitName: String,
+        costPrice: Double,
+        sellingPrice: Double,
+        barcode: String?,
+        quantity: Double = 1.0,
+        onSuccess: (() -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cleanName = name.trim()
+                if (cleanName.isBlank()) {
+                    _uiState.update { it.copy(feedbackMessage = "يرجى إدخال اسم الصنف", isError = true) }
+                    return@launch
+                }
+
+                val cleanCategory = if (category.trim().isBlank()) "عام" else category.trim()
+                val cleanUnitName = if (unitName.trim().isBlank()) "حبة" else unitName.trim()
+                val timestamp = System.currentTimeMillis()
+                val cleanCode = "P-$timestamp"
+                val cleanBarcode = if (!barcode.isNullOrBlank()) barcode.trim() else "${timestamp % 10000000000L}"
+
+                val product = ProductEntity(
+                    code = cleanCode,
+                    name = cleanName,
+                    category = cleanCategory,
+                    isWeighted = false,
+                    minStockAlert = 5.0,
+                    isActive = true,
+                    createdAt = timestamp
+                )
+
+                val productId = productDao.insertProduct(product)
+
+                val unit = ProductUnitEntity(
+                    productId = productId,
+                    unitName = cleanUnitName,
+                    conversionFactor = 1.0,
+                    barcode = cleanBarcode,
+                    costPrice = costPrice,
+                    sellingPrice = sellingPrice,
+                    isBaseUnit = true
+                )
+
+                val unitId = productDao.insertUnit(unit)
+
+                val savedProduct = product.copy(id = productId)
+                val savedUnit = unit.copy(id = unitId)
+
+                // إدراج الصنف والوحدة مباشرة إلى قائمة بنود الفاتورة الحالية وتحديث الإجماليات
+                addProductItem(savedProduct, savedUnit, quantity, costPrice)
+
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "تم إنشاء الصنف \"$cleanName\" وإدراجه مباشرة في الفاتورة",
+                        isError = false
+                    )
+                }
+
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "خطأ في إنشاء الصنف: ${e.localizedMessage ?: "حدث خطأ غير متوقع"}",
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
     // --- حماية وصلاحيات مدير النظام Admin Security PIN ---
     fun openAdminPinDialog(action: PendingAdminAction) {
         _uiState.update {

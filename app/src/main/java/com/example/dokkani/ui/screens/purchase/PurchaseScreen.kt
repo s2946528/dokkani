@@ -54,6 +54,8 @@ fun PurchaseScreen(
     var newSupplierPhone by remember { mutableStateOf("") }
     var newSupplierTax by remember { mutableStateOf("") }
 
+    var showQuickAddProductDialog by remember { mutableStateOf(false) }
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Scaffold(
             snackbarHost = {
@@ -107,7 +109,8 @@ fun PurchaseScreen(
 
                                 ProductSearchAndAddCard(
                                     uiState = uiState,
-                                    viewModel = viewModel
+                                    viewModel = viewModel,
+                                    onAddNewProduct = { showQuickAddProductDialog = true }
                                 )
                             }
 
@@ -132,7 +135,8 @@ fun PurchaseScreen(
 
                             ProductSearchAndAddCard(
                                 uiState = uiState,
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onAddNewProduct = { showQuickAddProductDialog = true }
                             )
 
                             InvoiceItemsAndTotalsCard(
@@ -266,6 +270,29 @@ fun PurchaseScreen(
                     TextButton(onClick = { showAddSupplierDialog = false }) {
                         Text("إلغاء")
                     }
+                }
+            )
+        }
+
+        // نافذة إضافة صنف جديد وإدراجه مباشرة للفاتورة الحالية
+        if (showQuickAddProductDialog) {
+            QuickAddProductDialog(
+                currencySymbol = uiState.currencySymbol,
+                initialSearchQuery = uiState.searchQuery,
+                onDismiss = { showQuickAddProductDialog = false },
+                onConfirm = { name, category, unitName, costPrice, sellingPrice, barcode, quantity ->
+                    viewModel.createAndAddProduct(
+                        name = name,
+                        category = category,
+                        unitName = unitName,
+                        costPrice = costPrice,
+                        sellingPrice = sellingPrice,
+                        barcode = barcode,
+                        quantity = quantity,
+                        onSuccess = {
+                            showQuickAddProductDialog = false
+                        }
+                    )
                 }
             )
         }
@@ -520,6 +547,7 @@ private fun SupplierDataCard(
 private fun ProductSearchAndAddCard(
     uiState: PurchaseUiState,
     viewModel: PurchaseViewModel,
+    onAddNewProduct: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -533,32 +561,66 @@ private fun ProductSearchAndAddCard(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "البحث عن الأصناف للتوريد وإضافتها",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "البحث عن الأصناف للتوريد وإضافتها",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                FilledTonalButton(
+                    onClick = onAddNewProduct,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("صنف جديد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
-            BarcodeTextField(
-                value = uiState.searchQuery,
-                onValueChange = { viewModel.setSearchQuery(it) },
+            // حقل البحث السريع مع زر + صنف جديد بجانبه مباشرة
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = "ابحث بالاسم أو امسح الباركود...",
-                label = "البحث أو مسح باركود الصنف",
-                onBarcodeScanned = { scannedCode ->
-                    viewModel.setSearchQuery(scannedCode)
-                },
-                singleLine = true
-            )
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BarcodeTextField(
+                    value = uiState.searchQuery,
+                    onValueChange = { viewModel.setSearchQuery(it) },
+                    modifier = Modifier.weight(1f),
+                    placeholder = "ابحث بالاسم أو امسح الباركود...",
+                    label = "البحث أو مسح باركود الصنف",
+                    onBarcodeScanned = { scannedCode ->
+                        viewModel.setSearchQuery(scannedCode)
+                    },
+                    singleLine = true
+                )
+
+                Button(
+                    onClick = onAddNewProduct,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("صنف جديد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
 
             val filteredProducts = uiState.productsWithUnits.filter { p ->
                 val query = uiState.searchQuery.trim().lowercase()
@@ -568,17 +630,29 @@ private fun ProductSearchAndAddCard(
             }
 
             if (filteredProducts.isEmpty()) {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 16.dp),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         if (uiState.searchQuery.isBlank()) "لا توجد أصناف في قاعدة البيانات" else "لا توجد أصناف تطابق: \"${uiState.searchQuery}\"",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    OutlinedButton(
+                        onClick = onAddNewProduct,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            if (uiState.searchQuery.isNotBlank()) "إضافة «${uiState.searchQuery}» كصنف جديد" else "إنشاء صنف جديد الآن",
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
@@ -1646,6 +1720,210 @@ private fun EditPurchaseInvoiceDialog(
         confirmButton = {
             Button(onClick = { onSave(notes, selectedMethod, selectedSupplier, selectedCurrency, exchangeRate) }) {
                 Text("حفظ التعديلات وعكس القيود")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
+}
+
+/**
+ * نافذة منبثقة سريعة لإنشاء صنف جديد وإدراجه مباشرة إلى فاتورة الشراء الحالية
+ */
+@Composable
+fun QuickAddProductDialog(
+    currencySymbol: String,
+    initialSearchQuery: String = "",
+    onDismiss: () -> Unit,
+    onConfirm: (
+        name: String,
+        category: String,
+        unitName: String,
+        costPrice: Double,
+        sellingPrice: Double,
+        barcode: String?,
+        quantity: Double
+    ) -> Unit
+) {
+    val cleanQuery = initialSearchQuery.trim()
+    val isQueryDigits = cleanQuery.isNotBlank() && cleanQuery.all { it.isDigit() } && cleanQuery.length >= 4
+
+    var name by remember { mutableStateOf(if (!isQueryDigits) cleanQuery else "") }
+    var category by remember { mutableStateOf("عام") }
+    var unitName by remember { mutableStateOf("حبة") }
+    var costPriceText by remember { mutableStateOf("") }
+    var sellingPriceText by remember { mutableStateOf("") }
+    var barcodeText by remember { mutableStateOf(if (isQueryDigits) cleanQuery else "") }
+    var quantityText by remember { mutableStateOf("1") }
+    var nameError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.AddBusiness,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                "إضافة صنف جديد وإدراجه للفاتورة",
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "سيتم حفظ الصنف في قاعدة البيانات وإدراجه مباشرة في بنود الفاتورة الحالية.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // اسم الصنف (إلزامي)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        if (it.isNotBlank()) nameError = false
+                    },
+                    label = { Text("اسم الصنف *") },
+                    isError = nameError,
+                    supportingText = if (nameError) {
+                        { Text("اسم الصنف مطلوب", color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.ShoppingBag, contentDescription = null) }
+                )
+
+                // التصنيف والوحدة الأساسية
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = category,
+                        onValueChange = { category = it },
+                        label = { Text("التصنيف / المجموعة") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Category, contentDescription = null) }
+                    )
+
+                    OutlinedTextField(
+                        value = unitName,
+                        onValueChange = { unitName = it },
+                        label = { Text("الوحدة الأساسية") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("حبة، كرتون...") }
+                    )
+                }
+
+                // سعر التكلفة وسعر البيع
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = costPriceText,
+                        onValueChange = { costPriceText = it },
+                        label = { Text("سعر التكلفة ($currencySymbol)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = sellingPriceText,
+                        onValueChange = { sellingPriceText = it },
+                        label = { Text("سعر البيع ($currencySymbol)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+                }
+
+                // الكمية المشتراة المراد إدراجها للفاتورة
+                OutlinedTextField(
+                    value = quantityText,
+                    onValueChange = { quantityText = it },
+                    label = { Text("الكمية المراد توريدها للفاتورة") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) }
+                )
+
+                // الباركود مع زر التوليد التلقائي
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = barcodeText,
+                        onValueChange = { barcodeText = it },
+                        label = { Text("الباركود (اختياري)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.QrCode, contentDescription = null) }
+                    )
+
+                    OutlinedButton(
+                        onClick = {
+                            barcodeText = (100000000000L + (Math.random() * 900000000000L).toLong()).toString()
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(top = 6.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("توليد", fontSize = 11.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (name.isBlank()) {
+                        nameError = true
+                        return@Button
+                    }
+                    val cost = costPriceText.toDoubleOrNull() ?: 0.0
+                    val selling = sellingPriceText.toDoubleOrNull() ?: (cost * 1.2)
+                    val qty = (quantityText.toDoubleOrNull() ?: 1.0).coerceAtLeast(0.01)
+
+                    onConfirm(
+                        name,
+                        category,
+                        unitName,
+                        cost,
+                        selling,
+                        barcodeText.ifBlank { null },
+                        qty
+                    )
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("حفظ وإدراج للفاتورة", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

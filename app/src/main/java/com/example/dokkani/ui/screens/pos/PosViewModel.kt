@@ -454,16 +454,31 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateCartQuantity(cartItemId: String, newQty: Double) {
         _uiState.update { state ->
-            val updatedItems = if (newQty <= 0.001) {
+            val targetItem = state.cartItems.find { it.cartItemId == cartItemId }
+            var feedbackMsg: String? = null
+            var isErr = false
+
+            // الحفاظ على مرونة التعديل بما لا يتجاوز الكمية المشتراة في تلك الفاتورة
+            val finalQty = if (targetItem?.originalInvoiceQuantity != null && newQty > targetItem.originalInvoiceQuantity) {
+                feedbackMsg = "لا يمكن إرجاع كمية (${"%.2f".format(newQty)}) أكبر من الكمية المشتراة في الفاتورة الأصلية (${"%.2f".format(targetItem.originalInvoiceQuantity)} ${targetItem.unitName})"
+                isErr = true
+                targetItem.originalInvoiceQuantity
+            } else {
+                newQty
+            }
+
+            val updatedItems = if (finalQty <= 0.001) {
                 state.cartItems.filterNot { it.cartItemId == cartItemId }
             } else {
                 state.cartItems.map {
-                    if (it.cartItemId == cartItemId) it.copy(quantity = newQty) else it
+                    if (it.cartItemId == cartItemId) it.copy(quantity = finalQty) else it
                 }
             }
             state.copy(
                 cartItems = updatedItems,
-                cartSummary = recalculateSummary(updatedItems, state.discount)
+                cartSummary = recalculateSummary(updatedItems, state.discount),
+                userFeedbackMessage = feedbackMsg ?: state.userFeedbackMessage,
+                isError = if (feedbackMsg != null) isErr else state.isError
             )
         }
     }
@@ -1142,11 +1157,19 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             val products = productDao.getAllProductsSync()
             val units = productDao.getAllUnitsSync()
 
+            val isPurchaseReturn = invoice.type == InvoiceType.PURCHASE || _uiState.value.activeOperation == PosOperation.PURCHASE_RETURN
+
             val cartList = mutableListOf<PosCartItem>()
             items.forEach { invItem ->
                 val prod = products.find { it.id == invItem.productId }
                 val unit = units.find { it.id == invItem.productUnitId }
                 if (prod != null && unit != null) {
+                    // القاعدة المحاسبية الدقيقة:
+                    // الاعتماد الصارم على سعر التكلفة الفعلي المسجل داخل تلك الفاتورة بالتحديد (invoice_items.unit_cost_price)
+                    // وليس سعر التكلفة الحالي في جدول الأصناف العامة (products_units.cost_price).
+                    val itemPrice = if (isPurchaseReturn) invItem.unitCostPrice else invItem.unitSellingPrice
+                    val itemCost = invItem.unitCostPrice
+
                     cartList.add(
                         PosCartItem(
                             cartItemId = UUID.randomUUID().toString(),
@@ -1156,11 +1179,13 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             unitId = unit.id,
                             unitName = unit.unitName,
                             conversionFactor = invItem.unitConversionFactor,
-                            unitPrice = invItem.unitSellingPrice,
-                            costPrice = invItem.unitCostPrice,
+                            unitPrice = itemPrice,
+                            costPrice = itemCost,
                             quantity = invItem.quantity,
                             discount = invItem.discount,
-                            isWeighted = prod.isWeighted
+                            isWeighted = prod.isWeighted,
+                            originalInvoiceQuantity = invItem.quantity,
+                            originalInvoiceCostPrice = invItem.unitCostPrice
                         )
                     )
                 }
@@ -1168,7 +1193,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
             _uiState.update { state ->
                 val newSummary = recalculateSummary(cartList, invoice.discount)
+                val op = if (invoice.type == InvoiceType.PURCHASE) PosOperation.PURCHASE_RETURN else PosOperation.SALE_RETURN
                 state.copy(
+                    activeOperation = op,
                     originalInvoiceForReturn = invoice,
                     returnOriginalInvoiceItems = items,
                     selectedParty = party,
@@ -1176,7 +1203,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                     cartSummary = newSummary,
                     paymentMethod = invoice.paymentMethod,
                     showSelectInvoiceForReturnDialog = false,
-                    userFeedbackMessage = "تم تحميل أصناف الفاتورة (${invoice.invoiceNumber}) بنجاح لإجراء المردود.",
+                    userFeedbackMessage = "تم استرجاع أصناف الفاتورة (${invoice.invoiceNumber}) بالتكلفة التاريخية الأصلية (${items.size} صنف).",
                     isError = false
                 )
             }

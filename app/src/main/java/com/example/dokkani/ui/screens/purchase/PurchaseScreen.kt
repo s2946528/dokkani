@@ -49,6 +49,26 @@ fun PurchaseScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    var showPurchaseReturnScreen by remember { mutableStateOf(false) }
+    var invoiceToReturn by remember { mutableStateOf<InvoiceEntity?>(null) }
+
+    if (showPurchaseReturnScreen) {
+        val returnVm: com.example.dokkani.ui.screens.purchasereturn.PurchaseReturnViewModel = viewModel()
+        LaunchedEffect(invoiceToReturn) {
+            invoiceToReturn?.let { inv ->
+                returnVm.selectInvoiceForReturn(inv)
+            }
+        }
+        com.example.dokkani.ui.screens.purchasereturn.PurchaseReturnScreen(
+            viewModel = returnVm,
+            onNavigateBack = {
+                showPurchaseReturnScreen = false
+                invoiceToReturn = null
+            }
+        )
+        return
+    }
+
     var showAddSupplierDialog by remember { mutableStateOf(false) }
     var newSupplierName by remember { mutableStateOf("") }
     var newSupplierPhone by remember { mutableStateOf("") }
@@ -86,6 +106,48 @@ fun PurchaseScreen(
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // شريط عنوان الشاشة والوصول السريع لمردود المشتريات
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.ShoppingBag,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "إدارة فواتير الشراء والتوريد",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+
+                        Button(
+                            onClick = { showPurchaseReturnScreen = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.AssignmentReturn, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("مردود مشتريات", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
                 // استخدام BoxWithConstraints لتوسيع وتوزيع الكروت ديناميكياً بحسب حجم الشاشة
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     val isTabletOrWide = maxWidth >= 840.dp
@@ -305,6 +367,11 @@ fun PurchaseScreen(
                 products = uiState.productsWithUnits,
                 parties = uiState.suppliers,
                 onDismiss = { viewModel.dismissInvoiceDetails() },
+                onStartReturn = { inv ->
+                    viewModel.dismissInvoiceDetails()
+                    invoiceToReturn = inv
+                    showPurchaseReturnScreen = true
+                },
                 currencySymbol = uiState.currencySymbol,
                 currencies = uiState.availableCurrencies,
                 baseCurrencySymbol = uiState.baseCurrencySymbol
@@ -1416,6 +1483,7 @@ private fun PurchaseInvoiceDetailsDialog(
     products: List<ProductWithUnits>,
     parties: List<PartyEntity>,
     onDismiss: () -> Unit,
+    onStartReturn: (InvoiceEntity) -> Unit = {},
     currencySymbol: String = "ر.س",
     currencies: List<CurrencyEntity> = emptyList(),
     baseCurrencySymbol: String = "ر.س"
@@ -1533,8 +1601,19 @@ private fun PurchaseInvoiceDetailsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("إغلاق")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { onStartReturn(invoice) },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.AssignmentReturn, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("إجراء مردود على الفاتورة", fontSize = 12.sp)
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("إغلاق")
+                }
             }
         }
     )

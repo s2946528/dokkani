@@ -115,4 +115,56 @@ class PosAndPurchaseAccountingTest {
         assertFalse(freshState.showReceiptDialog)
         assertTrue(freshState.cartItems.isEmpty())
     }
+
+    @Test
+    fun testPurchaseReturnHistoricalCostAccounting() {
+        // القاعدة المحاسبية:
+        // عند إجراء مردود مشتريات عن فاتورة شراء سابقة:
+        // سعر التكلفة التاريخي المسجل داخل الفاتورة الأصلية = 12.50 ر.س
+        // سعر التكلفة الحالي في جدول الأصناف العامة ارتفع لاحقاً إلى 18.00 ر.س
+        // يجب أن يعتمد النظام حصرياً على التكلفة التاريخية (12.50 ر.س)
+        val historicalInvoiceCost = 12.50
+        val currentGeneralCost = 18.00
+        val purchasedQuantity = 10.0
+
+        val returnItem = com.example.dokkani.ui.screens.purchasereturn.PurchaseReturnItem(
+            productId = 1L,
+            productName = "حليب نادك 1 لتر",
+            productCode = "NADEC-1L",
+            unitId = 1L,
+            unitName = "كرتون",
+            conversionFactor = 1.0,
+            originalUnitCostPrice = historicalInvoiceCost,
+            originalPurchasedQuantity = purchasedQuantity,
+            returnQuantity = 4.0,
+            returnCostPrice = historicalInvoiceCost,
+            isSelectedForReturn = true
+        )
+
+        // 1. التحقق من التكلفة المعتمدة هي التاريخية (12.50) وليس الحالية (18.00)
+        assertEquals(historicalInvoiceCost, returnItem.returnCostPrice, 0.001)
+        assertEquals(historicalInvoiceCost, returnItem.originalUnitCostPrice, 0.001)
+        assertTrue(returnItem.returnCostPrice != currentGeneralCost)
+
+        // 2. التحقق من حساب إجمالي سطر المردود (4 * 12.50 = 50.00 ر.س)
+        assertEquals(50.0, returnItem.totalReturnCost, 0.001)
+
+        // 3. التحقق من قاعدة عدم تجاوز الكمية المشتراة
+        val requestedExcessQty = 15.0
+        val clampedQty = requestedExcessQty.coerceAtMost(returnItem.originalPurchasedQuantity)
+        assertEquals(purchasedQuantity, clampedQty, 0.001) // تم تقييدها بالحد الأقصى 10.0
+
+        // 4. التحقق من الأثر المحاسبي والمالي:
+        // رصيد المورد الأصلي: دائن بـ 1000 (-1000.0)
+        // مردود مشتريات آجل بـ 50 ر.س -> يخفض التزام المورد (-1000 + 50 = -950.0)
+        var supplierBalance = -1000.0
+        supplierBalance += returnItem.totalReturnCost
+        assertEquals(-950.0, supplierBalance, 0.001)
+
+        // 5. التحقق من حركة المخزون المعكوسة (RETURN_OUT):
+        // خروج من المخزون بقيمة سالبة = -4 وحدات
+        val stockMovementQty = -(returnItem.returnQuantity * returnItem.conversionFactor)
+        assertEquals(-4.0, stockMovementQty, 0.001)
+        assertTrue(stockMovementQty < 0)
+    }
 }

@@ -500,6 +500,36 @@ fun PosCartItemRow(
                 }
             }
 
+            // عرض سعر الشراء الأصلي والكمية المشتراة كمرجع في المردودات
+            if (item.originalInvoiceQuantity != null && item.originalInvoiceCostPrice != null) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color(0xFFE8F5E9),
+                    border = BorderStroke(1.dp, Color(0xFF81C784)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "سعر الشراء بالفاتورة الأصلية: %.2f %s".format(item.originalInvoiceCostPrice, currencySymbol),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1B5E20)
+                        )
+                        Text(
+                            text = "الكمية المشتراة: %.2f %s".format(item.originalInvoiceQuantity, item.unitName),
+                            fontSize = 10.sp,
+                            color = Color(0xFF2E7D32)
+                        )
+                    }
+                }
+            }
+
             // شريط تأكيد الحذف بدلاً من الحذف الفوري المباشر
             if (showDeleteConfirm) {
                 Surface(

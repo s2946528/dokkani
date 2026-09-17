@@ -23,7 +23,9 @@ data class PosCartItem(
     val discount: Double = 0.0,
     val scaleBarcodeRaw: String? = null,
     val notes: String = "",
-    val availableUnits: List<ProductUnitEntity> = emptyList()
+    val availableUnits: List<ProductUnitEntity> = emptyList(),
+    val originalInvoiceQuantity: Double? = null,
+    val originalInvoiceCostPrice: Double? = null
 ) {
     val totalPrice: Double
         get() = ((quantity * unitPrice) - discount).coerceAtLeast(0.0)

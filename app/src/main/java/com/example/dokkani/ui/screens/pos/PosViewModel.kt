@@ -44,10 +44,20 @@ import java.util.Locale
 import java.util.UUID
 
 /**
+ * علامات التبويب المخصصة لواجهة نقطة البيع في الهواتف والشاشات الصغيرة
+ */
+enum class PosMobileTab {
+    CATALOG, // قائمة الأصناف والتصنيفات
+    CART     // سلة الفاتورة الحالية
+}
+
+/**
  * حالة واجهة شاشة العمليات المالية والمبيعات (POS UI State)
  */
 data class PosUiState(
     val activeOperation: PosOperation = PosOperation.SALE,
+    val activeMobileTab: PosMobileTab = PosMobileTab.CATALOG,
+    val selectedTab: PosMobileTab = PosMobileTab.CATALOG,
     val productsWithUnits: List<ProductWithUnits> = emptyList(),
     val parties: List<PartyEntity> = emptyList(),
     val selectedParty: PartyEntity? = null, // null للزبون النقدي المباشر في فواتير البيع
@@ -473,7 +483,10 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             state.copy(
                 cartItems = emptyList(),
                 cartSummary = recalculateSummary(emptyList(), 0.0),
-                discount = 0.0
+                discount = 0.0,
+                paidAmountInput = "",
+                activeMobileTab = PosMobileTab.CATALOG,
+                selectedTab = PosMobileTab.CATALOG
             )
         }
     }
@@ -829,10 +842,15 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             isProcessingCheckout = false,
                             cartItems = emptyList(),
                             cartSummary = recalculateSummary(emptyList(), 0.0),
+                            discount = 0.0,
+                            paidAmountInput = "",
                             lastCheckoutResult = result,
                             showReceiptDialog = true,
+                            showCheckoutDialog = false,
                             originalInvoiceForReturn = null,
                             returnOriginalInvoiceItems = emptyList(),
+                            activeMobileTab = PosMobileTab.CATALOG,
+                            selectedTab = PosMobileTab.CATALOG,
                             userFeedbackMessage = "تم حفظ الفاتورة بنجاح: $invoiceNumber",
                             isError = false
                         )
@@ -1023,8 +1041,44 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(showHistoryDialog = show) }
     }
 
+    fun setActiveMobileTab(tab: PosMobileTab) {
+        _uiState.update { it.copy(activeMobileTab = tab, selectedTab = tab) }
+    }
+
+    /**
+     * تهيئة وبدء فاتورة جديدة ونظيفة:
+     * 1. تفريغ سلة المبيعات الحالية ومسح جميع الأصناف المؤقتة
+     * 2. تصفير الحقول المالية بالكامل (المدفوع، الباقي، الخصم، طريقة الدفع الافتراضية نقداً)
+     * 3. إغلاق نوافذ الإيصال والدفع (showReceiptDialog = false, showCheckoutDialog = false)
+     * 4. التوجيه التلقائي المباشر إلى قائمة وتصنيفات الأصناف (Products / Catalog Tab) وليس السلة الفارغة
+     * 5. تهيئة الفاتورة في الخلفية لتكون جاهزة لاستقبال الأصناف بمجرد النقر عليها
+     */
+    fun startNewInvoice() {
+        _uiState.update { state ->
+            state.copy(
+                cartItems = emptyList(),
+                cartSummary = recalculateSummary(emptyList(), 0.0),
+                discount = 0.0,
+                paidAmountInput = "",
+                paymentMethod = PaymentMethod.CASH,
+                selectedParty = null,
+                originalInvoiceForReturn = null,
+                returnOriginalInvoiceItems = emptyList(),
+                showReceiptDialog = false,
+                showCheckoutDialog = false,
+                lastCheckoutResult = null,
+                searchQuery = "",
+                activeMobileTab = PosMobileTab.CATALOG,
+                selectedTab = PosMobileTab.CATALOG,
+                activeOperation = PosOperation.SALE,
+                userFeedbackMessage = null,
+                isError = false
+            )
+        }
+    }
+
     fun dismissReceiptDialog() {
-        _uiState.update { it.copy(showReceiptDialog = false) }
+        startNewInvoice()
     }
 
     fun dismissFeedback() {

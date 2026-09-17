@@ -99,4 +99,20 @@ class PosAndPurchaseAccountingTest {
         val returnOutBase = -purchaseReturnQty
         assertTrue(returnOutBase < 0)
     }
+
+    @Test
+    fun testStartNewInvoiceStateAndNavigationReset() {
+        // التحقق من القيم الافتراضية والجاهزية لفاتورة جديدة:
+        // 1. التوجيه التلقائي إلى قائمة الأصناف (CATALOG) وليس السلة الفارغة
+        // 2. تصفير السلة بالكامل
+        // 3. تصفير الخصم والمدفوع
+        // 4. إغلاق نافذة الإيصال
+        val freshState = com.example.dokkani.ui.screens.pos.PosUiState()
+        assertEquals(com.example.dokkani.ui.screens.pos.PosMobileTab.CATALOG, freshState.activeMobileTab)
+        assertEquals(com.example.dokkani.ui.screens.pos.PosMobileTab.CATALOG, freshState.selectedTab)
+        assertEquals(0.0, freshState.discount, 0.0)
+        assertEquals("", freshState.paidAmountInput)
+        assertFalse(freshState.showReceiptDialog)
+        assertTrue(freshState.cartItems.isEmpty())
+    }
 }

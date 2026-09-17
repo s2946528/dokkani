@@ -196,6 +196,19 @@ fun PosScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            // زر فاتورة جديدة السريع
+                            Button(
+                                onClick = { viewModel.startNewInvoice() },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(34.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+                            ) {
+                                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("فاتورة جديدة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
                             // زر ملخص الشفت المدمج
                             Surface(
                                 onClick = { showShiftSummaryModal = true },
@@ -357,7 +370,7 @@ fun PosScreen(
                             .printReceipt(uiState.lastCheckoutResult!!.receiptData)
                     }
                 },
-                onDismiss = { viewModel.dismissReceiptDialog() }
+                onDismiss = { viewModel.startNewInvoice() }
             )
         }
 
@@ -428,14 +441,6 @@ fun PosScreen(
             )
         }
     }
-}
-
-/**
- * علامات التبويب المخصصة لواجهة الهواتف والشاشات الصغيرة
- */
-enum class PosMobileTab {
-    CATALOG,
-    CART
 }
 
 /**
@@ -959,11 +964,22 @@ private fun PosCartPanel(
                     }
                 }
 
-                if (uiState.cartItems.isNotEmpty()) {
-                    TextButton(onClick = { viewModel.clearCart() }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) {
-                        Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = { viewModel.startNewInvoice() },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.AddShoppingCart, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("تفريغ", color = Color.Red, fontSize = 11.sp)
+                        Text("فاتورة جديدة", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (uiState.cartItems.isNotEmpty()) {
+                        TextButton(onClick = { viewModel.clearCart() }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) {
+                            Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تفريغ", color = Color.Red, fontSize = 11.sp)
+                        }
                     }
                 }
             }
@@ -1265,11 +1281,9 @@ private fun PosInvoiceSection(
         }
     } else {
         // الشاشات الصغيرة والهواتف: تبويب علوي وسحب رأسي لأسفل دون تراكم أو تداخل
-        var activeMobileTab by remember { mutableStateOf(PosMobileTab.CATALOG) }
-
         Column(modifier = modifier.fillMaxSize()) {
             TabRow(
-                selectedTabIndex = activeMobileTab.ordinal,
+                selectedTabIndex = uiState.activeMobileTab.ordinal,
                 containerColor = Color.White,
                 contentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
@@ -1277,8 +1291,8 @@ private fun PosInvoiceSection(
                     .clip(RoundedCornerShape(8.dp))
             ) {
                 Tab(
-                    selected = activeMobileTab == PosMobileTab.CATALOG,
-                    onClick = { activeMobileTab = PosMobileTab.CATALOG },
+                    selected = uiState.activeMobileTab == PosMobileTab.CATALOG,
+                    onClick = { viewModel.setActiveMobileTab(PosMobileTab.CATALOG) },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -1289,8 +1303,8 @@ private fun PosInvoiceSection(
                 )
 
                 Tab(
-                    selected = activeMobileTab == PosMobileTab.CART,
-                    onClick = { activeMobileTab = PosMobileTab.CART },
+                    selected = uiState.activeMobileTab == PosMobileTab.CART,
+                    onClick = { viewModel.setActiveMobileTab(PosMobileTab.CART) },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             BadgedBox(
@@ -1324,13 +1338,13 @@ private fun PosInvoiceSection(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            when (activeMobileTab) {
+            when (uiState.activeMobileTab) {
                 PosMobileTab.CATALOG -> {
                     PosProductsPanel(
                         uiState = uiState,
                         viewModel = viewModel,
                         isCompact = true,
-                        onSwitchToCart = { activeMobileTab = PosMobileTab.CART },
+                        onSwitchToCart = { viewModel.setActiveMobileTab(PosMobileTab.CART) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -1342,7 +1356,7 @@ private fun PosInvoiceSection(
                         viewModel = viewModel,
                         onOpenAddPartyDialog = onOpenAddPartyDialog,
                         isCompact = true,
-                        onSwitchToCatalog = { activeMobileTab = PosMobileTab.CATALOG },
+                        onSwitchToCatalog = { viewModel.setActiveMobileTab(PosMobileTab.CATALOG) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)

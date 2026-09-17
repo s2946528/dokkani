@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Print
@@ -345,7 +346,13 @@ fun PosReceiptDialog(
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.testTag("new_sale_button")
             ) {
-                Text("فاتورة جديدة")
+                Icon(
+                    imageVector = Icons.Default.AddShoppingCart,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("فاتورة جديدة", fontWeight = FontWeight.Bold)
             }
         }
     )

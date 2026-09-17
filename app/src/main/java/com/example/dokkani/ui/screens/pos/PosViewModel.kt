@@ -510,8 +510,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         val totalDiscount = itemsDiscount + discount
         val taxable = (subtotal - totalDiscount).coerceAtLeast(0.0)
 
-        val isTaxEnabled = settings?.isTaxEnabled ?: true
-        val rawRate = settings?.defaultTaxRate ?: 0.15
+        val isTaxEnabled = settings?.isTaxEnabled ?: false
+        val rawRate = settings?.defaultTaxRate ?: 0.0
         val taxRatePercent = if (!isTaxEnabled) 0.0 else if (rawRate <= 1.0 && rawRate > 0.0) rawRate * 100.0 else rawRate
         val taxAmount = if (isTaxEnabled) taxable * (taxRatePercent / 100.0) else 0.0
         val finalTotal = taxable + taxAmount
@@ -607,8 +607,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
                     val returnNotePart = state.originalInvoiceForReturn?.let { " - مرتبط بالفاتورة رقم: ${it.invoiceNumber}" } ?: ""
 
-                    val isTaxEnabled = state.systemSettings?.isTaxEnabled ?: true
-                    val rawRate = state.systemSettings?.defaultTaxRate ?: 0.15
+                    val isTaxEnabled = state.systemSettings?.isTaxEnabled ?: false
+                    val rawRate = state.systemSettings?.defaultTaxRate ?: 0.0
                     val currentTaxRateDecimal = if (isTaxEnabled) (if (rawRate <= 1.0 && rawRate > 0.0) rawRate else rawRate / 100.0) else 0.0
                     val currentTaxAmount = if (isTaxEnabled) state.cartSummary.taxAmount else 0.0
 

@@ -15,10 +15,10 @@ data class SystemSettingsEntity(
     val storeName: String = "دكاني - تموينات ومخضار السعادة", // اسم البقالة أو المتجر
     val costValuationMethod: CostValuationMethod = CostValuationMethod.WAC, // طريقة التقييم المحاسبي المعتمدة
     val defaultCurrencyCode: String = "SAR",               // العملة الافتراضية للفواتير
-    val isTaxEnabled: Boolean = true,                      // تفعيل / إلغاء حساب الضريبة في المبيعات
-    val defaultTaxRate: Double = 0.15,                     // نسبة ضريبة المبيعات الافتراضية (مثال 0.15 = 15%)
-    val isPurchaseTaxEnabled: Boolean = true,              // تفعيل / إلغاء حساب ضريبة المشتريات بشكل مستقل
-    val purchaseTaxRate: Double = 0.15,                    // نسبة ضريبة المشتريات الافتراضية (مثال 0.15 = 15%)
+    val isTaxEnabled: Boolean = false,                     // تفعيل / إلغاء حساب الضريبة في المبيعات (معطلة افتراضياً وفق بيئة العمل بالجمهورية اليمنية)
+    val defaultTaxRate: Double = 0.0,                      // نسبة ضريبة المبيعات الافتراضية (0.0% افتراضياً)
+    val isPurchaseTaxEnabled: Boolean = false,             // تفعيل / إلغاء حساب ضريبة المشتريات بشكل مستقل (معطلة افتراضياً)
+    val purchaseTaxRate: Double = 0.0,                     // نسبة ضريبة المشتريات الافتراضية (0.0% افتراضياً)
     val enableProduceShrinkageTracking: Boolean = true,    // تفعيل احتساب الهدر والتالف للخضار المشكل
     val enableNegativeStock: Boolean = false,              // السماح بالبيع بالسالب في حال تأخر إدخال الفواتير
     val invoiceFooterText: String = "شكراً لزيارتكم دكاني - تسوقكم يسعدنا!", // رسالة ذيل الفاتورة

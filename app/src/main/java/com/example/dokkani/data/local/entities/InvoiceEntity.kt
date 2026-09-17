@@ -44,7 +44,7 @@ data class InvoiceEntity(
     val exchangeRate: Double = 1.0,       // سعر الصرف للعملة مقابل الأساس وقت الفاتورة
     val subtotal: Double,                 // الإجمالي قبل الخصم والضريبة
     val discount: Double = 0.0,           // مبلغ الخصم
-    val taxRate: Double = 0.15,           // نسبة الضريبة (مثال: 0.15 = 15%)
+    val taxRate: Double = 0.0,            // نسبة الضريبة (0.0% افتراضياً وفق بيئة العمل)
     val taxAmount: Double = 0.0,          // قيمة الضريبة المضافة
     val total: Double,                    // الإجمالي النهائي الصافي للفاتورة
     val paidAmount: Double,               // المبلغ المدفوع

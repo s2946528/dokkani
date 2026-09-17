@@ -185,8 +185,10 @@ abstract class DokkaniDatabase : RoomDatabase() {
                     storeName = "متجري",
                     costValuationMethod = CostValuationMethod.WAC,
                     defaultCurrencyCode = "YER",
-                    isTaxEnabled = true,
-                    defaultTaxRate = 0.15,
+                    isTaxEnabled = false,
+                    defaultTaxRate = 0.0,
+                    isPurchaseTaxEnabled = false,
+                    purchaseTaxRate = 0.0,
                     enableProduceShrinkageTracking = false,
                     enableNegativeStock = false,
                     invoiceFooterText = "شكراً لزيارتكم!"

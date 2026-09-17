@@ -81,8 +81,8 @@ data class PurchaseUiState(
     val productsWithUnits: List<ProductWithUnits> = emptyList(),
     val searchQuery: String = "",
     val items: List<PurchaseLineItem> = emptyList(),
-    val isTaxApplied: Boolean = true,
-    val purchaseTaxRate: Double = 0.15,
+    val isTaxApplied: Boolean = false,
+    val purchaseTaxRate: Double = 0.0,
     val discount: Double = 0.0,
     val notes: String = "",
     val isProcessing: Boolean = false,
@@ -385,7 +385,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                             exchangeRate = rate,
                             subtotal = state.subtotalBaseCurrency,
                             discount = state.discount * rate,
-                            taxRate = if (state.isTaxApplied) 0.15 else 0.0,
+                            taxRate = if (state.isTaxApplied) state.purchaseTaxRate else 0.0,
                             taxAmount = state.taxAmountBaseCurrency,
                             total = finalTotalLocal,
                             paidAmount = paidLocal,
@@ -415,7 +415,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                                 unitCostPrice = itemCostPriceLocal,
                                 unitSellingPrice = item.newSellingPrice ?: item.sellingPrice,
                                 discount = 0.0,
-                                taxRate = if (state.isTaxApplied) 0.15 else 0.0,
+                                taxRate = if (state.isTaxApplied) state.purchaseTaxRate else 0.0,
                                 totalPrice = itemTotalCostLocal
                             )
                         )
@@ -795,7 +795,9 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                     // 5. بناء التعديلات الجديدة وتطبيق سعر الصرف
                     val activeRate = if (rate > 0) rate else 1.0
                     val subtotalCurr = editedItems.sumOf { it.totalCost }
-                    val taxCurr = subtotalCurr * 0.15
+                    val currentPurchaseTaxRate = _uiState.value.purchaseTaxRate
+                    val isTaxApplied = _uiState.value.isTaxApplied
+                    val taxCurr = if (isTaxApplied) subtotalCurr * currentPurchaseTaxRate else 0.0
                     val totalCurr = subtotalCurr + taxCurr
 
                     val totalLocal = totalCurr * activeRate
@@ -839,7 +841,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                                 unitCostPrice = itemCostPriceLocal,
                                 unitSellingPrice = item.sellingPrice,
                                 discount = 0.0,
-                                taxRate = 0.15,
+                                taxRate = if (isTaxApplied) currentPurchaseTaxRate else 0.0,
                                 totalPrice = itemTotalCostLocal
                             )
                         )

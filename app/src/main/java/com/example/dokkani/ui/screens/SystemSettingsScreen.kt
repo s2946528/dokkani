@@ -199,10 +199,10 @@ fun SystemSettingsScreen(
                             }
 
                             Switch(
-                                checked = settings?.isTaxEnabled ?: true,
+                                checked = settings?.isTaxEnabled ?: false,
                                 onCheckedChange = { isChecked ->
                                     if (isAdmin) {
-                                        val rawRate = settings?.defaultTaxRate ?: 0.15
+                                        val rawRate = settings?.defaultTaxRate ?: 0.0
                                         onUpdateTaxSettings(isChecked, rawRate)
                                     }
                                 },
@@ -214,7 +214,7 @@ fun SystemSettingsScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         // حقل إدخال نسبة الضريبة اليدوية
-                        val currentRate = settings?.defaultTaxRate ?: 0.15
+                        val currentRate = settings?.defaultTaxRate ?: 0.0
                         val pctValue = if (currentRate <= 1.0) currentRate * 100.0 else currentRate
                         var taxRateText by remember(settings?.defaultTaxRate) {
                             mutableStateOf(if (pctValue % 1.0 == 0.0) pctValue.toInt().toString() else "%.1f".format(pctValue))
@@ -233,14 +233,14 @@ fun SystemSettingsScreen(
                                         val parsed = input.toDoubleOrNull()
                                         if (parsed != null && parsed >= 0.0 && isAdmin) {
                                             val rateToSave = parsed / 100.0
-                                            val isEnabled = settings?.isTaxEnabled ?: true
+                                            val isEnabled = settings?.isTaxEnabled ?: false
                                             onUpdateTaxSettings(isEnabled, rateToSave)
                                         }
                                     }
                                 },
                                 label = { Text("نسبة الضريبة المئوية (%)") },
                                 suffix = { Text("%") },
-                                enabled = isAdmin && (settings?.isTaxEnabled ?: true),
+                                enabled = isAdmin && (settings?.isTaxEnabled ?: false),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 modifier = Modifier.weight(1f).testTag("tax_rate_input")
@@ -248,12 +248,12 @@ fun SystemSettingsScreen(
 
                             Button(
                                 onClick = {
-                                    val parsed = taxRateText.toDoubleOrNull() ?: 15.0
+                                    val parsed = taxRateText.toDoubleOrNull() ?: 0.0
                                     val rateToSave = parsed / 100.0
-                                    val isEnabled = settings?.isTaxEnabled ?: true
+                                    val isEnabled = settings?.isTaxEnabled ?: false
                                     onUpdateTaxSettings(isEnabled, rateToSave)
                                 },
-                                enabled = isAdmin && (settings?.isTaxEnabled ?: true),
+                                enabled = isAdmin && (settings?.isTaxEnabled ?: false),
                                 modifier = Modifier.testTag("save_tax_rate_button")
                             ) {
                                 Text("حفظ النسبة")
@@ -263,8 +263,8 @@ fun SystemSettingsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         // صندوق الحالة التوضيحي
-                        val isTaxActive = settings?.isTaxEnabled ?: true
-                        val activeRate = settings?.defaultTaxRate ?: 0.15
+                        val isTaxActive = settings?.isTaxEnabled ?: false
+                        val activeRate = settings?.defaultTaxRate ?: 0.0
                         val displayPct = if (activeRate <= 1.0) activeRate * 100.0 else activeRate
 
                         Surface(
@@ -338,10 +338,10 @@ fun SystemSettingsScreen(
                             }
 
                             Switch(
-                                checked = settings?.isPurchaseTaxEnabled ?: true,
+                                checked = settings?.isPurchaseTaxEnabled ?: false,
                                 onCheckedChange = { isChecked ->
                                     if (isAdmin) {
-                                        val rawRate = settings?.purchaseTaxRate ?: 0.15
+                                        val rawRate = settings?.purchaseTaxRate ?: 0.0
                                         onUpdatePurchaseTaxSettings(isChecked, rawRate)
                                     }
                                 },
@@ -352,7 +352,7 @@ fun SystemSettingsScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        val currentPurRate = settings?.purchaseTaxRate ?: 0.15
+                        val currentPurRate = settings?.purchaseTaxRate ?: 0.0
                         val pctPurValue = if (currentPurRate <= 1.0) currentPurRate * 100.0 else currentPurRate
                         var purTaxRateText by remember(settings?.purchaseTaxRate) {
                             mutableStateOf(if (pctPurValue % 1.0 == 0.0) pctPurValue.toInt().toString() else "%.1f".format(pctPurValue))
@@ -371,14 +371,14 @@ fun SystemSettingsScreen(
                                         val parsed = input.toDoubleOrNull()
                                         if (parsed != null && parsed >= 0.0 && isAdmin) {
                                             val rateToSave = parsed / 100.0
-                                            val isEnabled = settings?.isPurchaseTaxEnabled ?: true
+                                            val isEnabled = settings?.isPurchaseTaxEnabled ?: false
                                             onUpdatePurchaseTaxSettings(isEnabled, rateToSave)
                                         }
                                     }
                                 },
                                 label = { Text("نسبة ضريبة المشتريات (%)") },
                                 suffix = { Text("%") },
-                                enabled = isAdmin && (settings?.isPurchaseTaxEnabled ?: true),
+                                enabled = isAdmin && (settings?.isPurchaseTaxEnabled ?: false),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 modifier = Modifier.weight(1f).testTag("purchase_tax_rate_input")
@@ -386,12 +386,12 @@ fun SystemSettingsScreen(
 
                             Button(
                                 onClick = {
-                                    val parsed = purTaxRateText.toDoubleOrNull() ?: 15.0
+                                    val parsed = purTaxRateText.toDoubleOrNull() ?: 0.0
                                     val rateToSave = parsed / 100.0
-                                    val isEnabled = settings?.isPurchaseTaxEnabled ?: true
+                                    val isEnabled = settings?.isPurchaseTaxEnabled ?: false
                                     onUpdatePurchaseTaxSettings(isEnabled, rateToSave)
                                 },
-                                enabled = isAdmin && (settings?.isPurchaseTaxEnabled ?: true),
+                                enabled = isAdmin && (settings?.isPurchaseTaxEnabled ?: false),
                                 modifier = Modifier.testTag("save_purchase_tax_rate_button")
                             ) {
                                 Text("حفظ النسبة")
@@ -400,8 +400,8 @@ fun SystemSettingsScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        val isPurTaxActive = settings?.isPurchaseTaxEnabled ?: true
-                        val activePurRate = settings?.purchaseTaxRate ?: 0.15
+                        val isPurTaxActive = settings?.isPurchaseTaxEnabled ?: false
+                        val activePurRate = settings?.purchaseTaxRate ?: 0.0
                         val displayPurPct = if (activePurRate <= 1.0) activePurRate * 100.0 else activePurRate
 
                         Surface(

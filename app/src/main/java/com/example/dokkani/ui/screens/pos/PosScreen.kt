@@ -1,6 +1,7 @@
 package com.example.dokkani.ui.screens.pos
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -90,6 +91,7 @@ fun PosScreen(
                         .padding(if (isCompact) 6.dp else 8.dp)
                 ) {
                     // 1. شريط ترويسة علوي مدمج وأنيق يوفر المساحة الرأسية الكاملة لقائمة البنود والسلة
+                    var showShiftSummaryModal by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -153,7 +155,31 @@ fun PosScreen(
                                     DropdownMenuItem(
                                         text = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(op.titleArabic, fontWeight = if (uiState.activeOperation == op) FontWeight.Bold else FontWeight.Normal)
+                                                Icon(
+                                                    imageVector = when (op) {
+                                                        PosOperation.SALE -> Icons.Default.PointOfSale
+                                                        PosOperation.PURCHASE -> Icons.Default.ShoppingBag
+                                                        PosOperation.SALE_RETURN -> Icons.Default.AssignmentReturn
+                                                        PosOperation.PURCHASE_RETURN -> Icons.Default.RemoveShoppingCart
+                                                        PosOperation.RECEIPT -> Icons.Default.ArrowDownward
+                                                        PosOperation.EXPENSE -> Icons.Default.ArrowUpward
+                                                    },
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = when (op) {
+                                                        PosOperation.SALE -> Color(0xFF1B5E20)
+                                                        PosOperation.PURCHASE -> Color(0xFF1976D2)
+                                                        PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
+                                                        PosOperation.RECEIPT -> Color(0xFF00796B)
+                                                        PosOperation.EXPENSE -> Color(0xFFE65100)
+                                                    }
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    op.titleArabic,
+                                                    fontWeight = if (uiState.activeOperation == op) FontWeight.Bold else FontWeight.Normal,
+                                                    fontSize = 13.sp
+                                                )
                                             }
                                         },
                                         onClick = {
@@ -170,13 +196,53 @@ fun PosScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            // زر ملخص الشفت المدمج
+                            Surface(
+                                onClick = { showShiftSummaryModal = true },
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.AccountBalanceWallet,
+                                        contentDescription = "تفاصيل الشفت",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "الشفت",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Surface(
+                                        color = Color(0xFF1B5E20),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "%.2f %s".format(uiState.shiftTotalSales, uiState.currencySymbol),
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+
                             OutlinedButton(
                                 onClick = { viewModel.openShiftCloseDialog() },
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 modifier = Modifier.height(34.dp),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("إغلاق الشفت", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
@@ -188,6 +254,16 @@ fun PosScreen(
                                 Icon(Icons.Default.ReceiptLong, contentDescription = "سجل الحركات", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
+                    }
+
+                    // نافذة ملخص الشفت والتقرير
+                    if (showShiftSummaryModal) {
+                        PosShiftSummaryModal(
+                            uiState = uiState,
+                            onCloseShift = { viewModel.openShiftCloseDialog() },
+                            onOpenHistory = { viewModel.toggleHistoryDialog(true) },
+                            onDismiss = { showShiftSummaryModal = false }
+                        )
                     }
 
                     // 2. جسم الشاشة الرئيسي: يستهلك المساحة المتاحة بالكامل دون قص أو اختفاء
@@ -363,147 +439,128 @@ enum class PosMobileTab {
 }
 
 /**
- * كرت إجمالي مبيعات الشفت وحالة صندوق الكاشير المتجاوب
+ * نافذة حوارية لعرض تفاصيل ومبيعات الشفت وصندوق الكاشير
  */
 @Composable
-private fun PosShiftHeaderCard(
+private fun PosShiftSummaryModal(
     uiState: PosUiState,
-    isCompact: Boolean,
     onCloseShift: () -> Unit,
     onOpenHistory: () -> Unit,
-    modifier: Modifier = Modifier
+    onDismiss: () -> Unit
 ) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        if (!isCompact) {
-            // شاشات التابليت والكمبيوتر: صف أفقي عريض ومريح
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("تفاصيل الشفت الحالي والمبيعات", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text("إجمالي مبيعات الشفت", color = Color(0xFFC8E6C9), fontSize = 11.sp)
-                        Text(
-                            text = "%.2f %s".format(uiState.shiftTotalSales, uiState.currencySymbol),
-                            color = Color.White,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(32.dp))
-                    Column {
-                        Text("النقدية الحالية بالدرج", color = Color(0xFFC8E6C9), fontSize = 11.sp)
-                        Text(
-                            text = "%.2f %s".format(uiState.cashInDrawer, uiState.currencySymbol),
-                            color = Color(0xFFFFD54F),
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                // معلومات الكاشير والشفت
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("رقم الشفت:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(uiState.currentShift?.shiftNumber ?: "SHF-1", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("الكاشير الحالي:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(uiState.currentShift?.cashierName ?: "مدير النظام", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("حالة الشفت:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("مفتوح (نشط)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                        }
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(
-                        onClick = onCloseShift,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                        shape = RoundedCornerShape(20.dp)
+                // إجمالي المبيعات والنقدية بالدرج
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("إغلاق ومطابقة الشفت", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("إجمالي مبيعات الشفت", color = Color(0xFFC8E6C9), fontSize = 11.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "%.2f %s".format(uiState.shiftTotalSales, uiState.currencySymbol),
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = onOpenHistory,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                        shape = RoundedCornerShape(20.dp)
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF004D40)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("سجل العمليات", color = Color.White, fontSize = 12.sp)
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("النقدية بالدرج", color = Color(0xFFB2DFDB), fontSize = 11.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "%.2f %s".format(uiState.cashInDrawer, uiState.currencySymbol),
+                                color = Color(0xFFFFD54F),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
-        } else {
-            // شاشات الهواتف والشاشات الصغيرة: بطاقة رشيقة من سطرين متوازنين بدون تكدس
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onDismiss()
+                    onCloseShift()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("إغلاق ومطابقة الشفت", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        onOpenHistory()
+                    }
                 ) {
-                    Column {
-                        Text("إجمالي مبيعات الشفت", color = Color(0xFFC8E6C9), fontSize = 10.sp)
-                        Text(
-                            text = "%.2f %s".format(uiState.shiftTotalSales, uiState.currencySymbol),
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("النقدية الحالية بالدرج", color = Color(0xFFC8E6C9), fontSize = 10.sp)
-                        Text(
-                            text = "%.2f %s".format(uiState.cashInDrawer, uiState.currencySymbol),
-                            color = Color(0xFFFFD54F),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("السجل")
                 }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Button(
-                        onClick = onCloseShift,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(34.dp)
-                    ) {
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("إغلاق الشفت", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = onOpenHistory,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(34.dp)
-                    ) {
-                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("سجل العمليات", color = Color.White, fontSize = 11.sp)
-                    }
+                TextButton(onClick = onDismiss) {
+                    Text("إغلاق")
                 }
             }
         }
-    }
+    )
 }
 
 /**
@@ -629,24 +686,41 @@ private fun PosProductsPanel(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // تصنيفات سريعة
+            // تصنيفات سريعة قابلة للتمرير مع شارات عالية التباين
             val categories = listOf("الكل", "خضار وفواكه", "ألبان وأجبان", "مخبوزات", "معلبات ومواد غذائية")
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(categories) { cat ->
+                    val isSelected = uiState.selectedCategory == cat
                     FilterChip(
-                        selected = uiState.selectedCategory == cat,
+                        selected = isSelected,
                         onClick = { viewModel.setSelectedCategory(cat) },
-                        label = { Text(cat, fontSize = 11.sp) }
+                        label = {
+                            Text(
+                                cat,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        leadingIcon = if (isSelected) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // شبكة الأصناف
+            // شبكة الأصناف المتجاوبة مع حماية التباين WCAG AAA
             val filtered = uiState.productsWithUnits.filter { p ->
                 val query = uiState.searchQuery.trim().lowercase()
                 val matchesQuery = query.isEmpty() ||
@@ -665,14 +739,14 @@ private fun PosProductsPanel(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(40.dp), tint = Color.LightGray)
+                        Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(40.dp), tint = Color.Gray)
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("لا توجد أصناف مطابقة", color = Color.Gray, fontSize = 13.sp)
+                        Text("لا توجد أصناف مطابقة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     }
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                    columns = GridCells.Adaptive(minSize = 135.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
@@ -693,13 +767,13 @@ private fun PosProductsPanel(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(if (isCompact) 115.dp else 125.dp)
+                                .height(128.dp)
                                 .clickable {
                                     if (baseUnit != null) {
                                         viewModel.addToCart(pw.product, baseUnit, 1.0)
                                     }
                                 },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                             border = CardDefaults.outlinedCardBorder()
                         ) {
                             Column(
@@ -718,15 +792,18 @@ private fun PosProductsPanel(
                                             text = pw.product.name,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f)
                                         )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        // شارة الكمية عالية التباين للوضع الداكن (WCAG AAA)
                                         Surface(
                                             color = when {
-                                                currentStock > 0 -> Color(0xFFE8F5E9)
-                                                allowNegative -> Color(0xFFFFF3E0)
-                                                else -> Color(0xFFFFEBEE)
+                                                currentStock > 0 -> Color(0xFF1B5E20)
+                                                allowNegative -> Color(0xFFE65100)
+                                                else -> Color(0xFFB71C1C)
                                             },
                                             shape = RoundedCornerShape(4.dp)
                                         ) {
@@ -738,11 +815,7 @@ private fun PosProductsPanel(
                                                 },
                                                 fontSize = 9.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = when {
-                                                    currentStock > 0 -> Color(0xFF2E7D32)
-                                                    allowNegative -> Color(0xFFE65100)
-                                                    else -> Color(0xFFC62828)
-                                                },
+                                                color = Color.White,
                                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                             )
                                         }
@@ -750,7 +823,7 @@ private fun PosProductsPanel(
                                     Text(
                                         text = pw.product.category,
                                         fontSize = 10.sp,
-                                        color = Color.Gray
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
@@ -762,23 +835,24 @@ private fun PosProductsPanel(
                                     Text(
                                         text = "%.2f %s".format(displayPrice, uiState.currencySymbol),
                                         color = when (uiState.activeOperation) {
-                                            PosOperation.PURCHASE -> Color(0xFF1976D2)
-                                            PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
-                                            else -> Color(0xFF1B5E20)
+                                            PosOperation.PURCHASE -> Color(0xFF64B5F6)
+                                            PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFFF8A80)
+                                            else -> Color(0xFF81C784)
                                         },
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
 
                                     Surface(
-                                        color = Color(0xFFE8F5E9),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
                                         shape = RoundedCornerShape(4.dp)
                                     ) {
                                         Text(
                                             text = baseUnit?.unitName ?: "حبة",
                                             fontSize = 10.sp,
-                                            color = Color(0xFF2E7D32),
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                         )
                                     }
                                 }

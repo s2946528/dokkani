@@ -1,0 +1,43 @@
+package com.example.dokkani.data.local.dao
+
+import androidx.room.*
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
+import com.example.dokkani.data.local.entities.FinancialAccountType
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface FinancialAccountDao {
+
+    @Query("SELECT * FROM financial_accounts ORDER BY code ASC")
+    fun getAllAccounts(): Flow<List<FinancialAccountEntity>>
+
+    @Query("SELECT * FROM financial_accounts WHERE isActive = 1 ORDER BY code ASC")
+    fun getActiveAccounts(): Flow<List<FinancialAccountEntity>>
+
+    @Query("SELECT * FROM financial_accounts WHERE accountType = :type ORDER BY code ASC")
+    fun getAccountsByType(type: FinancialAccountType): Flow<List<FinancialAccountEntity>>
+
+    @Query("SELECT * FROM financial_accounts WHERE id = :id")
+    suspend fun getAccountById(id: Long): FinancialAccountEntity?
+
+    @Query("SELECT * FROM financial_accounts WHERE code = :code LIMIT 1")
+    suspend fun getAccountByCode(code: String): FinancialAccountEntity?
+
+    @Query("SELECT COUNT(*) FROM financial_accounts")
+    suspend fun getAccountsCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAccount(account: FinancialAccountEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(accounts: List<FinancialAccountEntity>)
+
+    @Update
+    suspend fun updateAccount(account: FinancialAccountEntity)
+
+    @Delete
+    suspend fun deleteAccount(account: FinancialAccountEntity)
+
+    @Query("DELETE FROM financial_accounts WHERE id = :id")
+    suspend fun deleteAccountById(id: Long)
+}

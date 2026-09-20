@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Calculate
@@ -55,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.ui.DokkaniViewModel
+import com.example.dokkani.ui.screens.accounts.AccountsManagementScreen
+import com.example.dokkani.ui.screens.accounts.AccountDeletionBlockedDialog
 import com.example.dokkani.ui.screens.assets.AssetsAndEquityScreen
 import com.example.dokkani.ui.screens.barcode.BarcodeLabelPrinterScreen
 import com.example.dokkani.ui.screens.cash.CashAndExpensesScreen
@@ -90,6 +93,7 @@ fun DokkaniApp(
         NavTabItem("المنتجات والوحدات", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("التكلفة والخضار", Icons.Default.Calculate, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("دليل الحسابات والبنوك", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("العملاء والموردين", Icons.Default.People, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("الأصول والملكية", Icons.Default.AccountBalance, setOf(UserRole.ADMIN)),
         NavTabItem("التقارير", Icons.Default.Analytics, setOf(UserRole.ADMIN)),
@@ -312,7 +316,34 @@ fun DokkaniApp(
                                     onDeleteExpense = viewModel::deleteExpense,
                                     onDrawerInputsChanged = viewModel::updateDrawerInputs,
                                     onCalculateDrawerReconciliation = viewModel::calculateDrawerReconciliation,
-                                    onCloseShiftAndSave = viewModel::closeShiftAndSave
+                                    onCloseShiftAndSave = viewModel::closeShiftAndSave,
+                                    onAccountsSearchChanged = viewModel::setAccountsSearchQuery,
+                                    onAccountsFilterTypeChanged = viewModel::setAccountsFilterType,
+                                    onOpenAddAccountDialog = viewModel::openAddAccountDialog,
+                                    onOpenEditAccountDialog = viewModel::openEditAccountDialog,
+                                    onDismissAddEditAccountDialog = viewModel::dismissAddEditAccountDialog,
+                                    onSaveAccount = viewModel::saveFinancialAccount,
+                                    onToggleAccountActive = viewModel::toggleFinancialAccountActive,
+                                    onRequestDeleteAccount = viewModel::requestDeleteFinancialAccount,
+                                    onConfirmDeleteAccount = viewModel::confirmDeleteFinancialAccount,
+                                    onDisableAccountInstead = viewModel::disableAccountInstead,
+                                    onDismissAccountDeleteDialogs = viewModel::dismissAccountDeleteDialogs
+                                )
+                            }
+                            "دليل الحسابات والبنوك" -> {
+                                AccountsManagementScreen(
+                                    uiState = uiState,
+                                    onSearchChanged = viewModel::setAccountsSearchQuery,
+                                    onFilterTypeChanged = viewModel::setAccountsFilterType,
+                                    onOpenAddDialog = viewModel::openAddAccountDialog,
+                                    onOpenEditDialog = viewModel::openEditAccountDialog,
+                                    onDismissAddEditDialog = viewModel::dismissAddEditAccountDialog,
+                                    onSaveAccount = viewModel::saveFinancialAccount,
+                                    onToggleActive = viewModel::toggleFinancialAccountActive,
+                                    onRequestDeleteAccount = viewModel::requestDeleteFinancialAccount,
+                                    onConfirmDeleteAccount = viewModel::confirmDeleteFinancialAccount,
+                                    onDisableInstead = viewModel::disableAccountInstead,
+                                    onDismissDeleteDialogs = viewModel::dismissAccountDeleteDialogs
                                 )
                             }
                             "العملاء والموردين" -> {
@@ -327,7 +358,7 @@ fun DokkaniApp(
                                     onVoucherInputsChanged = viewModel::updateVoucherInputs,
                                     onSubmitPaymentVoucher = viewModel::submitPaymentVoucher,
                                     onSaveParty = viewModel::saveParty,
-                                    onDeleteParty = viewModel::deleteParty,
+                                    onDeleteParty = viewModel::requestDeletePartyWithProtection,
                                     onDeleteVoucher = viewModel::deletePaymentVoucher,
                                     onDeleteInvoice = viewModel::deleteInvoice,
                                     onSendWhatsAppReminder = { ctx, phone, text ->
@@ -457,5 +488,15 @@ fun DokkaniApp(
                 }
             }
         }
+    }
+
+    // نافذة تنبيه الأمان المحاسبي الشاملة (تظهر في حال محاولة حذف أي حساب أو عميل/مورد مرتبط بسجلات)
+    uiState.accountDeletionBlockedDialog?.let { blockedResult ->
+        AccountDeletionBlockedDialog(
+            result = blockedResult,
+            currencySymbol = uiState.currencySymbol,
+            onDisableInstead = { viewModel.disableAccountInstead(blockedResult) },
+            onDismiss = viewModel::dismissAccountDeleteDialogs
+        )
     }
 }

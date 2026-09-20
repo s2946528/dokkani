@@ -10,6 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.dao.CurrencyDao
 import com.example.dokkani.data.local.dao.ExpenseDao
+import com.example.dokkani.data.local.dao.FinancialAccountDao
 import com.example.dokkani.data.local.dao.FixedAssetDao
 import com.example.dokkani.data.local.dao.InvoiceDao
 import com.example.dokkani.data.local.dao.LeaseholdRightDao
@@ -26,6 +27,8 @@ import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.ExpenseEntity
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
+import com.example.dokkani.data.local.entities.FinancialAccountType
 import com.example.dokkani.data.local.entities.FixedAssetEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
@@ -68,9 +71,10 @@ import kotlinx.coroutines.launch
         LicenseEntity::class,
         FixedAssetEntity::class,
         OwnerTransactionEntity::class,
-        LeaseholdRightEntity::class
+        LeaseholdRightEntity::class,
+        FinancialAccountEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -91,6 +95,7 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun fixedAssetDao(): FixedAssetDao
     abstract fun ownerTransactionDao(): OwnerTransactionDao
     abstract fun leaseholdRightDao(): LeaseholdRightDao
+    abstract fun financialAccountDao(): FinancialAccountDao
 
     companion object {
         @Volatile
@@ -195,7 +200,69 @@ abstract class DokkaniDatabase : RoomDatabase() {
                 )
             )
 
-            // ملحوظة: تم حذف بذر المنتجات والفواتير والسندات والعملاء والموردين نهائياً لتبدأ قاعدة البيانات فارغة تماماً.
+            // 4. الحسابات المالية والبنوك والمحافظ الافتراضية
+            val accountDao = db.financialAccountDao()
+            if (accountDao.getAccountsCount() == 0) {
+                accountDao.insertAll(
+                    listOf(
+                        FinancialAccountEntity(
+                            code = "10101",
+                            name = "صندوق النقدية الرئيسي",
+                            accountType = FinancialAccountType.CASH_DRAWER,
+                            parentAccountCode = "101",
+                            parentAccountName = "101 - النقدية وما في حكمها (الصناديق)",
+                            accountNumber = "DRAWER-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "صندوق الكاشير والخزينة النقدية الرئيسية"
+                        ),
+                        FinancialAccountEntity(
+                            code = "10201",
+                            name = "مصرف الراجحي - الحساب الجاري",
+                            accountType = FinancialAccountType.BANK,
+                            parentAccountCode = "102",
+                            parentAccountName = "102 - البنوك والمصارف التجارية",
+                            accountNumber = "SA0380000201608010000000",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "الحساب البنكي الرئيسي للمتجر"
+                        ),
+                        FinancialAccountEntity(
+                            code = "10202",
+                            name = "البنك الأهلي السعودي (SNB)",
+                            accountType = FinancialAccountType.BANK,
+                            parentAccountCode = "102",
+                            parentAccountName = "102 - البنوك والمصارف التجارية",
+                            accountNumber = "SA1010000012345678901234",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب بنكي فرعي لتحصيل المبيعات"
+                        ),
+                        FinancialAccountEntity(
+                            code = "10301",
+                            name = "محفظة STC Pay للأعمال",
+                            accountType = FinancialAccountType.E_WALLET,
+                            parentAccountCode = "103",
+                            parentAccountName = "103 - محافظ الدفع والتحصيل الإلكتروني",
+                            accountNumber = "STC-966500000000",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "محفظة تجارية للتحصيل الإلكتروني السريع"
+                        ),
+                        FinancialAccountEntity(
+                            code = "10302",
+                            name = "محفظة يورباي Urpay",
+                            accountType = FinancialAccountType.E_WALLET,
+                            parentAccountCode = "103",
+                            parentAccountName = "103 - محافظ الدفع والتحصيل الإلكتروني",
+                            accountNumber = "URP-966555000000",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "محفظة دفع رقمية"
+                        )
+                    )
+                )
+            }
         }
     }
 }

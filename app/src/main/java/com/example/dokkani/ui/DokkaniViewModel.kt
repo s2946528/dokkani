@@ -47,11 +47,15 @@ import com.example.dokkani.data.local.entities.LeaseholdRightEntity
 import com.example.dokkani.data.local.entities.OwnerTransactionEntity
 import com.example.dokkani.data.local.entities.OwnerTransactionType
 import com.example.dokkani.domain.assets.AssetCategories
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
+import com.example.dokkani.data.local.entities.FinancialAccountType
+import com.example.dokkani.data.local.entities.ChartOfAccountsDefaults
 import com.example.dokkani.domain.assets.AssetsAndEquityEngine
 import com.example.dokkani.domain.assets.EquityCalculationResult
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +63,24 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * نتيجة فحص الأمان المحاسبي عند محاولة حذف حساب
+ */
+data class AccountUsageCheckResult(
+    val accountName: String,
+    val accountCode: String,
+    val hasRecords: Boolean,
+    val totalRecordCount: Int,
+    val invoicesCount: Int,
+    val vouchersCount: Int,
+    val expensesCount: Int,
+    val currentBalance: Double,
+    val message: String,
+    val isFinancialAccount: Boolean = true,
+    val financialAccount: FinancialAccountEntity? = null,
+    val partyEntity: PartyEntity? = null
+)
 
 data class OpeningBalanceItem(
     val name: String,
@@ -189,7 +211,16 @@ data class DokkaniUiState(
     val leaseholdNotesInput: String = "",
     val leaseholdAmortizeAmountInput: String = "",
     val leaseholdSellPriceInput: String = "",
-    val leaseholdSellPaymentMethod: PaymentMethod = PaymentMethod.CASH
+    val leaseholdSellPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+
+    // Financial Accounts & Chart of Accounts (إدارة الحسابات والدليل المحاسبي)
+    val financialAccounts: List<FinancialAccountEntity> = emptyList(),
+    val showAddEditAccountDialog: Boolean = false,
+    val selectedAccountForEdit: FinancialAccountEntity? = null,
+    val accountDeletionBlockedDialog: AccountUsageCheckResult? = null,
+    val accountToDelete: FinancialAccountEntity? = null,
+    val accountsSearchQuery: String = "",
+    val accountsFilterType: FinancialAccountType? = null
 ) {
     val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.س"
     val currencyName: String get() = baseCurrency?.name ?: "الريال السعودي"
@@ -302,6 +333,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     isTimeTampered = license?.isTimeTampered ?: false
                 )
                 _uiState.update { it.copy(licenseEvaluation = eval) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.financialAccountDao().getAllAccounts().collectLatest { accounts ->
+                _uiState.update { it.copy(financialAccounts = accounts) }
             }
         }
     }
@@ -1564,5 +1600,176 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.leaseholdRightDao().deleteLeaseholdRightById(id)
         }
+    }
+
+    // =========================================================================
+    // إدارة الحسابات المالية والدليل المحاسبي (Financial Accounts & Security)
+    // =========================================================================
+
+    fun setAccountsSearchQuery(query: String) {
+        _uiState.update { it.copy(accountsSearchQuery = query) }
+    }
+
+    fun setAccountsFilterType(type: FinancialAccountType?) {
+        _uiState.update { it.copy(accountsFilterType = type) }
+    }
+
+    fun openAddAccountDialog() {
+        _uiState.update {
+            it.copy(
+                showAddEditAccountDialog = true,
+                selectedAccountForEdit = null
+            )
+        }
+    }
+
+    fun openEditAccountDialog(account: FinancialAccountEntity) {
+        _uiState.update {
+            it.copy(
+                showAddEditAccountDialog = true,
+                selectedAccountForEdit = account
+            )
+        }
+    }
+
+    fun dismissAddEditAccountDialog() {
+        _uiState.update {
+            it.copy(
+                showAddEditAccountDialog = false,
+                selectedAccountForEdit = null
+            )
+        }
+    }
+
+    fun saveFinancialAccount(account: FinancialAccountEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.financialAccountDao().insertAccount(account)
+            _uiState.update {
+                it.copy(
+                    showAddEditAccountDialog = false,
+                    selectedAccountForEdit = null
+                )
+            }
+        }
+    }
+
+    fun toggleFinancialAccountActive(account: FinancialAccountEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = account.copy(isActive = !account.isActive)
+            db.financialAccountDao().updateAccount(updated)
+        }
+    }
+
+    /**
+     * فحص الأمان المحاسبي قبل الحذف:
+     * التحقق مما إذا كان الحساب يحتوي على أي حركات مالية مسجلة (سندات، فواتير، قيود، أو رصيد قائم)
+     */
+    fun requestDeleteFinancialAccount(account: FinancialAccountEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val invoices = _uiState.value.invoices
+            val vouchers = _uiState.value.vouchers
+            val expenses = _uiState.value.expenses
+
+            // حساب عدد الفواتير المرتبطة بالحساب (عن طريق الاسم أو الكود أو طريقة السداد)
+            val invCount = invoices.count { inv ->
+                inv.notes.contains(account.name, ignoreCase = true) ||
+                inv.notes.contains(account.code, ignoreCase = true) ||
+                (account.accountType == FinancialAccountType.BANK && inv.paymentMethod == PaymentMethod.BANK_TRANSFER) ||
+                (account.accountType == FinancialAccountType.CASH_DRAWER && inv.paymentMethod == PaymentMethod.CASH && invoices.isNotEmpty())
+            }
+
+            // حساب عدد السندات المرتبطة بالحساب
+            val vouchCount = vouchers.count { v ->
+                v.notes.contains(account.name, ignoreCase = true) ||
+                v.notes.contains(account.code, ignoreCase = true) ||
+                (account.accountType == FinancialAccountType.BANK && v.paymentMethod == PaymentMethod.BANK_TRANSFER)
+            }
+
+            // حساب عدد المصروفات المسددة عبر الحساب
+            val expCount = expenses.count { exp ->
+                exp.paidTo.contains(account.name, ignoreCase = true) ||
+                exp.notes.contains(account.name, ignoreCase = true) ||
+                exp.notes.contains(account.code, ignoreCase = true)
+            }
+
+            val hasBalance = abs(account.currentBalance) > 0.001 || abs(account.openingBalance) > 0.001
+            val totalRecords = invCount + vouchCount + expCount + (if (hasBalance) 1 else 0)
+
+            if (totalRecords > 0) {
+                // منع الحذف وتفعيل شرط الأمان المحاسبي
+                val result = AccountUsageCheckResult(
+                    accountName = account.name,
+                    accountCode = account.code,
+                    hasRecords = true,
+                    totalRecordCount = totalRecords,
+                    invoicesCount = invCount,
+                    vouchersCount = vouchCount,
+                    expensesCount = expCount,
+                    currentBalance = account.currentBalance,
+                    message = "عذراً، لا يمكن حذف هذا الحساب لوجود حركات وسجلات مالية مرتبطة به، يمكنك تعطيله بدلاً من ذلك.",
+                    isFinancialAccount = true,
+                    financialAccount = account
+                )
+                _uiState.update { it.copy(accountDeletionBlockedDialog = result, accountToDelete = null) }
+            } else {
+                // الحساب خالٍ تماماً -> السماح بالحذف
+                _uiState.update { it.copy(accountToDelete = account, accountDeletionBlockedDialog = null) }
+            }
+        }
+    }
+
+    fun confirmDeleteFinancialAccount(account: FinancialAccountEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.financialAccountDao().deleteAccount(account)
+            _uiState.update { it.copy(accountToDelete = null) }
+        }
+    }
+
+    /**
+     * فحص أمان مماثل لحسابات العملاء والموردين لمنع حذف عميل/مورد مرتبط بفواتير أو سندات
+     */
+    fun requestDeletePartyWithProtection(party: PartyEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val invCount = _uiState.value.invoices.count { it.partyId == party.id }
+            val vouchCount = _uiState.value.vouchers.count { it.partyId == party.id }
+            val hasBalance = abs(party.currentBalance) > 0.001
+            val totalRecords = invCount + vouchCount + (if (hasBalance) 1 else 0)
+
+            if (totalRecords > 0) {
+                val result = AccountUsageCheckResult(
+                    accountName = party.name,
+                    accountCode = "PARTY-${party.id}",
+                    hasRecords = true,
+                    totalRecordCount = totalRecords,
+                    invoicesCount = invCount,
+                    vouchersCount = vouchCount,
+                    expensesCount = 0,
+                    currentBalance = party.currentBalance,
+                    message = "عذراً، لا يمكن حذف هذا الحساب لوجود حركات وسجلات مالية مرتبطة به، يمكنك تعطيله بدلاً من ذلك.",
+                    isFinancialAccount = false,
+                    partyEntity = party
+                )
+                _uiState.update { it.copy(accountDeletionBlockedDialog = result) }
+            } else {
+                deleteParty(party)
+            }
+        }
+    }
+
+    fun disableAccountInstead(result: AccountUsageCheckResult) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (result.isFinancialAccount && result.financialAccount != null) {
+                val deactivated = result.financialAccount.copy(isActive = false)
+                db.financialAccountDao().updateAccount(deactivated)
+            } else if (!result.isFinancialAccount && result.partyEntity != null) {
+                val party = result.partyEntity.copy(creditLimit = 0.0)
+                db.partyDao().updateParty(party)
+            }
+            _uiState.update { it.copy(accountDeletionBlockedDialog = null) }
+        }
+    }
+
+    fun dismissAccountDeleteDialogs() {
+        _uiState.update { it.copy(accountDeletionBlockedDialog = null, accountToDelete = null) }
     }
 }

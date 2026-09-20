@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CheckCircle
@@ -26,6 +27,10 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoneyOff
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Warning
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
+import com.example.dokkani.data.local.entities.FinancialAccountType
+import com.example.dokkani.ui.AccountUsageCheckResult
+import com.example.dokkani.ui.screens.accounts.AccountsManagementScreen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -81,7 +86,18 @@ fun CashAndExpensesScreen(
     onDeleteExpense: (ExpenseEntity) -> Unit = {},
     onDrawerInputsChanged: (String, String, String) -> Unit,
     onCalculateDrawerReconciliation: () -> Unit,
-    onCloseShiftAndSave: () -> Unit
+    onCloseShiftAndSave: () -> Unit,
+    onAccountsSearchChanged: (String) -> Unit = {},
+    onAccountsFilterTypeChanged: (FinancialAccountType?) -> Unit = {},
+    onOpenAddAccountDialog: () -> Unit = {},
+    onOpenEditAccountDialog: (FinancialAccountEntity) -> Unit = {},
+    onDismissAddEditAccountDialog: () -> Unit = {},
+    onSaveAccount: (FinancialAccountEntity) -> Unit = {},
+    onToggleAccountActive: (FinancialAccountEntity) -> Unit = {},
+    onRequestDeleteAccount: (FinancialAccountEntity) -> Unit = {},
+    onConfirmDeleteAccount: (FinancialAccountEntity) -> Unit = {},
+    onDisableAccountInstead: (AccountUsageCheckResult) -> Unit = {},
+    onDismissAccountDeleteDialogs: () -> Unit = {}
 ) {
     LaunchedEffect(Unit) {
         onCalculateDrawerReconciliation()
@@ -116,26 +132,53 @@ fun CashAndExpensesScreen(
                 icon = { Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 modifier = Modifier.testTag("tab_shift_reconciliation")
             )
+            Tab(
+                selected = uiState.cashSubTab == 2,
+                onClick = { onSelectSubTab(2) },
+                text = { Text("إدارة الحسابات والبنوك (الدليل)", fontWeight = FontWeight.Bold, fontSize = 13.sp) },
+                icon = { Icon(Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.testTag("tab_accounts_management")
+            )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        if (uiState.cashSubTab == 0) {
-            // محتوى تبويب المصروفات والنثريات
-            ExpensesContent(
-                expenses = expenses,
-                onOpenAddDialog = onOpenAddExpenseDialog,
-                currencySymbol = uiState.currencySymbol
-            )
-        } else {
-            // محتوى تبويب مطابقة الصندوق وإغلاق الشفت
-            ShiftReconciliationContent(
-                uiState = uiState,
-                cashShifts = cashShifts,
-                onDrawerInputsChanged = onDrawerInputsChanged,
-                onCalculateReconciliation = onCalculateDrawerReconciliation,
-                onCloseShiftAndSave = onCloseShiftAndSave
-            )
+        when (uiState.cashSubTab) {
+            0 -> {
+                // محتوى تبويب المصروفات والنثريات
+                ExpensesContent(
+                    expenses = expenses,
+                    onOpenAddDialog = onOpenAddExpenseDialog,
+                    currencySymbol = uiState.currencySymbol
+                )
+            }
+            1 -> {
+                // محتوى تبويب مطابقة الصندوق وإغلاق الشفت
+                ShiftReconciliationContent(
+                    uiState = uiState,
+                    cashShifts = cashShifts,
+                    onDrawerInputsChanged = onDrawerInputsChanged,
+                    onCalculateReconciliation = onCalculateDrawerReconciliation,
+                    onCloseShiftAndSave = onCloseShiftAndSave
+                )
+            }
+            else -> {
+                // محتوى تبويب إدارة الحسابات والبنوك والدليل المحاسبي
+                AccountsManagementScreen(
+                    uiState = uiState,
+                    onSearchChanged = onAccountsSearchChanged,
+                    onFilterTypeChanged = onAccountsFilterTypeChanged,
+                    onOpenAddDialog = onOpenAddAccountDialog,
+                    onOpenEditDialog = onOpenEditAccountDialog,
+                    onDismissAddEditDialog = onDismissAddEditAccountDialog,
+                    onSaveAccount = onSaveAccount,
+                    onToggleActive = onToggleAccountActive,
+                    onRequestDeleteAccount = onRequestDeleteAccount,
+                    onConfirmDeleteAccount = onConfirmDeleteAccount,
+                    onDisableInstead = onDisableAccountInstead,
+                    onDismissDeleteDialogs = onDismissAccountDeleteDialogs
+                )
+            }
         }
     }
 

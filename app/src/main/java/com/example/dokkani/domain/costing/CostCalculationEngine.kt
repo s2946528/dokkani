@@ -120,6 +120,9 @@ class CostCalculationEngine(
             CostValuationMethod.LAST_PURCHASE_PRICE -> {
                 calculateLastPurchaseCost(product, baseUnit, targetUnit, steps)
             }
+            CostValuationMethod.LIFO -> {
+                calculateFifoCurrentUnitCost(product, baseUnit, targetUnit, steps)
+            }
         }
     }
 

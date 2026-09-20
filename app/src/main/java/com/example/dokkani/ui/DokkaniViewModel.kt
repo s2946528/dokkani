@@ -25,6 +25,8 @@ import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
+import com.example.dokkani.data.local.entities.UserEntity
+import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.domain.cash.CashDrawerEngine
 import com.example.dokkani.domain.cash.CashReconciliationResult
 import com.example.dokkani.domain.credit.CreditNotebookEngine
@@ -79,6 +81,18 @@ data class OpeningBalanceSupplier(
     val phone: String,
     val openingPayable: Double
 )
+
+data class FixedAssetInput(
+    val name: String,
+    val category: String,
+    val purchaseCost: Double,
+    val notes: String = ""
+)
+
+enum class PropertyStatus {
+    OWNED,
+    RENTED
+}
 
 data class DokkaniUiState(
     val selectedTab: Int = 0,
@@ -860,12 +874,20 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         selectedBaseCurrency: CurrencyEntity? = null,
         isNewGrocery: Boolean,
         storeName: String,
-        cashierName: String,
-        openingCash: Double,
-        valuationMethod: CostValuationMethod,
-        openingItems: List<OpeningBalanceItem>,
-        openingCustomers: List<OpeningBalanceCustomer>,
-        openingSuppliers: List<OpeningBalanceSupplier>,
+        adminPin: String = "1234",
+        cashierName: String = "كاشير 1",
+        cashierPin: String = "1234",
+        initialCapital: Double = 0.0,
+        openingCashDrawer: Double = 0.0,
+        bankBalance: Double = 0.0,
+        valuationMethod: CostValuationMethod = CostValuationMethod.WAC,
+        propertyStatus: PropertyStatus = PropertyStatus.OWNED,
+        monthlyRent: Double = 0.0,
+        prepaidMonths: Int = 0,
+        fixedAssets: List<FixedAssetInput> = emptyList(),
+        openingItems: List<OpeningBalanceItem> = emptyList(),
+        openingCustomers: List<OpeningBalanceCustomer> = emptyList(),
+        openingSuppliers: List<OpeningBalanceSupplier> = emptyList(),
         onCompleted: () -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -881,31 +903,89 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
                 db.systemSettingsDao().insertOrUpdateSettings(
                     currentSettings.copy(
-                        storeName = storeName,
+                        storeName = storeName.ifBlank { "تموينات ومخضار السعادة" },
                         costValuationMethod = valuationMethod,
                         lastUpdated = now
                     )
                 )
 
-                // 2. إنشاء وفتح أول شفت مالي كاشير
+                // 2. تحديث وتثبيت مستخدم مدير النظام والكاشير
+                db.userDao().insertUser(
+                    UserEntity(
+                        id = 1,
+                        username = "admin",
+                        fullName = "مدير النظام",
+                        pinCode = adminPin.ifBlank { "1234" },
+                        role = UserRole.ADMIN,
+                        isActive = true
+                    )
+                )
+                db.userDao().insertUser(
+                    UserEntity(
+                        id = 2,
+                        username = "cashier1",
+                        fullName = cashierName.ifBlank { "كاشير 1" },
+                        pinCode = cashierPin.ifBlank { "1234" },
+                        role = UserRole.CASHIER,
+                        isActive = true
+                    )
+                )
+
+                // 3. إنشاء وفتح أول شفت مالي كاشير
+                val effectiveOpeningCash = if (openingCashDrawer > 0.0) openingCashDrawer else (if (initialCapital > 0.0) initialCapital else 300.0)
                 val shiftNumber = "SHF-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date(now))}"
                 val initialShift = CashShiftEntity(
                     shiftNumber = shiftNumber,
-                    cashierName = cashierName,
+                    cashierName = cashierName.ifBlank { "كاشير 1" },
                     startTime = now,
-                    openingCash = openingCash,
+                    openingCash = effectiveOpeningCash,
                     totalCashSales = 0.0,
                     totalCashCollections = 0.0,
                     totalCashExpenses = 0.0,
-                    expectedCashInDrawer = openingCash,
-                    actualPhysicalCash = openingCash,
+                    expectedCashInDrawer = effectiveOpeningCash,
+                    actualPhysicalCash = effectiveOpeningCash,
                     cashDiscrepancy = 0.0,
                     status = "OPEN",
-                    notes = if (isNewGrocery) "افتتاح أول فترة مالية - بقالة جديدة" else "افتتاح أول فترة مالية - ترحيل أرصدة وجرد افتتاحي"
+                    notes = if (isNewGrocery) "افتتاح أول فترة مالية - تأسيس بقالة جديدة" else "افتتاح أول فترة مالية - ترحيل أرصدة ودفاتر"
                 )
                 db.cashShiftDao().insertShift(initialShift)
 
-                // 3. في حال البقالة القائمة: إدراج بضاعة أول المدة
+                // 4. تسجيل الأصول الثابتة المدخلة إن وجدت
+                if (fixedAssets.isNotEmpty()) {
+                    fixedAssets.forEachIndexed { index, asset ->
+                        if (asset.purchaseCost > 0.0) {
+                            db.fixedAssetDao().insertAsset(
+                                FixedAssetEntity(
+                                    assetCode = "AST-INIT-${100 + index}",
+                                    name = asset.name,
+                                    category = asset.category,
+                                    purchaseCost = asset.purchaseCost,
+                                    currentValue = asset.purchaseCost,
+                                    purchaseDate = now,
+                                    notes = asset.notes.ifBlank { "أصل ثابت افتتاحي عند التأسيس" }
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // 5. تسجيل مصروف الإيجار المدفوع مقدماً إذا كان العقار مستأجراً
+                if (propertyStatus == PropertyStatus.RENTED && monthlyRent * prepaidMonths > 0.0) {
+                    val prepaidTotal = monthlyRent * prepaidMonths
+                    db.leaseholdRightDao().insertLeaseholdRight(
+                        LeaseholdRightEntity(
+                            code = "PREPAID-RENT-${SimpleDateFormat("yyyyMM", Locale.getDefault()).format(Date(now))}",
+                            name = "إيجار المحل المدفوع مقدماً ($prepaidMonths أشهر)",
+                            initialCost = prepaidTotal,
+                            currentBookValue = prepaidTotal,
+                            contractStartDate = now,
+                            contractDurationYears = 1,
+                            notes = "إيجار شهري قدره $monthlyRent لمدة $prepaidMonths أشهر"
+                        )
+                    )
+                }
+
+                // 6. في حال البقالة القائمة: إدراج بضاعة أول المدة
                 if (!isNewGrocery && openingItems.isNotEmpty()) {
                     openingItems.forEachIndexed { index, item ->
                         val code = "INIT-${1000 + index}"
@@ -947,7 +1027,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
-                // 4. إدراج ديون العملاء الافتتاحية من الدفتر القديم
+                // 7. إدراج ديون العملاء الافتتاحية من الدفتر القديم
                 if (!isNewGrocery && openingCustomers.isNotEmpty()) {
                     openingCustomers.forEach { cust ->
                         db.partyDao().insertParty(
@@ -963,7 +1043,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
-                // 5. إدراج مستحقات الموردين الافتتاحية
+                // 8. إدراج مستحقات الموردين الافتتاحية
                 if (!isNewGrocery && openingSuppliers.isNotEmpty()) {
                     openingSuppliers.forEach { supp ->
                         db.partyDao().insertParty(
@@ -978,7 +1058,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
-                // 6. حفظ اكتمال التهيئة في تفضيلات الجلسة
+                // 9. حفظ اكتمال التهيئة في تفضيلات الجلسة
                 sessionManager.setOnboardingCompleted(true)
             }
 

@@ -45,6 +45,7 @@ enum class InvoiceStatus(val labelArabic: String) {
 enum class CostValuationMethod(val labelArabic: String, val descriptionArabic: String) {
     WAC("المتوسط المرجح (WAC)", "Weighted Average Cost - قسمة إجمالي تكلفة البضاعة المتاحة على إجمالي الكميات المتاحة."),
     FIFO("الوارد أولاً صادر أولاً (FIFO)", "First In, First Out - تقييم المخزون الصادر بناءً على أقدم طبقات الشراء المخزنة أولاً."),
+    LIFO("الوارد أخيراً صادر أولاً (LIFO)", "Last In, First Out - تقييم المخزون الصادر بناءً على أحدث طبقات الشراء المخزنة أولاً."),
     LAST_PURCHASE_PRICE("آخر سعر شراء", "Last Purchase Price - اعتماد سعر آخر فاتورة توريد/شراء مسجلة للصنف.")
 }
 

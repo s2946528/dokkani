@@ -216,6 +216,7 @@ private fun ProfitAndLossView(
                                     text = when (method) {
                                         CostValuationMethod.WAC -> "المتوسط المرجح (WAC)"
                                         CostValuationMethod.FIFO -> "الوارد أولاً (FIFO)"
+                                        CostValuationMethod.LIFO -> "الوارد أخيراً (LIFO)"
                                         CostValuationMethod.LAST_PURCHASE_PRICE -> "آخر سعر شراء"
                                     },
                                     fontSize = 11.sp,

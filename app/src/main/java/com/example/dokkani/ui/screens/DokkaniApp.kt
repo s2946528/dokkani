@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,8 +39,6 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -105,10 +102,6 @@ fun DokkaniApp(
     val allowedTabs = allTabs.filter { currentUserRole in it.requiredRoles }
     val currentTabIndex = uiState.selectedTab.coerceIn(0, (allowedTabs.size - 1).coerceAtLeast(0))
 
-    // الخيارات الظاهرة في الشريط العلوي (العمليات المباشرة فقط بدون فواتير الشراء أو الإعدادات التفصيلية)
-    val topBarTabTitles = setOf("الفواتير والسندات", "الخزينة والمصروفات", "دفتر الديون")
-    val topBarTabs = allowedTabs.filter { it.title in topBarTabTitles }
-
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -118,7 +111,7 @@ fun DokkaniApp(
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    // ترويسة القائمة الجانبية
+                    // ترويسة القائمة الجانبية الشاملة
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -149,13 +142,13 @@ fun DokkaniApp(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    // قائمة خيارات التطبيق
+                    // القائمة الجانبية المحدثة لجميع شاشات وأقسام النظام دون فواتير الشراء
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        allowedTabs.forEach { tab ->
+                        allowedTabs.filter { it.title != "فواتير الشراء" }.forEach { tab ->
                             val originalIndex = allowedTabs.indexOf(tab)
                             val isSelected = currentTabIndex == originalIndex
 
@@ -189,7 +182,7 @@ fun DokkaniApp(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    // الإجراءات الإضافية أسفل القائمة الجانبية
+                    // خيارات وإجراءات النظام أسفل القائمة
                     if (currentUserRole == UserRole.ADMIN) {
                         NavigationDrawerItem(
                             label = { Text("معالج التهيئة الأولى والرقابة", fontSize = 13.sp) },
@@ -228,10 +221,20 @@ fun DokkaniApp(
                         }
                     },
                     title = {
-                        val activeTitle = allowedTabs.getOrNull(currentTabIndex)?.title ?: "دكاني"
+                        // عرض عنوان الشاشة النشطة حالياً ديناميكياً
+                        val activeTitle = allowedTabs.getOrNull(currentTabIndex)?.title ?: "دكاني POS"
                         Column {
-                            Text("دكاني - $activeTitle", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Text("الدور: ${currentUserRole.labelArabic}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                activeTitle,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "نظام دكاني - ${currentUserRole.labelArabic}",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     },
                     actions = {
@@ -267,28 +270,6 @@ fun DokkaniApp(
                     .padding(paddingValues)
             ) {
                 if (allowedTabs.isNotEmpty()) {
-                    // الشريط العلوي الملتزم بالخيارات الأساسية النظيفة دون فواتير الشراء أو الإعدادات
-                    val selectedTopTabIndex = topBarTabs.indexOfFirst { allowedTabs.indexOf(it) == currentTabIndex }
-
-                    ScrollableTabRow(
-                        selectedTabIndex = if (selectedTopTabIndex >= 0) selectedTopTabIndex else 0,
-                        edgePadding = 8.dp,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ) {
-                        topBarTabs.forEach { tab ->
-                            val globalIndex = allowedTabs.indexOf(tab)
-                            val isSelected = (currentTabIndex == globalIndex)
-
-                            Tab(
-                                selected = isSelected,
-                                onClick = { viewModel.selectTab(globalIndex) },
-                                text = { Text(tab.title, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                                icon = { Icon(tab.icon, contentDescription = tab.title) }
-                            )
-                        }
-                    }
-
                     Box(modifier = Modifier.fillMaxSize()) {
                         val activeTabTitle = allowedTabs.getOrNull(currentTabIndex)?.title ?: ""
                         when (activeTabTitle) {
@@ -306,7 +287,9 @@ fun DokkaniApp(
                                     onSaveProduct = viewModel::saveProduct,
                                     onDeleteProduct = viewModel::deleteProduct,
                                     onSaveUnit = viewModel::saveProductUnit,
-                                    onDeleteUnit = viewModel::deleteProductUnit
+                                    onDeleteUnit = viewModel::deleteProductUnit,
+                                    onRenameCategory = viewModel::renameCategory,
+                                    onDeleteCategory = viewModel::deleteCategory
                                 )
                             }
                             "التكلفة والخضار" -> {

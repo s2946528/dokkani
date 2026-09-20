@@ -702,6 +702,27 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun renameCategory(oldName: String, newName: String) {
+        if (oldName.isBlank() || newName.isBlank() || oldName == newName) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val productsToUpdate = db.productDao().getAllProductsSync().filter { it.category.trim() == oldName.trim() }
+            productsToUpdate.forEach { prod ->
+                db.productDao().updateProduct(prod.copy(category = newName.trim()))
+            }
+        }
+    }
+
+    fun deleteCategory(categoryName: String, reassignTo: String = "عام") {
+        if (categoryName.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val targetCategory = reassignTo.ifBlank { "عام" }
+            val productsToUpdate = db.productDao().getAllProductsSync().filter { it.category.trim() == categoryName.trim() }
+            productsToUpdate.forEach { prod ->
+                db.productDao().updateProduct(prod.copy(category = targetCategory))
+            }
+        }
+    }
+
     fun saveParty(party: PartyEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             db.partyDao().insertParty(party)

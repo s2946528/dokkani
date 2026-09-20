@@ -79,6 +79,7 @@ fun PosCartComponent(
     cartSummary: CartSummary,
     currencySymbol: String = "ر.س",
     onQuantityChange: (cartItemId: String, newQty: Double) -> Unit,
+    onUnitPriceChange: (cartItemId: String, newPrice: Double) -> Unit = { _, _ -> },
     onUnitChange: (cartItemId: String, newUnit: ProductUnitEntity) -> Unit = { _, _ -> },
     onNoteChange: (cartItemId: String, newNote: String) -> Unit = { _, _ -> },
     onRemoveItem: (cartItemId: String) -> Unit,
@@ -229,6 +230,7 @@ fun PosCartComponent(
                             item = item,
                             currencySymbol = currencySymbol,
                             onQuantityChange = { newQty -> onQuantityChange(item.cartItemId, newQty) },
+                            onUnitPriceChange = { newPrice -> onUnitPriceChange(item.cartItemId, newPrice) },
                             onUnitChange = { newUnit -> onUnitChange(item.cartItemId, newUnit) },
                             onNoteChange = { note -> onNoteChange(item.cartItemId, note) },
                             onRemove = { onRemoveItem(item.cartItemId) }
@@ -366,12 +368,14 @@ fun PosCartItemRow(
     item: PosCartItem,
     currencySymbol: String,
     onQuantityChange: (Double) -> Unit,
+    onUnitPriceChange: (Double) -> Unit = {},
     onUnitChange: (ProductUnitEntity) -> Unit = {},
     onNoteChange: (String) -> Unit = {},
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showQtyDialog by remember { mutableStateOf(false) }
+    var showPriceDialog by remember { mutableStateOf(false) }
     var showNoteDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var unitMenuExpanded by remember { mutableStateOf(false) }
@@ -582,68 +586,90 @@ fun PosCartItemRow(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 // منتقي الوحدات المتعددة والسعر الفردي
-                Box {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                        modifier = Modifier.clickable(enabled = item.availableUnits.size > 1) {
-                            unitMenuExpanded = true
-                        }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Box {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                            modifier = Modifier.clickable {
+                                if (item.availableUnits.size > 1) {
+                                    unitMenuExpanded = true
+                                } else {
+                                    showPriceDialog = true
+                                }
+                            }
                         ) {
-                            Text(
-                                text = "%.2f %s / %s".format(item.unitPrice, currencySymbol, item.unitName),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            if (item.availableUnits.size > 1) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "اختيار وحدة أخرى",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "%.2f %s / %s".format(item.unitPrice, currencySymbol, item.unitName),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (item.availableUnits.size > 1) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = "اختيار وحدة أخرى",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // القائمة المنسدلة للوحدات المتعددة
+                        DropdownMenu(
+                            expanded = unitMenuExpanded,
+                            onDismissRequest = { unitMenuExpanded = false }
+                        ) {
+                            item.availableUnits.forEach { unit ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = unit.unitName,
+                                                fontWeight = if (unit.id == item.unitId) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = "%.2f %s".format(unit.sellingPrice, currencySymbol),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        unitMenuExpanded = false
+                                        onUnitChange(unit)
+                                    }
                                 )
                             }
                         }
                     }
 
-                    // القائمة المنسدلة للوحدات المتعددة
-                    DropdownMenu(
-                        expanded = unitMenuExpanded,
-                        onDismissRequest = { unitMenuExpanded = false }
+                    // زر تعديل السعر المباشر
+                    IconButton(
+                        onClick = { showPriceDialog = true },
+                        modifier = Modifier.size(26.dp)
                     ) {
-                        item.availableUnits.forEach { unit ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = unit.unitName,
-                                            fontWeight = if (unit.id == item.unitId) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "%.2f %s".format(unit.sellingPrice, currencySymbol),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    unitMenuExpanded = false
-                                    onUnitChange(unit)
-                                }
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.EditNote,
+                            contentDescription = "تعديل سعر الشراء",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
 
@@ -740,6 +766,21 @@ fun PosCartItemRow(
         )
     }
 
+    // نافذة الإدخال الرقمي المباشر لسعر الشراء/الوحدة
+    if (showPriceDialog) {
+        CartItemPriceDialog(
+            currentPrice = item.unitPrice,
+            productName = item.productName,
+            unitName = item.unitName,
+            currencySymbol = currencySymbol,
+            onConfirm = { newPrice ->
+                showPriceDialog = false
+                onUnitPriceChange(newPrice)
+            },
+            onDismiss = { showPriceDialog = false }
+        )
+    }
+
     // نافذة إدخال الملاحظات والبيانات الفرعية للصنف
     if (showNoteDialog) {
         CartItemNoteDialog(
@@ -752,6 +793,69 @@ fun PosCartItemRow(
             onDismiss = { showNoteDialog = false }
         )
     }
+}
+
+/**
+ * نافذة الإدخال الرقمي المباشر لسعر الشراء والوحدة
+ */
+@Composable
+private fun CartItemPriceDialog(
+    currentPrice: Double,
+    productName: String,
+    unitName: String,
+    currencySymbol: String,
+    onConfirm: (Double) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var priceText by remember {
+        mutableStateOf(if (currentPrice % 1.0 == 0.0) currentPrice.toInt().toString() else "%.2f".format(currentPrice))
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "تعديل سعر الشراء والتكلفة ($unitName)",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = productName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = priceText,
+                    onValueChange = { priceText = it },
+                    label = { Text("سعر الشراء والتكلفة ($currencySymbol)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("cart_price_input_field")
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val p = priceText.toDoubleOrNull() ?: currentPrice
+                    onConfirm(p.coerceAtLeast(0.0))
+                }
+            ) {
+                Text("حفظ السعر")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
 }
 
 /**

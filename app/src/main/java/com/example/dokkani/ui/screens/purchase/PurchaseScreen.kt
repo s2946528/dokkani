@@ -936,10 +936,18 @@ private fun InvoiceItemsAndTotalsCard(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    var qtyInput by remember(item.quantity) {
+                                        mutableStateOf(if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else item.quantity.toString())
+                                    }
+                                    var costInput by remember(item.costPrice) {
+                                        mutableStateOf(if (item.costPrice % 1.0 == 0.0) item.costPrice.toInt().toString() else item.costPrice.toString())
+                                    }
+
                                     // حقل الكمية
                                     OutlinedTextField(
-                                        value = if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else item.quantity.toString(),
+                                        value = qtyInput,
                                         onValueChange = { str ->
+                                            qtyInput = str
                                             str.toDoubleOrNull()?.let { qty ->
                                                 viewModel.updateItemQuantity(item.productId, item.unitId, qty)
                                             }
@@ -952,13 +960,14 @@ private fun InvoiceItemsAndTotalsCard(
 
                                     // حقل سعر الشراء والتكلفة الجديد
                                     OutlinedTextField(
-                                        value = if (item.costPrice % 1.0 == 0.0) item.costPrice.toInt().toString() else item.costPrice.toString(),
+                                        value = costInput,
                                         onValueChange = { str ->
+                                            costInput = str
                                             str.toDoubleOrNull()?.let { cost ->
                                                 viewModel.updateItemCostPrice(item.productId, item.unitId, cost)
                                             }
                                         },
-                                        label = { Text("سعر التكلفة الجديد") },
+                                        label = { Text("سعر الشراء") },
                                         modifier = Modifier.weight(1.2f),
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         singleLine = true

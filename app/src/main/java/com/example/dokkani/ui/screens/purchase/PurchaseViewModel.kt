@@ -82,6 +82,8 @@ data class PurchaseUiState(
     val searchQuery: String = "",
     val categories: List<String> = listOf("الكل"),
     val selectedCategory: String = "الكل",
+    val sortOption: com.example.dokkani.ui.models.ProductSortOption = com.example.dokkani.ui.models.ProductSortOption.POPULAR,
+    val productStockMap: Map<Long, Double> = emptyMap(),
     val items: List<PurchaseLineItem> = emptyList(),
     val isTaxApplied: Boolean = false,
     val purchaseTaxRate: Double = 0.0,
@@ -187,6 +189,11 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                 val allCategories = listOf("الكل") + combinedCategories
 
+                val stockMap = mutableMapOf<Long, Double>()
+                products.forEach { p ->
+                    stockMap[p.product.id] = stockMovementDao.getTotalStockQuantity(p.product.id)
+                }
+
                 _uiState.update { state ->
                     val validSelectedCategory = if (allCategories.contains(state.selectedCategory)) {
                         state.selectedCategory
@@ -195,6 +202,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                     }
                     state.copy(
                         productsWithUnits = products,
+                        productStockMap = stockMap,
                         categories = allCategories,
                         selectedCategory = validSelectedCategory
                     )
@@ -275,6 +283,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
     fun setSelectedCategory(category: String) {
         _uiState.update { it.copy(selectedCategory = category) }
+    }
+
+    fun setSortOption(option: com.example.dokkani.ui.models.ProductSortOption) {
+        _uiState.update { it.copy(sortOption = option) }
     }
 
     fun setTaxApplied(applied: Boolean) {

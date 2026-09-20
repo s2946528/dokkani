@@ -69,6 +69,7 @@ data class PosUiState(
     val searchQuery: String = "",
     val categories: List<String> = listOf("الكل"),
     val selectedCategory: String = "الكل",
+    val sortOption: com.example.dokkani.ui.models.ProductSortOption = com.example.dokkani.ui.models.ProductSortOption.POPULAR,
 
     // فحص المخزون والضبط
     val systemSettings: SystemSettingsEntity? = null,
@@ -559,6 +560,10 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSelectedCategory(category: String) {
         _uiState.update { it.copy(selectedCategory = category) }
+    }
+
+    fun setSortOption(option: com.example.dokkani.ui.models.ProductSortOption) {
+        _uiState.update { it.copy(sortOption = option) }
     }
 
     private fun recalculateSummary(

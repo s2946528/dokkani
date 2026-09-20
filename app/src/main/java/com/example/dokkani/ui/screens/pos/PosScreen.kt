@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.example.dokkani.ui.components.BarcodeTextField
+import com.example.dokkani.ui.components.ProductSortSelector
+import com.example.dokkani.ui.models.sortProducts
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
@@ -691,36 +693,49 @@ private fun PosProductsPanel(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // تصنيفات سريعة قابلة للتمرير مع شارات عالية التباين
+            // تصنيفات سريعة وقائمة الفرز والترتيب
             val categories = uiState.categories.ifEmpty { listOf("الكل") }
-            LazyRow(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                items(categories) { cat ->
-                    val isSelected = uiState.selectedCategory == cat
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.setSelectedCategory(cat) },
-                        label = {
-                            Text(
-                                cat,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(categories) { cat ->
+                        val isSelected = uiState.selectedCategory == cat
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setSelectedCategory(cat) },
+                            label = {
+                                Text(
+                                    cat,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = if (isSelected) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        },
-                        leadingIcon = if (isSelected) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    )
+                    }
                 }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                ProductSortSelector(
+                    selectedOption = uiState.sortOption,
+                    onOptionSelected = { viewModel.setSortOption(it) }
+                )
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -734,7 +749,7 @@ private fun PosProductsPanel(
                         p.units.any { it.barcode.lowercase().contains(query) }
                 val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                 matchesQuery && matchesCat
-            }
+            }.sortProducts(uiState.sortOption, uiState.productStockMap)
 
             if (filtered.isEmpty()) {
                 Box(
@@ -1493,19 +1508,32 @@ private fun PosInvoiceSectionOld(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // تصنيفات سريعة
+                // تصنيفات سريعة وقائمة الفرز
                 val categories = uiState.categories.ifEmpty { listOf("الكل") }
-                LazyRow(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    items(categories) { cat ->
-                        FilterChip(
-                            selected = uiState.selectedCategory == cat,
-                            onClick = { viewModel.setSelectedCategory(cat) },
-                            label = { Text(cat, fontSize = 11.sp) }
-                        )
+                    LazyRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(categories) { cat ->
+                            FilterChip(
+                                selected = uiState.selectedCategory == cat,
+                                onClick = { viewModel.setSelectedCategory(cat) },
+                                label = { Text(cat, fontSize = 11.sp) }
+                            )
+                        }
                     }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    ProductSortSelector(
+                        selectedOption = uiState.sortOption,
+                        onOptionSelected = { viewModel.setSortOption(it) }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -1519,7 +1547,7 @@ private fun PosInvoiceSectionOld(
                             p.units.any { it.barcode.lowercase().contains(query) }
                     val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                     matchesQuery && matchesCat
-                }
+                }.sortProducts(uiState.sortOption, uiState.productStockMap)
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),

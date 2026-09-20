@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.dokkani.ui.components.BarcodeTextField
+import com.example.dokkani.ui.components.ProductSortSelector
+import com.example.dokkani.ui.models.sortProducts
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
@@ -691,37 +693,52 @@ private fun ProductSearchAndAddCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // تصنيفات سريعة قابلة للتمرير مع شارات عالية التباين
+            // تصنيفات سريعة وقائمة الفرز
             val categories = uiState.categories.ifEmpty { listOf("الكل") }
-            LazyRow(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                items(categories) { cat ->
-                    val isSelected = uiState.selectedCategory == cat
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.setSelectedCategory(cat) },
-                        label = {
-                            Text(
-                                cat,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(categories) { cat ->
+                        val isSelected = uiState.selectedCategory == cat
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setSelectedCategory(cat) },
+                            label = {
+                                Text(
+                                    cat,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = if (isSelected) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        },
-                        leadingIcon = if (isSelected) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    )
+                    }
                 }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                ProductSortSelector(
+                    selectedOption = uiState.sortOption,
+                    onOptionSelected = { viewModel.setSortOption(it) }
+                )
             }
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             val filteredProducts = uiState.productsWithUnits.filter { p ->
                 val query = uiState.searchQuery.trim().lowercase()
@@ -730,7 +747,7 @@ private fun ProductSearchAndAddCard(
                         p.units.any { it.barcode.lowercase().contains(query) }
                 val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                 matchesQuery && matchesCat
-            }
+            }.sortProducts(uiState.sortOption, uiState.productStockMap)
 
             if (filteredProducts.isEmpty()) {
                 Column(

@@ -14,29 +14,48 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.ProductionQuantityLimits
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,11 +64,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.CostValuationMethod
+import com.example.dokkani.data.local.entities.PartyType
+import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.domain.credit.CreditNotebookEngine
 import com.example.dokkani.domain.reports.ExpiryStatus
 import com.example.dokkani.domain.reports.InventoryHealthReport
 import com.example.dokkani.domain.reports.ProfitAndLossReport
 import com.example.dokkani.domain.reports.TopProductsReport
 import com.example.dokkani.ui.DokkaniUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
 
 /**
  * شاشة لوحة التحكم والتقارير المالية والمخزنية (Dashboard & Reports)
@@ -130,6 +156,13 @@ fun ReportsDashboardScreen(
                 icon = { Icon(Icons.Default.ProductionQuantityLimits, contentDescription = null, modifier = Modifier.size(16.dp)) },
                 modifier = Modifier.testTag("tab_inventory_health_report")
             )
+            Tab(
+                selected = uiState.reportSubTab == 3,
+                onClick = { onSelectSubTab(3) },
+                text = { Text("كشوفات الحسابات", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                icon = { Icon(Icons.Default.Assessment, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                modifier = Modifier.testTag("tab_account_statements_report")
+            )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -152,6 +185,7 @@ fun ReportsDashboardScreen(
                 )
                 1 -> TopProductsView(report = uiState.topProductsReport)
                 2 -> InventoryHealthView(report = uiState.inventoryHealthReport)
+                3 -> AccountStatementsReportView(uiState = uiState)
             }
         }
     }
@@ -720,6 +754,508 @@ private fun InventoryHealthView(report: InventoryHealthReport?) {
                             color = Color(0xFF64748B)
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * تبويب كشوفات الحسابات التفصيلية (Account Statements & Ledgers)
+ */
+@Composable
+private fun AccountStatementsReportView(
+    uiState: DokkaniUiState,
+    currencySymbol: String = "ر.س"
+) {
+    var selectedCategory by remember { mutableIntStateOf(0) } // 0: العملاء, 1: الموردين, 2: الصندوق, 3: المصروفات
+    var selectedPartyId by remember { mutableStateOf<Long?>(null) } // null = الكل
+    var selectedPeriod by remember { mutableIntStateOf(0) } // 0: الكل, 1: اليوم, 2: هذا الأسبوع, 3: هذا الشهر
+    var partyDropdownExpanded by remember { mutableStateOf(false) }
+
+    val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+
+    // إعداد فلترة الفترة الزمنية
+    val minTimestamp = remember(selectedPeriod) {
+        val now = System.currentTimeMillis()
+        when (selectedPeriod) {
+            1 -> now - (24 * 60 * 60 * 1000L) // اليوم
+            2 -> now - (7 * 24 * 60 * 60 * 1000L) // هذا الأسبوع
+            3 -> now - (30L * 24 * 60 * 60 * 1000L) // هذا الشهر
+            else -> 0L
+        }
+    }
+
+    // تصفية العملاء أو الموردين المتاحين
+    val filteredParties = remember(uiState.parties, selectedCategory) {
+        when (selectedCategory) {
+            0 -> uiState.parties.filter { it.type == PartyType.CUSTOMER || it.type == PartyType.BOTH }
+            1 -> uiState.parties.filter { it.type == PartyType.SUPPLIER || it.type == PartyType.BOTH }
+            else -> emptyList()
+        }
+    }
+
+    // بناء قائمة الحركات بحسب الفئة المختصرة
+    data class GeneralLedgerItem(
+        val date: Long,
+        val typeLabel: String,
+        val refNumber: String,
+        val description: String,
+        val debit: Double,   // مدين (+)
+        val credit: Double,  // دائن (-)
+        val isIncome: Boolean,
+        val runningBalance: Double
+    )
+
+    val ledgerData = remember(
+        selectedCategory,
+        selectedPartyId,
+        minTimestamp,
+        uiState.invoices,
+        uiState.vouchers,
+        uiState.expenses,
+        uiState.cashShifts
+    ) {
+        val items = mutableListOf<GeneralLedgerItem>()
+
+        when (selectedCategory) {
+            0 -> { // العملاء
+                val partyInvoices = uiState.invoices.filter { inv ->
+                    (selectedPartyId == null || inv.partyId == selectedPartyId) && inv.date >= minTimestamp
+                }
+                val partyVouchers = uiState.vouchers.filter { v ->
+                    (selectedPartyId == null || v.partyId == selectedPartyId) && v.date >= minTimestamp
+                }
+
+                partyInvoices.forEach { inv ->
+                    val amt = if (inv.remainingAmount > 0.001) inv.remainingAmount else inv.total
+                    items.add(
+                        GeneralLedgerItem(
+                            date = inv.date,
+                            typeLabel = "فاتورة مبيعات آجل",
+                            refNumber = inv.invoiceNumber,
+                            description = if (inv.notes.isNotBlank()) inv.notes else "مشتريات على الحساب",
+                            debit = amt,
+                            credit = 0.0,
+                            isIncome = false,
+                            runningBalance = 0.0
+                        )
+                    )
+                }
+
+                partyVouchers.forEach { v ->
+                    items.add(
+                        GeneralLedgerItem(
+                            date = v.date,
+                            typeLabel = "سند قبض وتسديد",
+                            refNumber = v.voucherNumber,
+                            description = if (v.notes.isNotBlank()) v.notes else "سداد دفعة نقدية - ${v.paymentMethod.labelArabic}",
+                            debit = 0.0,
+                            credit = v.amount,
+                            isIncome = true,
+                            runningBalance = 0.0
+                        )
+                    )
+                }
+            }
+
+            1 -> { // الموردين
+                val supplierInvoices = uiState.invoices.filter { inv ->
+                    (selectedPartyId == null || inv.partyId == selectedPartyId) && inv.date >= minTimestamp
+                }
+                val supplierVouchers = uiState.vouchers.filter { v ->
+                    (selectedPartyId == null || v.partyId == selectedPartyId) && v.date >= minTimestamp
+                }
+
+                supplierInvoices.forEach { inv ->
+                    val amt = if (inv.remainingAmount > 0.001) inv.remainingAmount else inv.total
+                    items.add(
+                        GeneralLedgerItem(
+                            date = inv.date,
+                            typeLabel = "فاتورة مشتريات",
+                            refNumber = inv.invoiceNumber,
+                            description = if (inv.notes.isNotBlank()) inv.notes else "توريد بضاعة بالآجل",
+                            debit = 0.0,
+                            credit = amt,
+                            isIncome = false,
+                            runningBalance = 0.0
+                        )
+                    )
+                }
+
+                supplierVouchers.forEach { v ->
+                    items.add(
+                        GeneralLedgerItem(
+                            date = v.date,
+                            typeLabel = "سند صرف وتدفيع",
+                            refNumber = v.voucherNumber,
+                            description = if (v.notes.isNotBlank()) v.notes else "دفعة سداد للمورد - ${v.paymentMethod.labelArabic}",
+                            debit = v.amount,
+                            credit = 0.0,
+                            isIncome = true,
+                            runningBalance = 0.0
+                        )
+                    )
+                }
+            }
+
+            2 -> { // الصندوق والخزينة
+                val cashInvoices = uiState.invoices.filter {
+                    it.paymentMethod == PaymentMethod.CASH && it.date >= minTimestamp
+                }
+                val cashVouchers = uiState.vouchers.filter {
+                    it.paymentMethod == PaymentMethod.CASH && it.date >= minTimestamp
+                }
+                val cashExpenses = uiState.expenses.filter {
+                    it.paymentMethod == PaymentMethod.CASH && it.date >= minTimestamp
+                }
+
+                cashInvoices.forEach { inv ->
+                    items.add(
+                        GeneralLedgerItem(
+                            date = inv.date,
+                            typeLabel = "مبيعات نقدية (درج)",
+                            refNumber = inv.invoiceNumber,
+                            description = "تحصيل نقدي مبادلة مبيعات",
+                            debit = inv.paidAmount,
+                            credit = 0.0,
+                            isIncome = true,
+                            runningBalance = 0.0
+                        )
+                    )
+                }
+
+                cashVouchers.forEach { v ->
+                    if (v.voucherNumber.startsWith("REC") || v.amount > 0) {
+                        items.add(
+                            GeneralLedgerItem(
+                                date = v.date,
+                                typeLabel = "سند قبض نقدي",
+                                refNumber = v.voucherNumber,
+                                description = if (v.notes.isNotBlank()) v.notes else "إيداع نقدي الخزينة",
+                                debit = v.amount,
+                                credit = 0.0,
+                                isIncome = true,
+                                runningBalance = 0.0
+                            )
+                        )
+                    }
+                }
+
+                cashExpenses.forEach { exp ->
+                    items.add(
+                        GeneralLedgerItem(
+                            date = exp.date,
+                            typeLabel = "مصروف نقدي من الصندوق",
+                            refNumber = exp.expenseNumber,
+                            description = "${exp.category} - ${exp.paidTo.ifBlank { "مصروف عام" }}",
+                            debit = 0.0,
+                            credit = exp.amount,
+                            isIncome = false,
+                            runningBalance = 0.0
+                        )
+                    )
+                }
+            }
+
+            3 -> { // المصروفات
+                val filteredExpenses = uiState.expenses.filter { it.date >= minTimestamp }
+                filteredExpenses.forEach { exp ->
+                    items.add(
+                        GeneralLedgerItem(
+                            date = exp.date,
+                            typeLabel = exp.category,
+                            refNumber = exp.expenseNumber,
+                            description = if (exp.paidTo.isNotBlank()) "المدفوع له: ${exp.paidTo} (${exp.notes})" else exp.notes.ifBlank { "مصروف تشغيلي" },
+                            debit = exp.amount,
+                            credit = 0.0,
+                            isIncome = false,
+                            runningBalance = 0.0
+                        )
+                    )
+                }
+            }
+        }
+
+        // ترتيب الحركات زمنياً وحساب الرصيد التراكمي
+        items.sortBy { it.date }
+
+        var cumulative = 0.0
+        val computedList = items.map { item ->
+            cumulative += (item.debit - item.credit)
+            item.copy(runningBalance = cumulative)
+        }
+
+        computedList.reversed() // إظهار الأحدث في الأعلى
+    }
+
+    val totalDebitSum = ledgerData.sumOf { it.debit }
+    val totalCreditSum = ledgerData.sumOf { it.credit }
+    val finalBalance = totalDebitSum - totalCreditSum
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // شريط اختيار فئة الحساب
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "اختر فئة الحساب لإصدار كشف الحساب التفصيلي:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Color(0xFF1E293B)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val categories = listOf(
+                            Pair("حسابات العملاء", Icons.Default.Person),
+                            Pair("حسابات الموردين", Icons.Default.LocalShipping),
+                            Pair("الصندوق والخزينة", Icons.Default.PointOfSale),
+                            Pair("المصروفات والنثريات", Icons.Default.MoneyOff)
+                        )
+                        items(categories.size) { index ->
+                            val (catName, icon) = categories[index]
+                            val isSelected = selectedCategory == index
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedCategory = index
+                                    selectedPartyId = null
+                                },
+                                label = { Text(catName, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // اختيار الحساب المحدد والفترة الزمنية
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (selectedCategory == 0 || selectedCategory == 1) {
+                            val selectedPartyName = filteredParties.find { it.id == selectedPartyId }?.name ?: "جميع الحسابات"
+                            Box(modifier = Modifier.weight(1f)) {
+                                OutlinedButton(
+                                    onClick = { partyDropdownExpanded = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(selectedPartyName, fontSize = 12.sp, maxLines = 1)
+                                }
+
+                                DropdownMenu(
+                                    expanded = partyDropdownExpanded,
+                                    onDismissRequest = { partyDropdownExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("جميع الحسابات", fontWeight = FontWeight.Bold) },
+                                        onClick = {
+                                            selectedPartyId = null
+                                            partyDropdownExpanded = false
+                                        }
+                                    )
+                                    filteredParties.forEach { p ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(p.name)
+                                                    Text(
+                                                        "${"%.2f".format(abs(p.currentBalance))} $currencySymbol",
+                                                        fontSize = 11.sp,
+                                                        color = Color.Gray
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                selectedPartyId = p.id
+                                                partyDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // فلتر الفترة الزمنية
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            val periods = listOf("الكل", "اليوم", "الأسبوع", "الشهر")
+                            items(periods.size) { idx ->
+                                FilterChip(
+                                    selected = selectedPeriod == idx,
+                                    onClick = { selectedPeriod = idx },
+                                    label = { Text(periods[idx], fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // بطاقات المؤشرات المدمجة لكشف الحساب
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("إجمالي المقبوضات/مدين (+)", fontSize = 11.sp, color = Color(0xFF166534))
+                        Text("${"%.2f".format(totalDebitSum)} $currencySymbol", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D))
+                    }
+                }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("إجمالي المدفوعات/دائن (-)", fontSize = 11.sp, color = Color(0xFF991B1B))
+                        Text("${"%.2f".format(totalCreditSum)} $currencySymbol", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+                    }
+                }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("صافي رصيد الحركة", fontSize = 11.sp, color = Color(0xFF1E40AF))
+                        Text("${"%.2f".format(finalBalance)} $currencySymbol", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8))
+                    }
+                }
+            }
+        }
+
+        // قائمة كشف الحساب التفصيلية
+        items(ledgerData) { item ->
+            Card(
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (item.isIncome) Color(0xFFDCFCE7) else Color(0xFFFEE2E2),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (item.isIncome) Icons.Default.ReceiptLong else Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    tint = if (item.isIncome) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(item.typeLabel, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0F172A))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFFF1F5F9)
+                                ) {
+                                    Text(
+                                        text = "#${item.refNumber}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF475569),
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Text(item.description, fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1)
+                            Text(
+                                text = dateFormat.format(Date(item.date)),
+                                fontSize = 10.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                    }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (item.debit > 0) {
+                            Text(
+                                text = "+${"%.2f".format(item.debit)} $currencySymbol",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF16A34A)
+                            )
+                        } else if (item.credit > 0) {
+                            Text(
+                                text = "-${"%.2f".format(item.credit)} $currencySymbol",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFFDC2626)
+                            )
+                        }
+                        Text(
+                            text = "الرصيد: ${"%.2f".format(item.runningBalance)} $currencySymbol",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF475569)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (ledgerData.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "لا توجد حركات مسجلة لهذا الحساب خلال الفترة المحددة",
+                        color = Color(0xFF64748B),
+                        fontSize = 13.sp
+                    )
                 }
             }
         }

@@ -101,6 +101,7 @@ data class DokkaniUiState(
     val expenses: List<ExpenseEntity> = emptyList(),
     val cashShifts: List<CashShiftEntity> = emptyList(),
     val invoices: List<InvoiceEntity> = emptyList(),
+    val vouchers: List<PaymentVoucherEntity> = emptyList(),
     val currencies: List<CurrencyEntity> = emptyList(),
     val baseCurrency: CurrencyEntity? = null,
     val settings: SystemSettingsEntity? = null,
@@ -241,6 +242,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.invoiceDao().getAllInvoices().collectLatest { invoices ->
                 _uiState.update { it.copy(invoices = invoices) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.paymentVoucherDao().getAllVouchers().collectLatest { vouchers ->
+                _uiState.update { it.copy(vouchers = vouchers) }
             }
         }
         viewModelScope.launch(Dispatchers.IO) {

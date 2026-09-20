@@ -80,6 +80,8 @@ data class PurchaseUiState(
     val paymentMethod: PaymentMethod = PaymentMethod.CASH,
     val productsWithUnits: List<ProductWithUnits> = emptyList(),
     val searchQuery: String = "",
+    val categories: List<String> = listOf("الكل"),
+    val selectedCategory: String = "الكل",
     val items: List<PurchaseLineItem> = emptyList(),
     val isTaxApplied: Boolean = false,
     val purchaseTaxRate: Double = 0.0,
@@ -163,7 +165,40 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch(Dispatchers.IO) {
             productDao.getProductsWithUnits().collectLatest { products ->
-                _uiState.update { it.copy(productsWithUnits = products) }
+                val defaultCategories = listOf(
+                    "خضار وفواكه",
+                    "ألبان وأجبان",
+                    "مخبوزات",
+                    "معلبات ومواد غذائية",
+                    "مشروبات ومياه",
+                    "حلويات وتسالي",
+                    "منظفات ومستلزمات منزلية",
+                    "عناية شخصية",
+                    "تموينات عامة",
+                    "عام"
+                )
+                val extractedCategories = products
+                    .map { it.product.category.trim() }
+                    .filter { it.isNotBlank() }
+
+                val combinedCategories = (defaultCategories + extractedCategories)
+                    .distinct()
+                    .sorted()
+
+                val allCategories = listOf("الكل") + combinedCategories
+
+                _uiState.update { state ->
+                    val validSelectedCategory = if (allCategories.contains(state.selectedCategory)) {
+                        state.selectedCategory
+                    } else {
+                        "الكل"
+                    }
+                    state.copy(
+                        productsWithUnits = products,
+                        categories = allCategories,
+                        selectedCategory = validSelectedCategory
+                    )
+                }
             }
         }
 
@@ -236,6 +271,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
     fun setSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    fun setSelectedCategory(category: String) {
+        _uiState.update { it.copy(selectedCategory = category) }
     }
 
     fun setTaxApplied(applied: Boolean) {

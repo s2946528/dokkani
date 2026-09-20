@@ -689,11 +689,47 @@ private fun ProductSearchAndAddCard(
                 }
             }
 
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // تصنيفات سريعة قابلة للتمرير مع شارات عالية التباين
+            val categories = uiState.categories.ifEmpty { listOf("الكل") }
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(categories) { cat ->
+                    val isSelected = uiState.selectedCategory == cat
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setSelectedCategory(cat) },
+                        label = {
+                            Text(
+                                cat,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        leadingIcon = if (isSelected) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+            }
+
             val filteredProducts = uiState.productsWithUnits.filter { p ->
                 val query = uiState.searchQuery.trim().lowercase()
-                query.isEmpty() || p.product.name.lowercase().contains(query) ||
+                val matchesQuery = query.isEmpty() || p.product.name.lowercase().contains(query) ||
                         p.product.code.lowercase().contains(query) ||
                         p.units.any { it.barcode.lowercase().contains(query) }
+                val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
+                matchesQuery && matchesCat
             }
 
             if (filteredProducts.isEmpty()) {

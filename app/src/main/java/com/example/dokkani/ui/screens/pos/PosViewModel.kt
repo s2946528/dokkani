@@ -67,6 +67,7 @@ data class PosUiState(
     val discount: Double = 0.0,
     val paidAmountInput: String = "",
     val searchQuery: String = "",
+    val categories: List<String> = listOf("الكل"),
     val selectedCategory: String = "الكل",
 
     // فحص المخزون والضبط
@@ -166,10 +167,43 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // 1. مراقبة المنتجات والوحدات
+        // 1. مراقبة المنتجات والوحدات واستخراج التصنيفات المحفوظة ديناميكياً
         viewModelScope.launch(Dispatchers.IO) {
             productDao.getProductsWithUnits().collectLatest { products ->
-                _uiState.update { it.copy(productsWithUnits = products) }
+                val defaultCategories = listOf(
+                    "خضار وفواكه",
+                    "ألبان وأجبان",
+                    "مخبوزات",
+                    "معلبات ومواد غذائية",
+                    "مشروبات ومياه",
+                    "حلويات وتسالي",
+                    "منظفات ومستلزمات منزلية",
+                    "عناية شخصية",
+                    "تموينات عامة",
+                    "عام"
+                )
+                val extractedCategories = products
+                    .map { it.product.category.trim() }
+                    .filter { it.isNotBlank() }
+
+                val combinedCategories = (defaultCategories + extractedCategories)
+                    .distinct()
+                    .sorted()
+
+                val allCategories = listOf("الكل") + combinedCategories
+
+                _uiState.update { state ->
+                    val validSelectedCategory = if (allCategories.contains(state.selectedCategory)) {
+                        state.selectedCategory
+                    } else {
+                        "الكل"
+                    }
+                    state.copy(
+                        productsWithUnits = products,
+                        categories = allCategories,
+                        selectedCategory = validSelectedCategory
+                    )
+                }
             }
         }
 

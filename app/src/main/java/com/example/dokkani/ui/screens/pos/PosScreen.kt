@@ -692,7 +692,7 @@ private fun PosProductsPanel(
             Spacer(modifier = Modifier.height(6.dp))
 
             // تصنيفات سريعة قابلة للتمرير مع شارات عالية التباين
-            val categories = listOf("الكل", "خضار وفواكه", "ألبان وأجبان", "مخبوزات", "معلبات ومواد غذائية")
+            val categories = uiState.categories.ifEmpty { listOf("الكل") }
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -732,7 +732,7 @@ private fun PosProductsPanel(
                         p.product.name.lowercase().contains(query) ||
                         p.product.code.lowercase().contains(query) ||
                         p.units.any { it.barcode.lowercase().contains(query) }
-                val matchesCat = uiState.selectedCategory == "الكل" || p.product.category == uiState.selectedCategory
+                val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                 matchesQuery && matchesCat
             }
 
@@ -1494,7 +1494,7 @@ private fun PosInvoiceSectionOld(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // تصنيفات سريعة
-                val categories = listOf("الكل", "خضار وفواكه", "ألبان وأجبان", "مخبوزات", "معلبات ومواد غذائية")
+                val categories = uiState.categories.ifEmpty { listOf("الكل") }
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1517,7 +1517,7 @@ private fun PosInvoiceSectionOld(
                             p.product.name.lowercase().contains(query) ||
                             p.product.code.lowercase().contains(query) ||
                             p.units.any { it.barcode.lowercase().contains(query) }
-                    val matchesCat = uiState.selectedCategory == "الكل" || p.product.category == uiState.selectedCategory
+                    val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                     matchesQuery && matchesCat
                 }
 

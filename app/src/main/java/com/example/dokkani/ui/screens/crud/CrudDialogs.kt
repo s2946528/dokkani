@@ -445,13 +445,14 @@ fun AddEditUnitDialog(
 @Composable
 fun AddEditPartyDialog(
     initialParty: PartyEntity? = null,
+    defaultPartyType: PartyType = PartyType.CUSTOMER,
     onSaveParty: (PartyEntity) -> Unit,
     onDismiss: () -> Unit,
     currencySymbol: String = "ر.س"
 ) {
     var name by remember { mutableStateOf(initialParty?.name ?: "") }
     var phone by remember { mutableStateOf(initialParty?.phone ?: "") }
-    var partyType by remember { mutableStateOf(initialParty?.type ?: PartyType.CUSTOMER) }
+    var partyType by remember { mutableStateOf(initialParty?.type ?: defaultPartyType) }
     var taxNumber by remember { mutableStateOf(initialParty?.taxNumber ?: "") }
     var creditLimit by remember { mutableStateOf(initialParty?.creditLimit?.toString() ?: "1000.0") }
 

@@ -12,12 +12,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -35,15 +41,17 @@ import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.UserRole
+import com.example.dokkani.domain.credit.CreditNotebookEngine
 import com.example.dokkani.domain.credit.CustomerStatementSummary
 import com.example.dokkani.domain.credit.StatementEntryType
 import com.example.dokkani.domain.credit.StatementItem
 import com.example.dokkani.ui.DokkaniUiState
 import com.example.dokkani.ui.screens.crud.AddEditPartyDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
+import kotlin.math.abs
 
 /**
- * شاشة إدارة الديون ودفتر الشكك والعملاء (Credit & Customer Ledger)
+ * شاشة إدارة حسابات العملاء والموردين (الديون والذمم)
  */
 @Composable
 fun CreditLedgerScreen(
@@ -65,6 +73,8 @@ fun CreditLedgerScreen(
     val context = LocalContext.current
     val isAdmin = currentUserRole == UserRole.ADMIN
 
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: العملاء, 1: الموردين
+
     var showAddPartyDialog by remember { mutableStateOf(false) }
     var editingParty by remember { mutableStateOf<PartyEntity?>(null) }
     var deletingParty by remember { mutableStateOf<PartyEntity?>(null) }
@@ -72,17 +82,34 @@ fun CreditLedgerScreen(
     var deletingVoucherId by remember { mutableStateOf<Long?>(null) }
     var deletingInvoiceId by remember { mutableStateOf<Long?>(null) }
 
-    // تصفية العملاء (العملاء فقط والمشتركين، واستبعاد الموردين الخالصين)
-    val customers = parties.filter { it.type == PartyType.CUSTOMER || it.type == PartyType.BOTH }
-    val filteredCustomers = customers.filter { cust ->
-        if (uiState.creditSearchQuery.isBlank()) true
-        else cust.name.contains(uiState.creditSearchQuery.trim(), ignoreCase = true) ||
-                cust.phone.contains(uiState.creditSearchQuery.trim())
+    // تقسيم الحسابات حسب التبويب المفتوح
+    val customers = remember(parties) {
+        parties.filter { it.type == PartyType.CUSTOMER || it.type == PartyType.BOTH }
+    }
+    val suppliers = remember(parties) {
+        parties.filter { it.type == PartyType.SUPPLIER || it.type == PartyType.BOTH }
     }
 
-    val totalDebtAmount = customers.filter { it.currentBalance > 0 }.sumOf { it.currentBalance }
+    val activeList = if (selectedTab == 0) customers else suppliers
+
+    val filteredParties = remember(activeList, uiState.creditSearchQuery) {
+        activeList.filter { party ->
+            if (uiState.creditSearchQuery.isBlank()) true
+            else party.name.contains(uiState.creditSearchQuery.trim(), ignoreCase = true) ||
+                    party.phone.contains(uiState.creditSearchQuery.trim()) ||
+                    party.taxNumber.contains(uiState.creditSearchQuery.trim())
+        }
+    }
+
+    // إحصائيات العملاء
+    val totalCustomerDebt = customers.filter { it.currentBalance > 0 }.sumOf { it.currentBalance }
     val debtorsCount = customers.count { it.currentBalance > 0 }
     val topDebtor = customers.maxByOrNull { it.currentBalance }
+
+    // إحصائيات الموردين
+    val totalSupplierPayable = suppliers.filter { it.currentBalance < 0 }.sumOf { abs(it.currentBalance) }
+    val suppliersOwedCount = suppliers.count { it.currentBalance < 0 }
+    val topSupplierOwed = suppliers.minByOrNull { it.currentBalance }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -91,7 +118,7 @@ fun CreditLedgerScreen(
                 .background(Color(0xFFF8F9FA))
                 .padding(12.dp)
         ) {
-            // شريط العنوان والبحث
+            // شريط العنوان الرئيسي المباشر
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -99,13 +126,16 @@ fun CreditLedgerScreen(
             ) {
                 Column {
                     Text(
-                        text = "دفتر الشكك وحسابات العملاء",
+                        text = "العملاء والموردين",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF1E293B)
                     )
                     Text(
-                        text = "متابعة الديون المستحقة، كشوفات الحساب الزمنية، وسندات القبض الفورية",
+                        text = if (selectedTab == 0)
+                            "متابعة الديون المستحقة على العملاء، كشوفات حساباتهم، وسندات القبض الفورية"
+                        else
+                            "متابعة الذمم المالية للموردين، المبالغ المستحقة لهم، وحركات ومشتريات الموردين",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF64748B)
                     )
@@ -114,47 +144,133 @@ fun CreditLedgerScreen(
                 if (isAdmin) {
                     Button(
                         onClick = { showAddPartyDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132)),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedTab == 0) Color(0xFF0F5132) else Color(0xFF0284C7)
+                        ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("عميل جديد")
+                        Text(if (selectedTab == 0) "+ عميل جديد" else "+ مورد جديد")
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // بطاقات المؤشرات المالية السريعة للديون
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // نظام التبويبات (Tabs)
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                CreditKpiCard(
-                    title = "إجمالي الديون المستحقة",
-                    value = "${"%.2f".format(totalDebtAmount)} ${uiState.currencySymbol}",
-                    subtitle = "في ذمة العملاء",
-                    backgroundColor = Color(0xFFFEF2F2),
-                    textColor = Color(0xFFDC2626),
-                    modifier = Modifier.weight(1f)
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = {
+                        selectedTab = 0
+                        onSearchChanged("")
+                    },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("حسابات العملاء", fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            BadgeCount(customers.size, color = Color(0xFFDC2626))
+                        }
+                    }
                 )
-                CreditKpiCard(
-                    title = "عدد العملاء المدينين",
-                    value = "$debtorsCount عميل",
-                    subtitle = "لديهم رصيد آجل",
-                    backgroundColor = Color(0xFFFFFBEB),
-                    textColor = Color(0xFFD97706),
-                    modifier = Modifier.weight(1f)
+
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = {
+                        selectedTab = 1
+                        onSearchChanged("")
+                    },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.LocalShipping,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("حسابات الموردين", fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            BadgeCount(suppliers.size, color = Color(0xFFEA580C))
+                        }
+                    }
                 )
-                CreditKpiCard(
-                    title = "أعلى مديونية",
-                    value = if (topDebtor != null && topDebtor.currentBalance > 0) "${"%.2f".format(topDebtor.currentBalance)} ${uiState.currencySymbol}" else "0.00",
-                    subtitle = topDebtor?.name ?: "لا يوجد",
-                    backgroundColor = Color(0xFFF0FDF4),
-                    textColor = Color(0xFF16A34A),
-                    modifier = Modifier.weight(1f)
-                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // بطاقات المؤشرات المالية للتبويب المحدد
+            if (selectedTab == 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CreditKpiCard(
+                        title = "إجمالي الديون المستحقة",
+                        value = "${"%.2f".format(totalCustomerDebt)} ${uiState.currencySymbol}",
+                        subtitle = "في ذمة العملاء",
+                        backgroundColor = Color(0xFFFEF2F2),
+                        textColor = Color(0xFFDC2626),
+                        modifier = Modifier.weight(1f)
+                    )
+                    CreditKpiCard(
+                        title = "عدد العملاء المدينين",
+                        value = "$debtorsCount عميل",
+                        subtitle = "لديهم رصيد آجل",
+                        backgroundColor = Color(0xFFFFFBEB),
+                        textColor = Color(0xFFD97706),
+                        modifier = Modifier.weight(1f)
+                    )
+                    CreditKpiCard(
+                        title = "أعلى مديونية",
+                        value = if (topDebtor != null && topDebtor.currentBalance > 0) "${"%.2f".format(topDebtor.currentBalance)} ${uiState.currencySymbol}" else "0.00",
+                        subtitle = topDebtor?.name ?: "لا يوجد",
+                        backgroundColor = Color(0xFFF0FDF4),
+                        textColor = Color(0xFF16A34A),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CreditKpiCard(
+                        title = "إجمالي الذمم والمستحقات",
+                        value = "${"%.2f".format(totalSupplierPayable)} ${uiState.currencySymbol}",
+                        subtitle = "مستحق للموردين",
+                        backgroundColor = Color(0xFFFFF7ED),
+                        textColor = Color(0xFFC2410C),
+                        modifier = Modifier.weight(1f)
+                    )
+                    CreditKpiCard(
+                        title = "عدد الموردين المستحقين",
+                        value = "$suppliersOwedCount مورد",
+                        subtitle = "ننتظر التسديد",
+                        backgroundColor = Color(0xFFEFF6FF),
+                        textColor = Color(0xFF1D4ED8),
+                        modifier = Modifier.weight(1f)
+                    )
+                    CreditKpiCard(
+                        title = "أعلى مستحق للموردين",
+                        value = if (topSupplierOwed != null && topSupplierOwed.currentBalance < 0) "${"%.2f".format(abs(topSupplierOwed.currentBalance))} ${uiState.currencySymbol}" else "0.00",
+                        subtitle = topSupplierOwed?.name ?: "لا يوجد",
+                        backgroundColor = Color(0xFFF5F3FF),
+                        textColor = Color(0xFF6D28D9),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -163,7 +279,9 @@ fun CreditLedgerScreen(
             OutlinedTextField(
                 value = uiState.creditSearchQuery,
                 onValueChange = onSearchChanged,
-                placeholder = { Text("ابحث باسم العميل أو رقم الجوال...") },
+                placeholder = {
+                    Text(if (selectedTab == 0) "ابحث باسم العميل أو رقم الجوال..." else "ابحث باسم المورد، الرقم الضريبي، أو رقم الجوال...")
+                },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
                 trailingIcon = {
                     if (uiState.creditSearchQuery.isNotEmpty()) {
@@ -180,9 +298,9 @@ fun CreditLedgerScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // إذا تم اختيار عميل لعرض كشف حسابه التفصيلي
+            // إذا تم اختيار عميل أو مورد لعرض كشف حسابه التفصيلي
             if (uiState.selectedPartyForStatement != null) {
-                CustomerStatementView(
+                PartyStatementView(
                     statement = uiState.customerStatementSummary,
                     isLoading = uiState.isLoadingStatement,
                     isAdmin = isAdmin,
@@ -194,32 +312,41 @@ fun CreditLedgerScreen(
                     currencySymbol = uiState.currencySymbol
                 )
             } else {
-                // قائمة العملاء المسجلين
+                // قائمة الحسابات المسجلة
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredCustomers, key = { it.id }) { customer ->
-                        CustomerLedgerItemCard(
-                            customer = customer,
+                    items(filteredParties, key = { it.id }) { party ->
+                        PartyItemCard(
+                            party = party,
+                            isSupplier = selectedTab == 1,
                             isAdmin = isAdmin,
-                            onOpenStatement = { onSelectParty(customer.id) },
-                            onQuickPay = { onOpenPaymentVoucherDialog(customer.id) },
-                            onEditParty = { editingParty = customer },
-                            onDeleteParty = { deletingParty = customer },
+                            onOpenStatement = { onSelectParty(party.id) },
+                            onQuickPay = { onOpenPaymentVoucherDialog(party.id) },
+                            onEditParty = { editingParty = party },
+                            onDeleteParty = { deletingParty = party },
                             onSendWhatsApp = {
-                                val text = com.example.dokkani.domain.credit.CreditNotebookEngine.generateWhatsAppReminderMessage(
-                                    customerName = customer.name,
-                                    balance = customer.currentBalance,
-                                    storeName = "تموينات دكاني"
-                                )
-                                onSendWhatsAppReminder(context, customer.phone, text)
+                                val text = if (selectedTab == 0) {
+                                    CreditNotebookEngine.generateWhatsAppReminderMessage(
+                                        customerName = party.name,
+                                        balance = party.currentBalance,
+                                        storeName = "تموينات دكاني"
+                                    )
+                                } else {
+                                    CreditNotebookEngine.generateSupplierWhatsAppMessage(
+                                        supplierName = party.name,
+                                        balance = party.currentBalance,
+                                        storeName = "تموينات دكاني"
+                                    )
+                                }
+                                onSendWhatsAppReminder(context, party.phone, text)
                             },
                             currencySymbol = uiState.currencySymbol
                         )
                     }
 
-                    if (filteredCustomers.isEmpty()) {
+                    if (filteredParties.isEmpty()) {
                         item {
                             Box(
                                 modifier = Modifier
@@ -228,7 +355,7 @@ fun CreditLedgerScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "لم يتم العثور على عملاء مطابقين للبحث",
+                                    text = if (selectedTab == 0) "لم يتم العثور على عملاء مطابقين للبحث" else "لم يتم العثور على موردين مطابقين للبحث",
                                     color = Color(0xFF64748B)
                                 )
                             }
@@ -243,6 +370,7 @@ fun CreditLedgerScreen(
     if (showAddPartyDialog || editingParty != null) {
         AddEditPartyDialog(
             initialParty = editingParty,
+            defaultPartyType = if (selectedTab == 1) PartyType.SUPPLIER else PartyType.CUSTOMER,
             onSaveParty = { p ->
                 onSaveParty(p)
                 showAddPartyDialog = false
@@ -251,13 +379,14 @@ fun CreditLedgerScreen(
             onDismiss = {
                 showAddPartyDialog = false
                 editingParty = null
-            }
+            },
+            currencySymbol = uiState.currencySymbol
         )
     }
 
     if (deletingParty != null) {
         ConfirmDeleteDialog(
-            message = "هل أنت ألكيد من حذف العميل '${deletingParty?.name}'؟",
+            message = "هل أنت تأكيد من حذف الحساب '${deletingParty?.name}'؟",
             onConfirm = {
                 onDeleteParty(deletingParty!!)
                 deletingParty = null
@@ -268,7 +397,7 @@ fun CreditLedgerScreen(
 
     if (deletingInvoiceId != null) {
         ConfirmDeleteDialog(
-            message = "هل أنت ألكيد من حذف الفاتورة رقم #$deletingInvoiceId؟",
+            message = "هل أنت تأكيد من حذف الفاتورة رقم #$deletingInvoiceId؟",
             onConfirm = {
                 onDeleteInvoice(deletingInvoiceId!!)
                 deletingInvoiceId = null
@@ -279,7 +408,7 @@ fun CreditLedgerScreen(
 
     if (deletingVoucherId != null) {
         ConfirmDeleteDialog(
-            message = "هل أنت ألكيد من إلغاء وحذف سند القبض رقم #$deletingVoucherId؟",
+            message = "هل أنت تأكيد من إلغاء وحذف السند رقم #$deletingVoucherId؟",
             onConfirm = {
                 onDeleteVoucher(deletingVoucherId!!)
                 deletingVoucherId = null
@@ -288,7 +417,7 @@ fun CreditLedgerScreen(
         )
     }
 
-    // نافذة حوار تسجيل سند قبض وتسديد دفعة
+    // نافذة حوار تسجيل سند القبض / سند الصرف
     if (uiState.showPaymentVoucherDialog && uiState.voucherPartyId != null) {
         val currentParty = parties.firstOrNull { it.id == uiState.voucherPartyId }
         PaymentVoucherDialog(
@@ -301,6 +430,25 @@ fun CreditLedgerScreen(
             onDismiss = onDismissPaymentVoucherDialog,
             onSubmit = onSubmitPaymentVoucher,
             currencySymbol = uiState.currencySymbol
+        )
+    }
+}
+
+/**
+ * شارة عدد الحسابات للتبويب
+ */
+@Composable
+private fun BadgeCount(count: Int, color: Color) {
+    Surface(
+        shape = CircleShape,
+        color = color.copy(alpha = 0.12f)
+    ) {
+        Text(
+            text = "$count",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
         )
     }
 }
@@ -331,11 +479,12 @@ private fun CreditKpiCard(
 }
 
 /**
- * بطاقة العميل في دفتر الشكك
+ * بطاقة العميل أو المورد مع الإجراءات السريعة المنظمة والتباين العالي
  */
 @Composable
-private fun CustomerLedgerItemCard(
-    customer: PartyEntity,
+private fun PartyItemCard(
+    party: PartyEntity,
+    isSupplier: Boolean,
     isAdmin: Boolean,
     onOpenStatement: () -> Unit,
     onQuickPay: () -> Unit,
@@ -344,8 +493,27 @@ private fun CustomerLedgerItemCard(
     onSendWhatsApp: () -> Unit,
     currencySymbol: String = "ر.س"
 ) {
-    val hasDebt = customer.currentBalance > 0.001
-    val isOverLimit = customer.creditLimit > 0 && customer.currentBalance > customer.creditLimit
+    val balance = party.currentBalance
+
+    // للعميل: الموجب يعني مستحق على العميل
+    // للمورد: السالب يعني مستحق للمورد
+    val isOwed = if (!isSupplier) balance > 0.001 else balance < -0.001
+    val isSettled = abs(balance) <= 0.001
+    val isOverLimit = !isSupplier && party.creditLimit > 0 && balance > party.creditLimit
+
+    val mainBadgeColor = when {
+        isSettled -> Color(0xFF16A34A)
+        !isSupplier && isOwed -> Color(0xFFDC2626)
+        isSupplier && isOwed -> Color(0xFFC2410C)
+        else -> Color(0xFF2563EB)
+    }
+
+    val mainBadgeBg = when {
+        isSettled -> Color(0xFFF0FDF4)
+        !isSupplier && isOwed -> Color(0xFFFEF2F2)
+        isSupplier && isOwed -> Color(0xFFFFF7ED)
+        else -> Color(0xFFEFF6FF)
+    }
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -354,7 +522,7 @@ private fun CustomerLedgerItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpenStatement() }
-            .testTag("party_item_${customer.id}")
+            .testTag("party_item_${party.id}")
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -365,14 +533,14 @@ private fun CustomerLedgerItemCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         shape = CircleShape,
-                        color = if (hasDebt) Color(0xFFFEE2E2) else Color(0xFFDCFCE7),
-                        modifier = Modifier.size(40.dp)
+                        color = mainBadgeBg,
+                        modifier = Modifier.size(42.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "عميل",
-                                tint = if (hasDebt) Color(0xFFDC2626) else Color(0xFF16A34A),
+                                imageVector = if (isSupplier) Icons.Default.LocalShipping else Icons.Default.Person,
+                                contentDescription = if (isSupplier) "مورد" else "عميل",
+                                tint = mainBadgeColor,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -380,7 +548,7 @@ private fun CustomerLedgerItemCard(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = customer.name,
+                            text = party.name,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = Color(0xFF0F172A)
@@ -394,28 +562,56 @@ private fun CustomerLedgerItemCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (customer.phone.isNotBlank()) customer.phone else "بدون جوال",
+                                text = if (party.phone.isNotBlank()) party.phone else "بدون جوال",
                                 fontSize = 12.sp,
                                 color = Color(0xFF64748B)
                             )
+                            if (party.taxNumber.isNotBlank()) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Badge,
+                                    contentDescription = null,
+                                    tint = Color(0xFF94A3B8),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = "ضريبي: ${party.taxNumber}",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF64748B)
+                                )
+                            }
                         }
                     }
                 }
 
-                // رصيد الدين الحالي مع أزرار الإدارة
+                // عرض الرصيد والتباين المالي
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "${"%.2f".format(customer.currentBalance)} ${currencySymbol}",
+                            text = "${"%.2f".format(abs(balance))} $currencySymbol",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
-                            color = if (hasDebt) Color(0xFFDC2626) else Color(0xFF16A34A)
+                            color = mainBadgeColor
                         )
-                        Text(
-                            text = if (hasDebt) "مستحق على العميل" else "الحساب خالص",
-                            fontSize = 11.sp,
-                            color = if (hasDebt) Color(0xFFEF4444) else Color(0xFF22C55E)
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = mainBadgeBg
+                        ) {
+                            Text(
+                                text = when {
+                                    isSettled -> "الحساب خالص"
+                                    !isSupplier && balance > 0 -> "مستحق على العميل"
+                                    !isSupplier && balance < 0 -> "رصيد مقدم للعميل"
+                                    isSupplier && balance < 0 -> "مستحق للمورد"
+                                    else -> "رصيد لصالح المحل"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = mainBadgeColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
 
                     if (isAdmin) {
@@ -447,7 +643,7 @@ private fun CustomerLedgerItemCard(
                 }
             }
 
-            // تنبيه تجاوز الحد الائتماني
+            // تنبيه تجاوز الحد الائتماني للعملاء
             if (isOverLimit) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
@@ -467,7 +663,7 @@ private fun CustomerLedgerItemCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "تجاوز السقف الائتماني (${"%.2f".format(customer.creditLimit)} $currencySymbol)",
+                            text = "تجاوز السقف الائتماني (${"%.2f".format(party.creditLimit)} $currencySymbol)",
                             fontSize = 11.sp,
                             color = Color(0xFFC2410C),
                             fontWeight = FontWeight.Bold
@@ -478,20 +674,32 @@ private fun CustomerLedgerItemCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // أزرار العمليات السريعة
+            // أزرار العمليات السريعة المنظمة
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = onQuickPay,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132)),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSupplier) Color(0xFF0284C7) else Color(0xFF0F5132)
+                    ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.2f)
                         .height(36.dp)
                 ) {
-                    Text("+ تسديد / سند قبض", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = if (isSupplier) Icons.Default.Payments else Icons.Default.ReceiptLong,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isSupplier) "+ تسديد / سند صرف" else "+ تسديد / سند قبض",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 OutlinedButton(
@@ -501,17 +709,24 @@ private fun CustomerLedgerItemCard(
                         .weight(1f)
                         .height(36.dp)
                 ) {
-                    Text("كشف الحساب", fontSize = 12.sp, color = Color(0xFF0F172A))
+                    Icon(
+                        imageVector = Icons.Default.Receipt,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = Color(0xFF0F172A)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("كشف الحساب", fontSize = 11.sp, color = Color(0xFF0F172A))
                 }
 
-                if (customer.phone.isNotBlank() && hasDebt) {
+                if (party.phone.isNotBlank()) {
                     Button(
                         onClick = onSendWhatsApp,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(36.dp)
                     ) {
-                        Text("واتساب", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("واتساب", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -520,10 +735,10 @@ private fun CustomerLedgerItemCard(
 }
 
 /**
- * شاشة تفاصيل كشف حساب العميل
+ * شاشة تفاصيل كشف الحساب للحساب المحدد (عميل أو مورد)
  */
 @Composable
-private fun CustomerStatementView(
+private fun PartyStatementView(
     statement: CustomerStatementSummary?,
     isLoading: Boolean,
     isAdmin: Boolean,
@@ -547,9 +762,10 @@ private fun CustomerStatementView(
     }
 
     val party = statement.party
+    val isSupplier = party.type == PartyType.SUPPLIER
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // شريط العودة ورأس العميل
+        // شريط العودة ورأس الحساب
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -560,13 +776,13 @@ private fun CustomerStatementView(
             Spacer(modifier = Modifier.width(6.dp))
             Column {
                 Text(
-                    text = "كشف حساب: ${party.name}",
+                    text = "كشف حساب: ${party.name} (${if (isSupplier) "مورد" else "عميل"})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF1E293B)
                 )
                 Text(
-                    text = "جوال: ${party.phone.ifBlank { "غير مسجل" }} | السقف: ${if (party.creditLimit > 0) "${party.creditLimit} $currencySymbol" else "مفتوح"}",
+                    text = "جوال: ${party.phone.ifBlank { "غير مسجل" }} ${if (party.taxNumber.isNotBlank()) "| ضريبي: ${party.taxNumber}" else ""}",
                     fontSize = 12.sp,
                     color = Color(0xFF64748B)
                 )
@@ -578,7 +794,9 @@ private fun CustomerStatementView(
         // بطاقة ملخص الحساب
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F3B2E)),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isSupplier) Color(0xFF1E293B) else Color(0xFF0F3B2E)
+            ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
@@ -588,9 +806,13 @@ private fun CustomerStatementView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("الرصيد القائم المستحق حالياً", fontSize = 12.sp, color = Color(0xFFD1E7DD))
                         Text(
-                            text = "${"%.2f".format(statement.currentBalance)} $currencySymbol",
+                            text = if (isSupplier) "الرصيد المستحق القائم للمورد" else "الرصيد المستحق القائم على العميل",
+                            fontSize = 12.sp,
+                            color = Color(0xFFD1E7DD)
+                        )
+                        Text(
+                            text = "${"%.2f".format(abs(statement.currentBalance))} $currencySymbol",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -600,13 +822,19 @@ private fun CustomerStatementView(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = { onAddPayment(party.id) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSupplier) Color(0xFF0284C7) else Color(0xFF22C55E)
+                            ),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("+ سند قبض", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                text = if (isSupplier) "+ سند صرف" else "+ سند قبض",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
                         }
 
-                        if (party.phone.isNotBlank() && statement.currentBalance > 0) {
+                        if (party.phone.isNotBlank()) {
                             Button(
                                 onClick = { onSendWhatsApp(party.phone, statement.whatsAppReminderText) },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
@@ -619,7 +847,7 @@ private fun CustomerStatementView(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-                HorizontalDivider(color = Color(0xFF198754))
+                HorizontalDivider(color = Color(0xFF334155))
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
@@ -627,7 +855,8 @@ private fun CustomerStatementView(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "إجمالي المشتريات بالآجل: ${"%.2f".format(statement.totalPurchasesOnCredit)} $currencySymbol",
+                        text = if (isSupplier) "إجمالي المشتريات والذمم: ${"%.2f".format(statement.totalPurchasesOnCredit)} $currencySymbol"
+                        else "إجمالي المشتريات بالآجل: ${"%.2f".format(statement.totalPurchasesOnCredit)} $currencySymbol",
                         fontSize = 11.sp,
                         color = Color(0xFFE2E8F0)
                     )
@@ -642,7 +871,7 @@ private fun CustomerStatementView(
 
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "السجل الزمني للحركات (فواتير الآجل وسندات القبض):",
+            text = "السجل الزمني للحركات والعمليات:",
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF334155)
@@ -672,7 +901,7 @@ private fun CustomerStatementView(
                             .padding(30.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("لا توجد حركات مسجلة لهذا العميل حتى الآن", color = Color(0xFF64748B))
+                        Text("لا توجد حركات مسجلة لهذا الحساب حتى الآن", color = Color(0xFF64748B))
                     }
                 }
             }
@@ -691,7 +920,7 @@ private fun StatementRowCard(
     onDeleteVoucher: (Long) -> Unit,
     currencySymbol: String = "ر.س"
 ) {
-    val isInvoice = item.type == StatementEntryType.SALE_INVOICE
+    val isInvoice = item.type == StatementEntryType.SALE_INVOICE || item.type == StatementEntryType.PURCHASE_INVOICE
 
     Card(
         shape = RoundedCornerShape(10.dp),
@@ -755,7 +984,7 @@ private fun StatementRowCard(
             // المبالغ (مدين / دائن والرصيد التراكمي)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.End) {
-                    if (isInvoice) {
+                    if (item.debit > 0) {
                         Text(
                             text = "+${"%.2f".format(item.debit)} $currencySymbol",
                             fontWeight = FontWeight.Bold,
@@ -771,7 +1000,7 @@ private fun StatementRowCard(
                         )
                     }
                     Text(
-                        text = "الرصيد: ${"%.2f".format(item.runningBalance)}",
+                        text = "الرصيد: ${"%.2f".format(abs(item.runningBalance))}",
                         fontSize = 11.sp,
                         color = Color(0xFF64748B)
                     )
@@ -800,7 +1029,7 @@ private fun StatementRowCard(
 }
 
 /**
- * نافذة حوار إضافة سند قبض وسداد دفعة
+ * نافذة حوار إضافة سند قبض وسند صرف تسديد
  */
 @Composable
 private fun PaymentVoucherDialog(
@@ -814,26 +1043,32 @@ private fun PaymentVoucherDialog(
     onSubmit: () -> Unit,
     currencySymbol: String = "ر.س"
 ) {
+    val isSupplier = party?.type == PartyType.SUPPLIER
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFFDCFCE7),
+                    color = if (isSupplier) Color(0xFFE0F2FE) else Color(0xFFDCFCE7),
                     modifier = Modifier.size(32.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF16A34A),
+                            tint = if (isSupplier) Color(0xFF0284C7) else Color(0xFF16A34A),
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("تسجيل سند قبض لحساب: ${party?.name ?: ""}", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (isSupplier) "تسجيل سند صرف وتسديد للمورد: ${party?.name ?: ""}" else "تسجيل سند قبض لحساب العميل: ${party?.name ?: ""}",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         text = {
@@ -849,11 +1084,15 @@ private fun PaymentVoucherDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("الرصيد المتبقي الحالي:", fontSize = 12.sp, color = Color(0xFF475569))
                             Text(
-                                text = "${"%.2f".format(party.currentBalance)} $currencySymbol",
+                                text = if (isSupplier) "الرصيد المتبقي المستحق للمورد:" else "الرصيد المتبقي المستحق على العميل:",
+                                fontSize = 12.sp,
+                                color = Color(0xFF475569)
+                            )
+                            Text(
+                                text = "${"%.2f".format(abs(party.currentBalance))} $currencySymbol",
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFDC2626)
+                                color = if (isSupplier) Color(0xFFC2410C) else Color(0xFFDC2626)
                             )
                         }
                     }
@@ -863,7 +1102,7 @@ private fun PaymentVoucherDialog(
                 OutlinedTextField(
                     value = amountInput,
                     onValueChange = { onInputsChanged(it, notesInput, selectedMethod) },
-                    label = { Text("المبلغ المستلم (${currencySymbol})*") },
+                    label = { Text(if (isSupplier) "المبلغ المدفوع ($currencySymbol)*" else "المبلغ المستلم ($currencySymbol)*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("voucher_amount_field")
@@ -871,7 +1110,7 @@ private fun PaymentVoucherDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Text("طريقة الاستلام:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
+                Text(if (isSupplier) "طريقة الدفع والصرف:" else "طريقة الاستلام:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -905,12 +1144,14 @@ private fun PaymentVoucherDialog(
             Button(
                 onClick = onSubmit,
                 enabled = !isSubmitting && amountInput.toDoubleOrNull()?.let { it > 0 } == true,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132))
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSupplier) Color(0xFF0284C7) else Color(0xFF0F5132)
+                )
             ) {
                 if (isSubmitting) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
                 } else {
-                    Text("حفظ السند وإيداع الخزينة", fontWeight = FontWeight.Bold)
+                    Text(if (isSupplier) "حفظ سند الصرف وخصم الصندوق" else "حفظ السند وإيداع الخزينة", fontWeight = FontWeight.Bold)
                 }
             }
         },

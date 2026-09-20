@@ -90,7 +90,7 @@ fun DokkaniApp(
         NavTabItem("المنتجات والوحدات", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("التكلفة والخضار", Icons.Default.Calculate, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
-        NavTabItem("دفتر الديون", Icons.Default.CreditCard, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("العملاء والموردين", Icons.Default.People, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("الأصول والملكية", Icons.Default.AccountBalance, setOf(UserRole.ADMIN)),
         NavTabItem("التقارير", Icons.Default.Analytics, setOf(UserRole.ADMIN)),
         NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
@@ -315,7 +315,7 @@ fun DokkaniApp(
                                     onCloseShiftAndSave = viewModel::closeShiftAndSave
                                 )
                             }
-                            "دفتر الديون" -> {
+                            "العملاء والموردين" -> {
                                 CreditLedgerScreen(
                                     parties = uiState.parties,
                                     uiState = uiState,
@@ -330,7 +330,17 @@ fun DokkaniApp(
                                     onDeleteParty = viewModel::deleteParty,
                                     onDeleteVoucher = viewModel::deletePaymentVoucher,
                                     onDeleteInvoice = viewModel::deleteInvoice,
-                                    onSendWhatsAppReminder = { _, _, _ -> }
+                                    onSendWhatsAppReminder = { ctx, phone, text ->
+                                        try {
+                                            val cleanPhone = phone.replace("+", "").replace(" ", "")
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                                data = android.net.Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone&text=${java.net.URLEncoder.encode(text, "UTF-8")}")
+                                            }
+                                            ctx.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    }
                                 )
                             }
                             "الأصول والملكية" -> {

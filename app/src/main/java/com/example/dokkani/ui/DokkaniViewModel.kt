@@ -501,8 +501,12 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isSubmittingVoucher = true) }
             val now = System.currentTimeMillis()
+            val party = db.partyDao().getPartyById(partyId)
+            val isSupplier = party?.type == PartyType.SUPPLIER
+
+            val prefix = if (isSupplier) "PAY-" else "RCV-"
             val voucher = PaymentVoucherEntity(
-                voucherNumber = "RCV-${now.toString().takeLast(6)}",
+                voucherNumber = "$prefix${now.toString().takeLast(6)}",
                 partyId = partyId,
                 amount = amount,
                 paymentMethod = state.voucherPaymentMethod,
@@ -510,7 +514,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 receivedBy = "كاشير النظام"
             )
             db.paymentVoucherDao().insertVoucher(voucher)
-            db.partyDao().updateBalance(partyId, -amount)
+
+            val balanceDiff = if (isSupplier) +amount else -amount
+            db.partyDao().updateBalance(partyId, balanceDiff)
 
             _uiState.update {
                 it.copy(
@@ -874,7 +880,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     // التراجع عن رصيد العميل (تم سداد مبلغ، فعند الحذف نعيد المديونية)
                     val party = db.partyDao().getPartyById(v.partyId)
                     if (party != null) {
-                        db.partyDao().updateParty(party.copy(currentBalance = party.currentBalance + v.amount))
+                        val isSupplier = party.type == PartyType.SUPPLIER
+                        val newBal = if (isSupplier) party.currentBalance - v.amount else party.currentBalance + v.amount
+                        db.partyDao().updateParty(party.copy(currentBalance = newBal))
                     }
                     if (v.paymentMethod == PaymentMethod.CASH) {
                         val shifts = db.cashShiftDao().getAllShiftsSync()

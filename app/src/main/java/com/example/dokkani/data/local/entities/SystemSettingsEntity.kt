@@ -13,6 +13,10 @@ data class SystemSettingsEntity(
     @PrimaryKey
     val id: Int = 1,                                       // سجل وحيد للإعدادات العامة للنظام
     val storeName: String = "دكاني - تموينات ومخضار السعادة", // اسم البقالة أو المتجر
+    val storeAddress: String = "صنعاء - شارع الزبيري", // عنوان البقالة أو المنشأة
+    val storePhone: String = "777000111",                 // هاتف المنشأة
+    val taxNumber: String = "",                           // الرقم الضريبي للمنشأة (وفقاً لنظام وضوابط الدولة)
+    val showPreviousBalanceOnInvoice: Boolean = true,     // خيار تفعيل/إلغاء إظهار الرصيد السابق في طباعة الفواتير الآجلة
     val costValuationMethod: CostValuationMethod = CostValuationMethod.WAC, // طريقة التقييم المحاسبي المعتمدة
     val defaultCurrencyCode: String = "SAR",               // العملة الافتراضية للفواتير
     val isTaxEnabled: Boolean = false,                     // تفعيل / إلغاء حساب الضريبة في المبيعات (معطلة افتراضياً وفق بيئة العمل بالجمهورية اليمنية)

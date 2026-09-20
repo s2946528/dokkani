@@ -319,17 +319,19 @@ class BluetoothPrinterManager(private val context: Context) {
             sb.append("[CASH DRAWER PULSE TRIGGERED: ESC p 0 25 250]\n")
         }
         sb.appendLine(centerText(data.storeName, cols))
+        if (data.storeAddress.isNotBlank()) sb.appendLine(centerText(data.storeAddress, cols))
         if (data.storePhone.isNotBlank()) sb.appendLine(centerText("هاتف: ${data.storePhone}", cols))
         if (data.taxNumber.isNotBlank()) sb.appendLine(centerText("الرقم الضريبي: ${data.taxNumber}", cols))
         sb.appendLine(sepDouble)
-        sb.appendLine(centerText("** فاتورة مبيعات ضريبية مبسطة **", cols))
+        sb.appendLine(centerText("** ${data.invoiceTitle} **", cols))
         sb.appendLine(sepSingle)
         sb.appendLine(twoCols("رقم الفاتورة:", data.invoiceNumber, cols))
         sb.appendLine(twoCols("التاريخ:", data.invoiceDateFormatted, cols))
         sb.appendLine(twoCols("الكاشير:", data.cashierName, cols))
         sb.appendLine(twoCols("طريقة الدفع:", data.paymentMethodArabic, cols))
         if (!data.customerName.isNullOrBlank()) {
-            sb.appendLine(twoCols("العميل:", data.customerName, cols))
+            val partyTag = if (data.partyLabel.isNotBlank()) data.partyLabel else if (data.invoiceTitle.contains("شراء")) "المورد:" else "العميل:"
+            sb.appendLine(twoCols(partyTag, data.customerName, cols))
         }
         sb.appendLine(sepSingle)
 
@@ -375,10 +377,11 @@ class BluetoothPrinterManager(private val context: Context) {
             }
         }
 
-        if (data.customerOldBalance != null && data.customerNewBalance != null) {
+        if (data.showPreviousBalance && data.customerOldBalance != null && data.customerNewBalance != null) {
+            val partyTitle = if (data.invoiceTitle.contains("شراء")) "المورد" else "العميل"
             sb.appendLine(sepSingle)
-            sb.appendLine(twoCols("رصيد العميل السابق:", "%.2f %s".format(data.customerOldBalance, data.currencySymbol), cols))
-            sb.appendLine(twoCols("رصيد العميل الجديد:", "%.2f %s".format(data.customerNewBalance, data.currencySymbol), cols))
+            sb.appendLine(twoCols("الرصيد السابق ($partyTitle):", "%.2f %s".format(data.customerOldBalance, data.currencySymbol), cols))
+            sb.appendLine(twoCols("إجمالي الرصيد الحالي:", "%.2f %s".format(data.customerNewBalance, data.currencySymbol), cols))
         }
 
         sb.appendLine(sepSingle)

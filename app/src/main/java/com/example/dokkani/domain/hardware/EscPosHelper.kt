@@ -16,12 +16,16 @@ enum class PrinterPaperWidth(val columns: Int, val labelArabic: String, val widt
  */
 data class ReceiptPrintData(
     val storeName: String,
-    val storePhone: String,
-    val taxNumber: String,
+    val storeAddress: String = "",
+    val storePhone: String = "",
+    val taxNumber: String = "",
+    val invoiceTitle: String = "فاتورة بيع",
     val invoiceNumber: String,
     val invoiceDateFormatted: String,
     val cashierName: String = "كاشير 1",
     val customerName: String? = null,
+    val partyLabel: String = "العميل:",
+    val isCredit: Boolean = false,
     val paymentMethodArabic: String,
     val items: List<ReceiptItemData>,
     val subtotal: Double,
@@ -33,6 +37,7 @@ data class ReceiptPrintData(
     val remainingAmount: Double,
     val customerOldBalance: Double? = null,
     val customerNewBalance: Double? = null,
+    val showPreviousBalance: Boolean = true,
     val currencySymbol: String = "ر.س",
     val footerText: String = "شكراً لتسوقكم من دكاني!",
     val qrCodePayload: String? = null
@@ -118,6 +123,9 @@ object EscPosHelper {
 
         stream.write(CMD_FONT_NORMAL)
         stream.write(CMD_BOLD_OFF)
+        if (data.storeAddress.isNotBlank()) {
+            stream.write("${data.storeAddress}\n".toByteArray(charset))
+        }
         if (data.storePhone.isNotBlank()) {
             stream.write("هاتف: ${data.storePhone}\n".toByteArray(charset))
         }
@@ -129,7 +137,7 @@ object EscPosHelper {
 
         // 4. نوع الفاتورة والبيانات الأساسية
         stream.write(CMD_BOLD_ON)
-        stream.write("فاتورة مبيعات ضريبية مبسطة\n".toByteArray(charset))
+        stream.write("** ${data.invoiceTitle} **\n".toByteArray(charset))
         stream.write(CMD_BOLD_OFF)
 
         stream.write(CMD_ALIGN_LEFT)
@@ -139,7 +147,8 @@ object EscPosHelper {
         stream.write(formatTwoColumns("طريقة الدفع:", data.paymentMethodArabic, cols).toByteArray(charset))
 
         if (!data.customerName.isNullOrBlank()) {
-            stream.write(formatTwoColumns("العميل (الحساب):", data.customerName, cols).toByteArray(charset))
+            val partyTag = if (data.partyLabel.isNotBlank()) data.partyLabel else if (data.invoiceTitle.contains("شراء")) "المورد:" else "العميل:"
+            stream.write(formatTwoColumns(partyTag, data.customerName, cols).toByteArray(charset))
         }
 
         stream.write(createSeparator(cols, '-').toByteArray(charset))
@@ -214,11 +223,12 @@ object EscPosHelper {
             }
         }
 
-        // كشف حساب العميل في حال البيع الآجل
-        if (data.customerOldBalance != null && data.customerNewBalance != null) {
+        // كشف حساب العميل / المورد في حال الفواتير الآجلة (مع مراعاة تفعيل الخيار من الإعدادات)
+        if (data.showPreviousBalance && data.customerOldBalance != null && data.customerNewBalance != null) {
+            val partyTitle = if (data.invoiceTitle.contains("شراء")) "المورد" else "العميل"
             stream.write(createSeparator(cols, '.').toByteArray(charset))
-            stream.write(formatTwoColumns("الرصيد السابق للعميل:", "%.2f %s".format(data.customerOldBalance, data.currencySymbol), cols).toByteArray(charset))
-            stream.write(formatTwoColumns("الرصيد الحالي الجديد:", "%.2f %s".format(data.customerNewBalance, data.currencySymbol), cols).toByteArray(charset))
+            stream.write(formatTwoColumns("الرصيد السابق لـ $partyTitle:", "%.2f %s".format(data.customerOldBalance, data.currencySymbol), cols).toByteArray(charset))
+            stream.write(formatTwoColumns("إجمالي الرصيد الحالي:", "%.2f %s".format(data.customerNewBalance, data.currencySymbol), cols).toByteArray(charset))
         }
 
         // 7. رمز الاستجابة السريعة (QR Code) أو نص الفاتورة الإلكترونية

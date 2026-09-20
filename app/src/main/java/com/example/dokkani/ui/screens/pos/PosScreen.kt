@@ -3045,8 +3045,26 @@ private fun PosHistoryDialog(
                                             Text(record.paymentMethod.labelArabic, fontSize = 10.sp, color = Color.Gray)
                                         }
 
+                                        // زر معاينة وطباعة الفاتورة لعمليات البيع والشراء ومردوداتهما
+                                        if (record.operation in listOf(PosOperation.SALE, PosOperation.PURCHASE, PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN)) {
+                                            IconButton(
+                                                onClick = {
+                                                    onDismiss()
+                                                    viewModel.showReceiptForInvoiceNumber(record.id)
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.ReceiptLong,
+                                                    contentDescription = "معاينة وطباعة الفاتورة",
+                                                    tint = Color(0xFF2E7D32),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+
                                         if (currentUserRole == UserRole.ADMIN) {
-                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
                                             IconButton(
                                                 onClick = {
                                                     onDismiss()

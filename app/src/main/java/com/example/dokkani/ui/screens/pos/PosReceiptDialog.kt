@@ -149,6 +149,15 @@ fun PosReceiptDialog(
                             textAlign = TextAlign.Center,
                             color = Color(0xFF1A1A1A)
                         )
+                        if (receipt.storeAddress.isNotBlank()) {
+                            Text(
+                                text = receipt.storeAddress,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = Color(0xFF555555),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                         if (receipt.storePhone.isNotBlank()) {
                             Text(
                                 text = "هاتف: ${receipt.storePhone}",
@@ -162,14 +171,15 @@ fun PosReceiptDialog(
                                 text = "الرقم الضريبي: ${receipt.taxNumber}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontSize = 11.sp,
-                                color = Color(0xFF555555)
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF333333)
                             )
                         }
 
                         ReceiptDashedSeparator()
 
                         Text(
-                            text = "** فاتورة مبيعات ضريبية مبسطة **",
+                            text = "** ${receipt.invoiceTitle} **",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF222222)
@@ -183,7 +193,8 @@ fun PosReceiptDialog(
                         ReceiptRow("طريقة الدفع:", receipt.paymentMethodArabic)
 
                         if (!receipt.customerName.isNullOrBlank()) {
-                            ReceiptRow("العميل (الحساب):", receipt.customerName)
+                            val partyTag = if (receipt.partyLabel.isNotBlank()) receipt.partyLabel else if (receipt.invoiceTitle.contains("شراء")) "المورد:" else "العميل:"
+                            ReceiptRow(partyTag, receipt.customerName)
                         }
 
                         ReceiptDashedSeparator()
@@ -283,11 +294,12 @@ fun PosReceiptDialog(
                             }
                         }
 
-                        // رصيد العميل إن وجد
-                        if (receipt.customerOldBalance != null && receipt.customerNewBalance != null) {
+                        // رصيد العميل / المورد في الفواتير الآجلة حسب إعدادات النظام
+                        if (receipt.showPreviousBalance && receipt.customerOldBalance != null && receipt.customerNewBalance != null) {
+                            val partyTitle = if (receipt.invoiceTitle.contains("شراء")) "المورد" else "العميل"
                             ReceiptDashedSeparator()
-                            ReceiptRow("الرصيد السابق:", "%.2f %s".format(receipt.customerOldBalance, receipt.currencySymbol))
-                            ReceiptRow("الرصيد الجديد المستحق:", "%.2f %s".format(receipt.customerNewBalance, receipt.currencySymbol))
+                            ReceiptRow("الرصيد السابق لـ $partyTitle:", "%.2f %s".format(receipt.customerOldBalance, receipt.currencySymbol))
+                            ReceiptRow("إجمالي الرصيد الحالي:", "%.2f %s".format(receipt.customerNewBalance, receipt.currencySymbol))
                         }
 
                         ReceiptDashedSeparator()

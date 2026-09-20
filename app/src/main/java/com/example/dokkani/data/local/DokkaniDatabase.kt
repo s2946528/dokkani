@@ -74,7 +74,7 @@ import kotlinx.coroutines.launch
         LeaseholdRightEntity::class,
         FinancialAccountEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -187,7 +187,11 @@ abstract class DokkaniDatabase : RoomDatabase() {
             settingsDao.insertOrUpdateSettings(
                 SystemSettingsEntity(
                     id = 1,
-                    storeName = "متجري",
+                    storeName = "دكاني - تموينات ومخضار السعادة",
+                    storeAddress = "صنعاء - شارع الزبيري",
+                    storePhone = "777000111",
+                    taxNumber = "300123456700003",
+                    showPreviousBalanceOnInvoice = true,
                     costValuationMethod = CostValuationMethod.WAC,
                     defaultCurrencyCode = "YER",
                     isTaxEnabled = false,
@@ -196,7 +200,7 @@ abstract class DokkaniDatabase : RoomDatabase() {
                     purchaseTaxRate = 0.0,
                     enableProduceShrinkageTracking = false,
                     enableNegativeStock = false,
-                    invoiceFooterText = "شكراً لزيارتكم!"
+                    invoiceFooterText = "شكراً لزيارتكم دكاني - تسوقكم يسعدنا!"
                 )
             )
 

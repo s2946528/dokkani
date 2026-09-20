@@ -866,6 +866,40 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateStoreProfile(
+        storeName: String,
+        storeAddress: String,
+        storePhone: String,
+        taxNumber: String,
+        invoiceFooterText: String,
+        showPreviousBalanceOnInvoice: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                storeName = storeName.ifBlank { "دكاني" },
+                storeAddress = storeAddress,
+                storePhone = storePhone,
+                taxNumber = taxNumber,
+                invoiceFooterText = invoiceFooterText,
+                showPreviousBalanceOnInvoice = showPreviousBalanceOnInvoice,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
+    fun updateShowPreviousBalance(show: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                showPreviousBalanceOnInvoice = show,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
     fun deleteInvoice(invoiceId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {

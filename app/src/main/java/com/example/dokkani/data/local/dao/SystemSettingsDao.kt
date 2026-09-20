@@ -35,4 +35,21 @@ interface SystemSettingsDao {
 
     @Query("UPDATE system_settings SET isPurchaseTaxEnabled = :enabled, purchaseTaxRate = :taxRate, lastUpdated = :timestamp WHERE id = 1")
     suspend fun updatePurchaseTaxSettings(enabled: Boolean, taxRate: Double, timestamp: Long = System.currentTimeMillis())
+
+    @Query("UPDATE system_settings SET storeName = :name, storeAddress = :address, storePhone = :phone, taxNumber = :taxNum, invoiceFooterText = :footer, showPreviousBalanceOnInvoice = :showPrevBal, lastUpdated = :timestamp WHERE id = 1")
+    suspend fun updateStoreProfile(
+        name: String,
+        address: String,
+        phone: String,
+        taxNum: String,
+        footer: String,
+        showPrevBal: Boolean,
+        timestamp: Long = System.currentTimeMillis()
+    )
+
+    @Query("UPDATE system_settings SET showPreviousBalanceOnInvoice = :show, lastUpdated = :timestamp WHERE id = 1")
+    suspend fun updateShowPreviousBalance(show: Boolean, timestamp: Long = System.currentTimeMillis())
+
+    @Query("UPDATE system_settings SET taxNumber = :taxNum, lastUpdated = :timestamp WHERE id = 1")
+    suspend fun updateTaxNumber(taxNum: String, timestamp: Long = System.currentTimeMillis())
 }

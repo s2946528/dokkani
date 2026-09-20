@@ -61,11 +61,23 @@ fun SystemSettingsScreen(
     onSaveParty: (PartyEntity) -> Unit = {},
     onDeleteParty: (PartyEntity) -> Unit = {},
     onDeleteInvoice: (Long) -> Unit = {},
+    onUpdateStoreProfile: (storeName: String, storeAddress: String, storePhone: String, taxNumber: String, invoiceFooterText: String, showPreviousBalance: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+    onUpdateShowPreviousBalance: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     val isAdmin = currentUserRole == UserRole.ADMIN
     val baseCurr = remember(currencies) { currencies.find { it.isBaseCurrency } ?: currencies.firstOrNull() }
+
+    var storeNameInput by remember(settings?.storeName) { mutableStateOf(settings?.storeName ?: "") }
+    var storeAddressInput by remember(settings?.storeAddress) { mutableStateOf(settings?.storeAddress ?: "") }
+    var storePhoneInput by remember(settings?.storePhone) { mutableStateOf(settings?.storePhone ?: "") }
+    var taxNumberInput by remember(settings?.taxNumber) { mutableStateOf(settings?.taxNumber ?: "") }
+    var invoiceFooterInput by remember(settings?.invoiceFooterText) { mutableStateOf(settings?.invoiceFooterText ?: "") }
+    var showPreviousBalanceSwitch by remember(settings?.showPreviousBalanceOnInvoice) {
+        mutableStateOf(settings?.showPreviousBalanceOnInvoice ?: true)
+    }
+    var profileSavedFeedback by remember { mutableStateOf(false) }
 
     var showAddCurrencyDialog by remember { mutableStateOf(false) }
     var editingCurrency by remember { mutableStateOf<CurrencyEntity?>(null) }
@@ -85,6 +97,202 @@ fun SystemSettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // بطاقة بيانات المنشأة وترويسة الفواتير المطبوعة (البيع، الشراء، ومردوداتهما)
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth().testTag("store_profile_settings_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Receipt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "بيانات المنشأة وترويسة الفواتير والتقارير:",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "تظهر تلقائياً في ترويسة فواتير البيع، الشراء، مردود البيع، ومردود الشراء المطبوعة",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // اسم المنشأة / البقالة
+                        OutlinedTextField(
+                            value = storeNameInput,
+                            onValueChange = {
+                                storeNameInput = it
+                                profileSavedFeedback = false
+                            },
+                            label = { Text("اسم البقالة / المنشأة") },
+                            placeholder = { Text("مثال: دكاني - تموينات ومخضار السعادة") },
+                            modifier = Modifier.fillMaxWidth().testTag("store_name_input"),
+                            singleLine = true,
+                            enabled = isAdmin
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // عنوان المنشأة
+                        OutlinedTextField(
+                            value = storeAddressInput,
+                            onValueChange = {
+                                storeAddressInput = it
+                                profileSavedFeedback = false
+                            },
+                            label = { Text("عنوان المنشأة / الفرع") },
+                            placeholder = { Text("مثال: صنعاء - شارع الزبيري") },
+                            modifier = Modifier.fillMaxWidth().testTag("store_address_input"),
+                            singleLine = true,
+                            enabled = isAdmin
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // هاتف المنشأة
+                        OutlinedTextField(
+                            value = storePhoneInput,
+                            onValueChange = {
+                                storePhoneInput = it
+                                profileSavedFeedback = false
+                            },
+                            label = { Text("رقم هاتف المنشأة") },
+                            placeholder = { Text("مثال: 777000111") },
+                            modifier = Modifier.fillMaxWidth().testTag("store_phone_input"),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            enabled = isAdmin
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // الرقم الضريبي للمنشأة
+                        OutlinedTextField(
+                            value = taxNumberInput,
+                            onValueChange = {
+                                taxNumberInput = it
+                                profileSavedFeedback = false
+                            },
+                            label = { Text("الرقم الضريبي للمنشأة (إن وجد)") },
+                            placeholder = { Text("مثال: 300123456700003") },
+                            supportingText = {
+                                Text("يُطبع تلقائياً في أعلى الفاتورة وفقاً للنظام الضريبي المعتمد")
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("tax_number_input"),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            enabled = isAdmin
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // رسالة ذيل الفاتورة
+                        OutlinedTextField(
+                            value = invoiceFooterInput,
+                            onValueChange = {
+                                invoiceFooterInput = it
+                                profileSavedFeedback = false
+                            },
+                            label = { Text("رسالة تذييل الفاتورة المطبوعة") },
+                            placeholder = { Text("مثال: شكراً لزيارتكم دكاني - تسوقكم يسعدنا!") },
+                            modifier = Modifier.fillMaxWidth().testTag("invoice_footer_input"),
+                            singleLine = true,
+                            enabled = isAdmin
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // خيار إظهار الرصيد السابق في الفواتير الآجلة
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "إظهار الرصيد السابق في الفواتير الآجلة",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "إظهار رصيد العميل أو المورد السابق وإجمالي الرصيد الحالي بعد العملية في طباعة ومعاينة الفواتير الآجلة",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Switch(
+                                    checked = showPreviousBalanceSwitch,
+                                    onCheckedChange = {
+                                        showPreviousBalanceSwitch = it
+                                        profileSavedFeedback = false
+                                        if (isAdmin) {
+                                            onUpdateShowPreviousBalance(it)
+                                        }
+                                    },
+                                    enabled = isAdmin,
+                                    modifier = Modifier.testTag("show_previous_balance_switch")
+                                )
+                            }
+                        }
+
+                        if (isAdmin) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    onUpdateStoreProfile(
+                                        storeNameInput,
+                                        storeAddressInput,
+                                        storePhoneInput,
+                                        taxNumberInput,
+                                        invoiceFooterInput,
+                                        showPreviousBalanceSwitch
+                                    )
+                                    profileSavedFeedback = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("save_store_profile_button")
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("حفظ بيانات المنشأة والفواتير")
+                            }
+
+                            if (profileSavedFeedback) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "تم حفظ بيانات المنشأة والفواتير بنجاح وتحديث الترويسة المطبوعة!",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // بطاقة إعدادات طريقة تقييم التكلفة المحاسبية
             item {
                 Card(

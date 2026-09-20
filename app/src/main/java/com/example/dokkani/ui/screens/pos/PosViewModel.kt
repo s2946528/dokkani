@@ -853,14 +853,38 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         (partyOldBal ?: 0.0) + diff
                     } else null
 
+                    val currentSettings = state.systemSettings
+                    val storeName = currentSettings?.storeName?.ifBlank { "دكاني - تموينات ومخضار السعادة" } ?: "دكاني - تموينات ومخضار السعادة"
+                    val storeAddress = currentSettings?.storeAddress ?: ""
+                    val storePhone = currentSettings?.storePhone ?: ""
+                    val taxNumber = currentSettings?.taxNumber ?: ""
+                    val footerText = currentSettings?.invoiceFooterText?.ifBlank { "شكراً لتسوقكم من دكاني!" } ?: "شكراً لتسوقكم من دكاني!"
+                    val showPrevBalanceSetting = currentSettings?.showPreviousBalanceOnInvoice ?: true
+
+                    val invoiceTitle = when (state.activeOperation) {
+                        PosOperation.SALE -> "فاتورة بيع"
+                        PosOperation.PURCHASE -> "فاتورة شراء"
+                        PosOperation.SALE_RETURN -> "مردود بيع"
+                        PosOperation.PURCHASE_RETURN -> "مردود شراء"
+                        PosOperation.RECEIPT -> "سند قبض"
+                        PosOperation.EXPENSE -> "سند صرف"
+                    }
+                    val isPurch = state.activeOperation == PosOperation.PURCHASE || state.activeOperation == PosOperation.PURCHASE_RETURN
+                    val partyLabel = if (isPurch) "المورد:" else "العميل:"
+                    val partyName = state.selectedParty?.name ?: (if (isPurch) "مورد نقدي" else "عميل نقدي")
+
                     val receiptData = ReceiptPrintData(
-                        storeName = "دكاني - تموينات ومخضار السعادة",
-                        storePhone = "0500000000",
-                        taxNumber = "300123456700003",
+                        storeName = storeName,
+                        storeAddress = storeAddress,
+                        storePhone = storePhone,
+                        taxNumber = taxNumber,
+                        invoiceTitle = invoiceTitle,
                         invoiceNumber = invoiceNumber,
                         invoiceDateFormatted = dateFormat.format(Date(timestamp)),
                         cashierName = "كاشير 1",
-                        customerName = state.selectedParty?.name ?: "عميل نقدي",
+                        customerName = partyName,
+                        partyLabel = partyLabel,
+                        isCredit = isCredit,
                         paymentMethodArabic = state.paymentMethod.labelArabic,
                         items = receiptItems,
                         subtotal = state.cartSummary.subtotal,
@@ -872,7 +896,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         remainingAmount = remaining,
                         customerOldBalance = partyOldBal,
                         customerNewBalance = partyNewBal,
-                        currencySymbol = state.currencySymbol
+                        showPreviousBalance = showPrevBalanceSetting,
+                        currencySymbol = state.currencySymbol,
+                        footerText = footerText
                     )
 
                     val result = PosCheckoutResult(
@@ -1137,6 +1163,90 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissFeedback() {
         _uiState.update { it.copy(userFeedbackMessage = null) }
+    }
+
+    fun showReceiptForInvoiceNumber(invoiceNumber: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val inv = invoiceDao.getInvoiceByInvoiceNumber(invoiceNumber) ?: return@launch
+            val invoiceWithDetails = invoiceDao.getInvoiceWithDetailsById(inv.id) ?: return@launch
+            val party = invoiceWithDetails.party
+            val items = invoiceWithDetails.items
+            val currentSettings = settingsDao.getSettingsSync() ?: SystemSettingsEntity()
+
+            val invoiceTitle = when (inv.type) {
+                InvoiceType.SALE -> "فاتورة بيع"
+                InvoiceType.PURCHASE -> "فاتورة شراء"
+                InvoiceType.SALE_RETURN -> "مردود بيع"
+                InvoiceType.PURCHASE_RETURN -> "مردود شراء"
+            }
+            val isPurch = inv.type == InvoiceType.PURCHASE || inv.type == InvoiceType.PURCHASE_RETURN
+            val partyLabel = if (isPurch) "المورد:" else "العميل:"
+            val partyName = party?.name ?: (if (isPurch) "مورد نقدي" else "عميل نقدي")
+            val isCredit = inv.paymentMethod == PaymentMethod.CREDIT
+
+            val productsMap = productDao.getAllProductsSync().associateBy { it.id }
+            val receiptItems = items.map { item ->
+                val p = productsMap[item.productId]
+                ReceiptItemData(
+                    name = p?.name ?: "صنف #${item.productId}",
+                    quantityFormatted = if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else "%.2f".format(item.quantity),
+                    unitPrice = item.unitSellingPrice,
+                    totalPrice = item.totalPrice,
+                    isWeighted = p?.isWeighted ?: false
+                )
+            }
+
+            val receiptData = ReceiptPrintData(
+                storeName = currentSettings.storeName.ifBlank { "دكاني" },
+                storeAddress = currentSettings.storeAddress,
+                storePhone = currentSettings.storePhone,
+                taxNumber = currentSettings.taxNumber,
+                invoiceTitle = invoiceTitle,
+                invoiceNumber = inv.invoiceNumber,
+                invoiceDateFormatted = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(inv.date)),
+                cashierName = "كاشير 1",
+                customerName = partyName,
+                partyLabel = partyLabel,
+                isCredit = isCredit,
+                paymentMethodArabic = inv.paymentMethod.labelArabic,
+                items = receiptItems,
+                subtotal = inv.subtotal,
+                discount = inv.discount,
+                taxRatePercent = inv.taxRate,
+                taxAmount = inv.taxAmount,
+                total = inv.total,
+                paidAmount = inv.paidAmount,
+                remainingAmount = inv.remainingAmount,
+                customerOldBalance = party?.currentBalance,
+                customerNewBalance = party?.currentBalance,
+                showPreviousBalance = currentSettings.showPreviousBalanceOnInvoice,
+                currencySymbol = _uiState.value.currencySymbol,
+                footerText = currentSettings.invoiceFooterText.ifBlank { "شكراً لتسوقكم!" }
+            )
+
+            val result = PosCheckoutResult(
+                success = true,
+                invoiceId = inv.id,
+                invoiceNumber = inv.invoiceNumber,
+                total = inv.total,
+                paymentMethod = inv.paymentMethod,
+                paidAmount = inv.paidAmount,
+                changeAmount = 0.0,
+                remainingCreditAmount = inv.remainingAmount,
+                customerName = party?.name,
+                customerNewBalance = party?.currentBalance,
+                drawerKickTriggered = false,
+                receiptData = receiptData,
+                message = "$invoiceTitle: ${inv.invoiceNumber}"
+            )
+
+            _uiState.update {
+                it.copy(
+                    lastCheckoutResult = result,
+                    showReceiptDialog = true
+                )
+            }
+        }
     }
 
     fun addNewParty(name: String, phone: String, type: PartyType, limit: Double = 1000.0) {

@@ -11,6 +11,9 @@ interface FinancialAccountDao {
     @Query("SELECT * FROM financial_accounts ORDER BY code ASC")
     fun getAllAccounts(): Flow<List<FinancialAccountEntity>>
 
+    @Query("SELECT * FROM financial_accounts ORDER BY code ASC")
+    suspend fun getAllAccountsSync(): List<FinancialAccountEntity>
+
     @Query("SELECT * FROM financial_accounts WHERE isActive = 1 ORDER BY code ASC")
     fun getActiveAccounts(): Flow<List<FinancialAccountEntity>>
 

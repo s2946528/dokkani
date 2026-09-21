@@ -199,7 +199,7 @@ private fun ProfitAndLossView(
     report: ProfitAndLossReport?,
     selectedMethod: CostValuationMethod,
     onSelectMethod: (CostValuationMethod) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     if (report == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -430,7 +430,7 @@ private fun PnlLineItem(label: String, value: String, color: Color, isBold: Bool
  * تبويب تقرير الأصناف الأكثر حركة والأعلى ربحية
  */
 @Composable
-private fun TopProductsView(report: TopProductsReport?, currencySymbol: String = "ر.س") {
+private fun TopProductsView(report: TopProductsReport?, currencySymbol: String = "ر.ي") {
     if (report == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("لا تتوفر مبيعات سابقة لحساب ربحية وحركة الأصناف", color = Color(0xFF64748B))
@@ -766,7 +766,7 @@ private fun InventoryHealthView(report: InventoryHealthReport?) {
 @Composable
 private fun AccountStatementsReportView(
     uiState: DokkaniUiState,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     var selectedCategory by remember { mutableIntStateOf(0) } // 0: العملاء, 1: الموردين, 2: الصندوق, 3: المصروفات
     var selectedPartyId by remember { mutableStateOf<Long?>(null) } // null = الكل
@@ -926,7 +926,21 @@ private fun AccountStatementsReportView(
                 }
 
                 cashVouchers.forEach { v ->
-                    if (v.voucherNumber.startsWith("REC") || v.amount > 0) {
+                    val isPay = v.isPayment || v.voucherNumber.startsWith("PAY")
+                    if (isPay) {
+                        items.add(
+                            GeneralLedgerItem(
+                                date = v.date,
+                                typeLabel = "سند صرف نقدي للمورد",
+                                refNumber = v.voucherNumber,
+                                description = if (v.notes.isNotBlank()) v.notes else "سداد نقدي للمورد من الخزينة",
+                                debit = 0.0,
+                                credit = v.amount,
+                                isIncome = false,
+                                runningBalance = 0.0
+                            )
+                        )
+                    } else {
                         items.add(
                             GeneralLedgerItem(
                                 date = v.date,

@@ -1546,9 +1546,9 @@ private fun PurchaseInvoiceDetailsDialog(
     parties: List<PartyEntity>,
     onDismiss: () -> Unit,
     onStartReturn: (InvoiceEntity) -> Unit = {},
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     currencies: List<CurrencyEntity> = emptyList(),
-    baseCurrencySymbol: String = "ر.س"
+    baseCurrencySymbol: String = "ر.ي"
 ) {
     val supplierName = invoice.partyId?.let { pId ->
         parties.find { it.id == pId }?.name

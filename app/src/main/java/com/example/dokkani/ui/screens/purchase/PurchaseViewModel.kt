@@ -101,10 +101,10 @@ data class PurchaseUiState(
     val availableCurrencies: List<CurrencyEntity> = emptyList(),
     val selectedCurrency: CurrencyEntity? = null,
     val exchangeRate: Double = 1.0,
-    val currencySymbol: String = "ر.س",
-    val currencyName: String = "الريال السعودي",
+    val currencySymbol: String = "ر.ي",
+    val currencyName: String = "الريال اليمني",
     val baseCurrencyId: Long = 1L,
-    val baseCurrencySymbol: String = "ر.س",
+    val baseCurrencySymbol: String = "ر.ي",
 
     // استعراض فواتير الشراء والتعديل والحذف
     val purchaseInvoices: List<InvoiceEntity> = emptyList(),
@@ -225,11 +225,11 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                     state.copy(
                         availableCurrencies = currencies,
                         selectedCurrency = selCurr,
-                        currencySymbol = selCurr?.symbol ?: "ر.س",
-                        currencyName = selCurr?.name ?: "الريال السعودي",
+                        currencySymbol = selCurr?.symbol ?: "ر.ي",
+                        currencyName = selCurr?.name ?: "الريال اليمني",
                         exchangeRate = selCurr?.exchangeRateToBase ?: 1.0,
                         baseCurrencyId = base?.id ?: 1L,
-                        baseCurrencySymbol = base?.symbol ?: "ر.س"
+                        baseCurrencySymbol = base?.symbol ?: "ر.ي"
                     )
                 }
             }
@@ -266,7 +266,14 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun selectSupplier(supplier: PartyEntity?) {
-        _uiState.update { it.copy(selectedSupplier = supplier) }
+        if (supplier == null) {
+            _uiState.update { it.copy(selectedSupplier = null) }
+        } else {
+            viewModelScope.launch(Dispatchers.IO) {
+                val freshSupplier = partyDao.getPartyById(supplier.id) ?: supplier
+                _uiState.update { it.copy(selectedSupplier = freshSupplier) }
+            }
+        }
     }
 
     fun setSupplierInvoiceNumber(number: String) {
@@ -546,9 +553,12 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
 
+                    val updatedSupplier = state.selectedSupplier?.id?.let { partyDao.getPartyById(it) }
+
                     _uiState.update {
                         it.copy(
                             isProcessing = false,
+                            selectedSupplier = updatedSupplier ?: it.selectedSupplier,
                             items = emptyList(),
                             supplierInvoiceNumber = "",
                             lastSavedInvoiceNumber = invoiceNumber,

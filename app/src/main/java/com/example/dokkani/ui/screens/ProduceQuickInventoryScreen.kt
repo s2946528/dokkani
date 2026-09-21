@@ -96,7 +96,7 @@ fun ProduceQuickInventoryScreen(
     onAuditInputsChanged: (begQty: String?, begCost: String?, purQty: String?, purCost: String?, endingQty: String?, wasteQty: String?, posSold: String?, posRev: String?) -> Unit,
     onCommitSilentAdjustments: () -> Unit,
     onNavigateToBarcodePrinter: (Long) -> Unit,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
 
     // حالة حاسبة سحارة الخضار المشكل القديمة
     grossWeightInput: String,
@@ -218,7 +218,7 @@ private fun DailyProduceAuditView(
     onAuditInputsChanged: (begQty: String?, begCost: String?, purQty: String?, purCost: String?, endingQty: String?, wasteQty: String?, posSold: String?, posRev: String?) -> Unit,
     onCommitSilentAdjustments: () -> Unit,
     onNavigateToBarcodePrinter: (Long) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     val weightedProducts = remember(productsWithUnits) {
         productsWithUnits.filter { it.product.isWeighted || it.product.category.contains("خضار") || it.product.category.contains("فاكهة") || it.product.category.contains("ورقيات") }
@@ -750,7 +750,7 @@ private fun MixedProduceCrateCalculatorView(
     dateFormat: SimpleDateFormat,
     onInputsChanged: (gross: String?, cost: String?, expense: String?, waste: String?, margin: String?, desc: String?) -> Unit,
     onSaveBatch: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     LazyColumn(
         modifier = Modifier

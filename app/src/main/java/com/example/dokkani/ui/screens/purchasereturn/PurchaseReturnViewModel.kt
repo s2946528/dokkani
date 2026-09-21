@@ -64,7 +64,7 @@ data class PurchaseReturnUiState(
     val isProcessing: Boolean = false,
     val userFeedbackMessage: String? = null,
     val isError: Boolean = false,
-    val currencySymbol: String = "ر.س",
+    val currencySymbol: String = "ر.ي",
     val showSelectInvoiceDialog: Boolean = false,
     val showSuccessDialog: Boolean = false,
     val generatedReturnInvoiceNumber: String? = null

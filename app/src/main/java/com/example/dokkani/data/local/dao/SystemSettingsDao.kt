@@ -21,6 +21,12 @@ interface SystemSettingsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateSettings(settings: SystemSettingsEntity)
 
+    @Query("SELECT openingCashDrawer FROM system_settings WHERE id = 1 LIMIT 1")
+    suspend fun getOpeningCashDrawer(): Double?
+
+    @Query("SELECT initialCapital FROM system_settings WHERE id = 1 LIMIT 1")
+    suspend fun getInitialCapital(): Double?
+
     @Query("UPDATE system_settings SET costValuationMethod = :method, lastUpdated = :timestamp WHERE id = 1")
     suspend fun updateCostValuationMethod(method: CostValuationMethod, timestamp: Long = System.currentTimeMillis())
 

@@ -75,7 +75,7 @@ fun CostingEngineScreen(
     onSelectMethod: (CostValuationMethod) -> Unit = {},
     onSaveMethodToSettings: (CostValuationMethod) -> Unit = {},
     onAddSimulatedPurchaseBatch: (quantity: Double, unitCost: Double) -> Unit = { _, _ -> },
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     modifier: Modifier = Modifier
 ) {
     var showAddBatchDialog by remember { mutableStateOf(false) }
@@ -398,7 +398,7 @@ private fun MethodComparisonCard(
     unitName: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -442,7 +442,7 @@ private fun MethodComparisonCard(
 private fun AddSimulatedBatchDialog(
     onDismiss: () -> Unit,
     onConfirm: (quantity: Double, unitCost: Double) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     var qtyText by remember { mutableStateOf("15.0") }
     var costText by remember { mutableStateOf("4.20") }

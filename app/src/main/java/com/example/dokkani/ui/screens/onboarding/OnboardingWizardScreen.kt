@@ -83,8 +83,8 @@ fun OnboardingWizardScreen(
             }
         }
 
-        val activeCurrencySymbol = uiState.baseCurrency?.symbol ?: selectedBaseCurrency?.symbol ?: "ر.س"
-        val activeCurrencyName = uiState.baseCurrency?.name ?: selectedBaseCurrency?.name ?: "الريال السعودي"
+        val activeCurrencySymbol = uiState.baseCurrency?.symbol ?: selectedBaseCurrency?.symbol ?: "ر.ي"
+        val activeCurrencyName = uiState.baseCurrency?.name ?: selectedBaseCurrency?.name ?: "الريال اليمني"
 
         // بيانات التهيئة المحاسبية والبيئة العامة
         var storeName by remember { mutableStateOf("تموينات ومخضار السعادة") }

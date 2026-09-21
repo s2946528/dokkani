@@ -94,7 +94,7 @@ fun ProductsAndUnitsScreen(
     onRenameCategory: (oldName: String, newName: String) -> Unit = { _, _ -> },
     onDeleteCategory: (categoryName: String, reassignTo: String) -> Unit = { _, _ -> },
     onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     modifier: Modifier = Modifier
 ) {
     // التبويبات المحدثة بالترتيب والأسماء المطلوبة: 0: الأصناف، 1: الوحدات، 2: التصنيفات
@@ -1258,7 +1258,7 @@ private fun UnitItemRow(
     onEditUnit: (ProductUnitEntity) -> Unit,
     onDeleteUnit: (ProductUnitEntity) -> Unit,
     onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     Surface(
         shape = RoundedCornerShape(6.dp),

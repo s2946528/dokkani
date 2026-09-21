@@ -58,7 +58,7 @@ import androidx.compose.ui.unit.sp
 fun PosOpenPriceDialog(
     onConfirm: (name: String, price: Double, quantity: Double, isWeighted: Boolean) -> Unit,
     onDismiss: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     var name by remember { mutableStateOf("صنف بسعر حر") }
     var priceInput by remember { mutableStateOf("5.00") }

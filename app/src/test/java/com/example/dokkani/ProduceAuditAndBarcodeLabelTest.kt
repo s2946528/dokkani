@@ -112,7 +112,7 @@ class ProduceAuditAndBarcodeLabelTest {
             unitName = "عبوة صحن",
             barcode = "2900004012019",
             price = 4.75,
-            currencySymbol = "ر.س",
+            currencySymbol = "ر.ي",
             size = LabelPaperSize.SIZE_38X25,
             copies = 3,
             showStoreName = true,

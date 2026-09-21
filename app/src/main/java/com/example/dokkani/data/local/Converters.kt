@@ -8,6 +8,7 @@ import com.example.dokkani.data.local.entities.InvoiceType
 import com.example.dokkani.data.local.entities.MovementType
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.data.local.entities.VoucherType
 
 /**
  * محولات الأنواع الخاصة بـ Room لتخزين الـ Enums في جداول SQLite كنصوص
@@ -104,5 +105,15 @@ class Converters {
         com.example.dokkani.domain.security.LicenseStatus.valueOf(value)
     } catch (e: Exception) {
         com.example.dokkani.domain.security.LicenseStatus.TRIAL
+    }
+
+    @TypeConverter
+    fun fromVoucherType(value: VoucherType): String = value.name
+
+    @TypeConverter
+    fun toVoucherType(value: String): VoucherType = try {
+        VoucherType.valueOf(value)
+    } catch (e: Exception) {
+        if (value.startsWith("PAY")) VoucherType.PAYMENT else VoucherType.RECEIPT
     }
 }

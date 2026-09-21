@@ -99,7 +99,7 @@ class PosHardwareAndBarcodeTest {
             total = 14.52,
             paidAmount = 20.00,
             remainingAmount = 0.0,
-            currencySymbol = "ر.س",
+            currencySymbol = "ر.ي",
             footerText = "شكراً لزيارتكم!"
         )
 

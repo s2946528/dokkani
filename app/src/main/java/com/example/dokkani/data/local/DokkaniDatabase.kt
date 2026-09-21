@@ -74,7 +74,7 @@ import kotlinx.coroutines.launch
         LeaseholdRightEntity::class,
         FinancialAccountEntity::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

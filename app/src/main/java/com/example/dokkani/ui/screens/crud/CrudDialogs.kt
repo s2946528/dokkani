@@ -448,7 +448,7 @@ fun AddEditPartyDialog(
     defaultPartyType: PartyType = PartyType.CUSTOMER,
     onSaveParty: (PartyEntity) -> Unit,
     onDismiss: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     var name by remember { mutableStateOf(initialParty?.name ?: "") }
     var phone by remember { mutableStateOf(initialParty?.phone ?: "") }

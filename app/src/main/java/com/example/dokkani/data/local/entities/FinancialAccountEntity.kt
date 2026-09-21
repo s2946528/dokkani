@@ -54,7 +54,7 @@ data class FinancialAccountEntity(
     val accountNumber: String = "",        // رقم الحساب المصرفي / الآيبان IBAN / رقم المحفظة
     val openingBalance: Double = 0.0,      // الرصيد الافتتاحي
     val currentBalance: Double = 0.0,      // الرصيد الجاري الحالي
-    val currency: String = "ر.س",          // العملة
+    val currency: String = "ر.ي",          // العملة
     val isActive: Boolean = true,          // حالة الحساب: نشط أو معطل
     val isDefault: Boolean = false,        // هل هو الحساب الافتراضي للدفع/التحصيل
     val notes: String = "",                // إعدادات وملاحظات إضافية

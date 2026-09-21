@@ -18,7 +18,10 @@ data class SystemSettingsEntity(
     val taxNumber: String = "",                           // الرقم الضريبي للمنشأة (وفقاً لنظام وضوابط الدولة)
     val showPreviousBalanceOnInvoice: Boolean = true,     // خيار تفعيل/إلغاء إظهار الرصيد السابق في طباعة الفواتير الآجلة
     val costValuationMethod: CostValuationMethod = CostValuationMethod.WAC, // طريقة التقييم المحاسبي المعتمدة
-    val defaultCurrencyCode: String = "SAR",               // العملة الافتراضية للفواتير
+    val defaultCurrencyCode: String = "YER",               // العملة الافتراضية للفواتير
+    val initialCapital: Double = 0.0,                      // رأس المال الافتتاحي المعتمد في معالج التهيئة
+    val openingCashDrawer: Double = 0.0,                   // نقدية الصندوق والدرج الافتتاحية المعتمدة في معالج التهيئة
+    val initialBankBalance: Double = 0.0,                  // الرصيد البنكي الافتتاحي في معالج التهيئة
     val isTaxEnabled: Boolean = false,                     // تفعيل / إلغاء حساب الضريبة في المبيعات (معطلة افتراضياً وفق بيئة العمل بالجمهورية اليمنية)
     val defaultTaxRate: Double = 0.0,                      // نسبة ضريبة المبيعات الافتراضية (0.0% افتراضياً)
     val isPurchaseTaxEnabled: Boolean = false,             // تفعيل / إلغاء حساب ضريبة المشتريات بشكل مستقل (معطلة افتراضياً)

@@ -140,7 +140,7 @@ fun AssetsAndEquityScreen(
     onSellLeaseholdInputsChanged: (String, PaymentMethod) -> Unit = { _, _ -> },
     onSubmitSellLeasehold: () -> Unit = {},
     onDeleteLeasehold: (Long) -> Unit = {},
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
 
@@ -310,7 +310,7 @@ fun AssetsAndEquityScreen(
 private fun CapitalAndEquityTabContent(
     equityResult: EquityCalculationResult?,
     onOpenOwnerTransDialog: (OwnerTransactionType) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     val eq = equityResult ?: EquityCalculationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
@@ -400,32 +400,38 @@ private fun CapitalAndEquityTabContent(
                     EquationRow(
                         label = "(+) نقدية الصندوق والدرج في البداية",
                         amount = eq.cashInHandAndDrawer,
-                        isPositive = true
+                        isPositive = true,
+                        currencySymbol = currencySymbol
                     )
                     EquationRow(
                         label = "(+) أرصدة البنوك ومقبوضات شبكة مدى",
                         amount = eq.bankAndMadaBalances,
-                        isPositive = true
+                        isPositive = true,
+                        currencySymbol = currencySymbol
                     )
                     EquationRow(
                         label = "(+) تقييم بضاعة أول المدة بسعر التكلفة",
                         amount = eq.inventoryValuationAtCost,
-                        isPositive = true
+                        isPositive = true,
+                        currencySymbol = currencySymbol
                     )
                     EquationRow(
                         label = "(+) نقل القدم / خلو المحل (أصل تأسيسي غير ملموس)",
                         amount = eq.totalLeaseholdGoodwillValue,
-                        isPositive = true
+                        isPositive = true,
+                        currencySymbol = currencySymbol
                     )
                     EquationRow(
                         label = "(+) ديون العملاء والمستحقات (الأرصدة المدينة)",
                         amount = eq.customerReceivables,
-                        isPositive = true
+                        isPositive = true,
+                        currencySymbol = currencySymbol
                     )
                     EquationRow(
                         label = "(-) ديون الموردين والالتزامات (الأرصدة الدائنة)",
                         amount = eq.supplierPayables,
-                        isPositive = false
+                        isPositive = false,
+                        currencySymbol = currencySymbol
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0xFFCBD5E1))
@@ -513,7 +519,7 @@ private fun FixedAssetsTabContent(
     dateFormat: SimpleDateFormat,
     onOpenAddAssetDialog: () -> Unit,
     onDeleteAsset: (Long) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -642,7 +648,7 @@ private fun OwnerTransactionsTabContent(
     dateFormat: SimpleDateFormat,
     onOpenOwnerTransDialog: (OwnerTransactionType) -> Unit,
     onDeleteOwnerTrans: (Long) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -803,7 +809,7 @@ private fun EquationRow(
     label: String,
     amount: Double,
     isPositive: Boolean,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     Row(
         modifier = Modifier
@@ -838,7 +844,7 @@ private fun AddAssetDialog(
     onInputsChanged: (String, String, String, String, String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     var categoryExpanded by remember { mutableStateOf(false) }
 
@@ -971,7 +977,7 @@ private fun AddOwnerTransactionDialog(
     onInputsChanged: (OwnerTransactionType, String, Long?, String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     var productExpanded by remember { mutableStateOf(false) }
     val selectedProduct = products.find { it.product.id == productIdInput }
@@ -1076,7 +1082,7 @@ private fun LeaseholdRightsTabContent(
     onOpenAmortizeLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
     onOpenSellLeaseholdDialog: (LeaseholdRightEntity) -> Unit,
     onDeleteLeasehold: (Long) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -1266,7 +1272,7 @@ private fun AddLeaseholdDialog(
     onInputsChanged: (String, String, String, String, String) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1363,7 +1369,7 @@ private fun AmortizeLeaseholdDialog(
     onAmortizeAmountChanged: (String) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1438,7 +1444,7 @@ private fun SellLeaseholdDialog(
     onInputsChanged: (String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     var paymentExpanded by remember { mutableStateOf(false) }
     val sellPrice = sellPriceInput.toDoubleOrNull() ?: 0.0

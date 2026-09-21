@@ -77,7 +77,7 @@ import com.example.dokkani.domain.pos.PosCartItem
 fun PosCartComponent(
     cartItems: List<PosCartItem>,
     cartSummary: CartSummary,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     onQuantityChange: (cartItemId: String, newQty: Double) -> Unit,
     onUnitPriceChange: (cartItemId: String, newPrice: Double) -> Unit = { _, _ -> },
     onUnitChange: (cartItemId: String, newUnit: ProductUnitEntity) -> Unit = { _, _ -> },

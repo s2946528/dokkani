@@ -126,7 +126,7 @@ fun PosQuickTilesGrid(
 fun QuickTileCard(
     tile: QuickTileItem,
     onClick: () -> Unit,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     modifier: Modifier = Modifier
 ) {
     val (icon, bgCol, iconCol) = getIconAndColors(tile.iconType)

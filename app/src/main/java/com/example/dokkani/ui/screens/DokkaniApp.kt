@@ -445,7 +445,10 @@ fun DokkaniApp(
                                 )
                             }
                             "طباعة الباركود" -> {
-                                BarcodeLabelPrinterScreen(productsWithUnits = uiState.products)
+                                BarcodeLabelPrinterScreen(
+                                    productsWithUnits = uiState.products,
+                                    currencySymbol = uiState.currencySymbol
+                                )
                             }
                             "الترخيص والحماية" -> {
                                 LicenseScreen(

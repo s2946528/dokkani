@@ -20,6 +20,7 @@ import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.PaymentVoucherEntity
+import com.example.dokkani.data.local.entities.VoucherType
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
@@ -222,8 +223,8 @@ data class DokkaniUiState(
     val accountsSearchQuery: String = "",
     val accountsFilterType: FinancialAccountType? = null
 ) {
-    val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.س"
-    val currencyName: String get() = baseCurrency?.name ?: "الريال السعودي"
+    val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.ي"
+    val currencyName: String get() = baseCurrency?.name ?: "الريال اليمني"
     val currencyId: Long get() = baseCurrency?.id ?: 1L
 }
 
@@ -253,21 +254,25 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.productDao().getProductsWithUnits().collectLatest { products ->
                 _uiState.update { it.copy(products = products) }
+                recalculateEquity()
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
             db.partyDao().getAllParties().collectLatest { parties ->
                 _uiState.update { it.copy(parties = parties) }
+                recalculateEquity()
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
             db.expenseDao().getAllExpenses().collectLatest { expenses ->
                 _uiState.update { it.copy(expenses = expenses) }
+                recalculateEquity()
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
             db.cashShiftDao().getAllShifts().collectLatest { shifts ->
                 _uiState.update { it.copy(cashShifts = shifts) }
+                recalculateEquity()
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -293,6 +298,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.systemSettingsDao().getSettings().collectLatest { settings ->
                 _uiState.update { it.copy(settings = settings) }
+                recalculateEquity()
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -338,6 +344,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.financialAccountDao().getAllAccounts().collectLatest { accounts ->
                 _uiState.update { it.copy(financialAccounts = accounts) }
+                recalculateEquity()
             }
         }
     }
@@ -430,17 +437,25 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
         val invoices = state.invoices
         val expenses = state.expenses
+        val vouchers = state.vouchers
 
         val cashSalesList = invoices.filter { it.type == InvoiceType.SALE && it.paymentMethod == PaymentMethod.CASH }
             .map { it.paidAmount }
         val cashExpensesList = expenses.filter { it.paymentMethod == PaymentMethod.CASH }
             .map { it.amount }
 
+        val cashCollectionsList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && !it.isPayment }
+            .map { it.amount }
+        val cashVoucherExpensesList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && it.isPayment }
+            .map { it.amount }
+
+        val totalCashExpensesList = cashExpensesList + cashVoucherExpensesList
+
         val res = CashDrawerEngine.calculateReconciliation(
             openingCash = opening,
             cashSales = cashSalesList,
-            cashCollections = emptyList(),
-            cashExpenses = cashExpensesList,
+            cashCollections = cashCollectionsList,
+            cashExpenses = totalCashExpensesList,
             actualPhysicalCash = physical
         )
         _uiState.update { it.copy(reconciliationResult = res) }
@@ -505,6 +520,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 vouchers = vouchers,
                 storeName = "دكاني"
             )
+
+            if (kotlin.math.abs(party.currentBalance - summary.currentBalance) > 0.001) {
+                db.partyDao().updateParty(party.copy(currentBalance = summary.currentBalance))
+            }
+
             _uiState.update { it.copy(customerStatementSummary = summary, isLoadingStatement = false) }
         }
     }
@@ -546,19 +566,49 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             val party = db.partyDao().getPartyById(partyId)
             val isSupplier = party?.type == PartyType.SUPPLIER
 
+            val vType = if (isSupplier) VoucherType.PAYMENT else VoucherType.RECEIPT
             val prefix = if (isSupplier) "PAY-" else "RCV-"
             val voucher = PaymentVoucherEntity(
                 voucherNumber = "$prefix${now.toString().takeLast(6)}",
                 partyId = partyId,
                 amount = amount,
+                voucherType = vType,
                 paymentMethod = state.voucherPaymentMethod,
                 notes = state.voucherNotesInput,
                 receivedBy = "كاشير النظام"
             )
             db.paymentVoucherDao().insertVoucher(voucher)
 
+            // 1. تحديث رصيد الحساب للعميل أو المورد
             val balanceDiff = if (isSupplier) +amount else -amount
             db.partyDao().updateBalance(partyId, balanceDiff)
+
+            // 2. تحديث عهدة الصندوق للشفت المفتوح فوراً عند الدفع النقدي
+            if (state.voucherPaymentMethod == PaymentMethod.CASH) {
+                val openShift = db.cashShiftDao().getOpenShift()
+                if (openShift != null) {
+                    if (isSupplier) {
+                        // سند صرف للمورد -> يضاف لمصاريف الشفت ويخصم من النقدية المتوقعة بالدرج
+                        val newExpenses = openShift.totalCashExpenses + amount
+                        db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
+                    } else {
+                        // سند قبض من عميل -> يضاف لمقبوضات الشفت ويزيد النقدية المتوقعة بالدرج
+                        val newCollections = openShift.totalCashCollections + amount
+                        db.cashShiftDao().updateCollections(openShift.id, newCollections)
+                    }
+                }
+            }
+
+            // 3. تحديث رصيد الحساب المالي (الصندوق / البنك)
+            val accountType = when (state.voucherPaymentMethod) {
+                PaymentMethod.CASH -> FinancialAccountType.CASH_DRAWER
+                else -> FinancialAccountType.BANK
+            }
+            val targetAccount = db.financialAccountDao().getAllAccountsSync().firstOrNull { it.accountType == accountType && it.isActive }
+            if (targetAccount != null) {
+                val accountDiff = if (isSupplier) -amount else +amount
+                db.financialAccountDao().updateAccount(targetAccount.copy(currentBalance = targetAccount.currentBalance + accountDiff))
+            }
 
             _uiState.update {
                 it.copy(
@@ -953,20 +1003,33 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             db.withTransaction {
                 val v = db.paymentVoucherDao().getVoucherById(voucherId)
                 if (v != null) {
-                    // التراجع عن رصيد العميل (تم سداد مبلغ، فعند الحذف نعيد المديونية)
+                    val isPay = v.isPayment
                     val party = db.partyDao().getPartyById(v.partyId)
                     if (party != null) {
                         val isSupplier = party.type == PartyType.SUPPLIER
-                        val newBal = if (isSupplier) party.currentBalance - v.amount else party.currentBalance + v.amount
+                        val newBal = if (isSupplier || isPay) party.currentBalance - v.amount else party.currentBalance + v.amount
                         db.partyDao().updateParty(party.copy(currentBalance = newBal))
                     }
                     if (v.paymentMethod == PaymentMethod.CASH) {
-                        val shifts = db.cashShiftDao().getAllShiftsSync()
-                        val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
-                        if (currentShift != null) {
-                            val newCollections = (currentShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
-                            db.cashShiftDao().updateCollections(currentShift.id, newCollections)
+                        val openShift = db.cashShiftDao().getOpenShift()
+                        if (openShift != null) {
+                            if (isPay) {
+                                val newExp = (openShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                                db.cashShiftDao().updateExpenses(openShift.id, newExp)
+                            } else {
+                                val newCollections = (openShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
+                                db.cashShiftDao().updateCollections(openShift.id, newCollections)
+                            }
                         }
+                    }
+                    val accountType = when (v.paymentMethod) {
+                        PaymentMethod.CASH -> FinancialAccountType.CASH_DRAWER
+                        else -> FinancialAccountType.BANK
+                    }
+                    val targetAccount = db.financialAccountDao().getAllAccountsSync().firstOrNull { it.accountType == accountType && it.isActive }
+                    if (targetAccount != null) {
+                        val accountDiff = if (isPay) +v.amount else -v.amount
+                        db.financialAccountDao().updateAccount(targetAccount.copy(currentBalance = targetAccount.currentBalance + accountDiff))
                     }
                     db.paymentVoucherDao().deleteVoucher(v)
                 }
@@ -1004,15 +1067,39 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
                 val now = System.currentTimeMillis()
 
-                // 1. تحديث إعدادات النظام
+                // 1. تحديث إعدادات النظام وتوثيق رأس المال ونقدية الصندوق والبنك المعتمدة
                 val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
-                db.systemSettingsDao().insertOrUpdateSettings(
-                    currentSettings.copy(
-                        storeName = storeName.ifBlank { "تموينات ومخضار السعادة" },
-                        costValuationMethod = valuationMethod,
-                        lastUpdated = now
-                    )
+                val effectiveOpeningCash = if (openingCashDrawer > 0.0) openingCashDrawer else (if (initialCapital > 0.0) initialCapital else 0.0)
+                val updatedSettings = currentSettings.copy(
+                    storeName = storeName.ifBlank { "تموينات ومخضار السعادة" },
+                    defaultCurrencyCode = selectedBaseCurrency?.code ?: "YER",
+                    costValuationMethod = valuationMethod,
+                    initialCapital = initialCapital,
+                    openingCashDrawer = effectiveOpeningCash,
+                    initialBankBalance = bankBalance,
+                    lastUpdated = now
                 )
+                db.systemSettingsDao().insertOrUpdateSettings(updatedSettings)
+
+                // تحديث أرصدة الحسابات المالية (صندوق النقدية والبنك) في الدليل المحاسبي
+                val cashAccount = db.financialAccountDao().getAccountByCode("10101")
+                if (cashAccount != null) {
+                    db.financialAccountDao().updateAccount(
+                        cashAccount.copy(
+                            openingBalance = effectiveOpeningCash,
+                            currentBalance = effectiveOpeningCash
+                        )
+                    )
+                }
+                val bankAccount = db.financialAccountDao().getAccountByCode("10201")
+                if (bankAccount != null && bankBalance > 0.0) {
+                    db.financialAccountDao().updateAccount(
+                        bankAccount.copy(
+                            openingBalance = bankBalance,
+                            currentBalance = bankBalance
+                        )
+                    )
+                }
 
                 // 2. تحديث وتثبيت مستخدم مدير النظام والكاشير
                 db.userDao().insertUser(
@@ -1037,7 +1124,6 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 )
 
                 // 3. إنشاء وفتح أول شفت مالي كاشير
-                val effectiveOpeningCash = if (openingCashDrawer > 0.0) openingCashDrawer else (if (initialCapital > 0.0) initialCapital else 300.0)
                 val shiftNumber = "SHF-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date(now))}"
                 val initialShift = CashShiftEntity(
                     shiftNumber = shiftNumber,
@@ -1180,17 +1266,35 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun recalculateEquity() {
         val state = _uiState.value
-        val openShiftCash = state.cashShifts.firstOrNull { it.status == "OPEN" }?.openingCash ?: 200.0
-        val bankBalance = state.expenses
+
+        // 1. استخراج نقدية الصندوق والدرج في البداية ديناميكياً
+        // يقرأ القيمة الحقيقية من إعدادات التهيئة المسجلة أولاً، ثم من حساب الصندوق الرئيسي (10101)، ثم من الشفت الافتتاحي
+        val cashFromSettings = state.settings?.openingCashDrawer?.takeIf { it > 0.0 }
+            ?: state.settings?.initialCapital?.takeIf { it > 0.0 }
+        val cashFromAccount = state.financialAccounts.firstOrNull { it.code == "10101" || it.accountType == FinancialAccountType.CASH_DRAWER }?.let {
+            if (it.openingBalance > 0.0) it.openingBalance else it.currentBalance
+        }?.takeIf { it > 0.0 }
+        val cashFromShift = state.cashShifts.minByOrNull { it.startTime }?.openingCash?.takeIf { it > 0.0 }
+            ?: state.cashShifts.firstOrNull { it.status == "OPEN" }?.openingCash?.takeIf { it > 0.0 }
+
+        val dynamicCashInDrawer = cashFromSettings ?: cashFromAccount ?: cashFromShift ?: 0.0
+
+        // 2. استخراج أرصدة البنوك والشبكة ديناميكياً
+        val bankFromSettings = state.settings?.initialBankBalance?.takeIf { it > 0.0 }
+        val bankFromAccount = state.financialAccounts.firstOrNull { it.code == "10201" || it.accountType == FinancialAccountType.BANK }?.let {
+            if (it.openingBalance > 0.0) it.openingBalance else it.currentBalance
+        }?.takeIf { it > 0.0 }
+        val expensesBank = state.expenses
             .filter { it.paymentMethod == PaymentMethod.BANK_TRANSFER || it.paymentMethod == PaymentMethod.MADA }
             .sumOf { it.amount }
+        val dynamicBankBalance = (bankFromSettings ?: bankFromAccount ?: 0.0) + expensesBank
 
         val pnl = state.pnlReport
         val netOperatingProfit = pnl?.netOperatingProfit ?: 0.0
 
         val result = AssetsAndEquityEngine.calculateInitialCapitalAndEquity(
-            cashInDrawer = openShiftCash,
-            bankBalances = bankBalance,
+            cashInDrawer = dynamicCashInDrawer,
+            bankBalances = dynamicBankBalance,
             productsWithUnits = state.products,
             stockMovements = state.stockMovements,
             parties = state.parties,

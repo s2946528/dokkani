@@ -65,27 +65,81 @@ object CreditNotebookEngine {
     ): CustomerStatementSummary {
         val rawItems = mutableListOf<RawMovement>()
         val isSupplier = party.type == com.example.dokkani.data.local.entities.PartyType.SUPPLIER
+        val partyInvoices = invoices.filter { it.partyId == party.id }
+        val partyVouchers = vouchers.filter { it.partyId == party.id }
 
-        if (!isSupplier) {
-            // 1. فواتير مبيعات الآجل للعميل
-            invoices.filter { it.partyId == party.id }.forEach { inv ->
-                val creditAmount = if (inv.remainingAmount > 0.001) inv.remainingAmount else inv.total
-                rawItems.add(
-                    RawMovement(
-                        rawId = inv.id,
-                        date = inv.date,
-                        type = StatementEntryType.SALE_INVOICE,
-                        refNumber = inv.invoiceNumber,
-                        description = if (inv.notes.isNotBlank()) inv.notes else "مشتريات على الحساب",
-                        debit = creditAmount,
-                        credit = 0.0,
-                        paymentMethodArabic = inv.paymentMethod.labelArabic
+        partyInvoices.forEach { inv ->
+            val isCreditPayment = inv.paymentMethod == com.example.dokkani.data.local.entities.PaymentMethod.CREDIT || inv.remainingAmount > 0.001
+            val effectiveCreditAmount = if (inv.remainingAmount > 0.001) inv.remainingAmount else (if (isCreditPayment) inv.total else 0.0)
+
+            when (inv.type) {
+                com.example.dokkani.data.local.entities.InvoiceType.SALE -> {
+                    if (effectiveCreditAmount > 0.001) {
+                        rawItems.add(
+                            RawMovement(
+                                rawId = inv.id,
+                                date = inv.date,
+                                type = StatementEntryType.SALE_INVOICE,
+                                refNumber = inv.invoiceNumber,
+                                description = if (inv.notes.isNotBlank()) inv.notes else "مشتريات على الحساب",
+                                debit = effectiveCreditAmount,
+                                credit = 0.0,
+                                paymentMethodArabic = inv.paymentMethod.labelArabic
+                            )
+                        )
+                    }
+                }
+                com.example.dokkani.data.local.entities.InvoiceType.SALE_RETURN -> {
+                    val returnAmt = if (effectiveCreditAmount > 0.001) effectiveCreditAmount else inv.total
+                    rawItems.add(
+                        RawMovement(
+                            rawId = inv.id,
+                            date = inv.date,
+                            type = StatementEntryType.SALE_RETURN,
+                            refNumber = inv.invoiceNumber,
+                            description = if (inv.notes.isNotBlank()) inv.notes else "مرتجع مبيعات",
+                            debit = 0.0,
+                            credit = returnAmt,
+                            paymentMethodArabic = inv.paymentMethod.labelArabic
+                        )
                     )
-                )
+                }
+                com.example.dokkani.data.local.entities.InvoiceType.PURCHASE -> {
+                    if (effectiveCreditAmount > 0.001) {
+                        rawItems.add(
+                            RawMovement(
+                                rawId = inv.id,
+                                date = inv.date,
+                                type = StatementEntryType.PURCHASE_INVOICE,
+                                refNumber = inv.invoiceNumber,
+                                description = if (inv.notes.isNotBlank()) inv.notes else "فاتورة توريد مشتريات",
+                                debit = 0.0,
+                                credit = effectiveCreditAmount,
+                                paymentMethodArabic = inv.paymentMethod.labelArabic
+                            )
+                        )
+                    }
+                }
+                com.example.dokkani.data.local.entities.InvoiceType.PURCHASE_RETURN -> {
+                    val returnAmt = if (effectiveCreditAmount > 0.001) effectiveCreditAmount else inv.total
+                    rawItems.add(
+                        RawMovement(
+                            rawId = inv.id,
+                            date = inv.date,
+                            type = StatementEntryType.PURCHASE_RETURN,
+                            refNumber = inv.invoiceNumber,
+                            description = if (inv.notes.isNotBlank()) inv.notes else "مرتجع مشتريات",
+                            debit = returnAmt,
+                            credit = 0.0,
+                            paymentMethodArabic = inv.paymentMethod.labelArabic
+                        )
+                    )
+                }
             }
+        }
 
-            // 2. سندات القبض والتسديدات للعميل
-            vouchers.filter { it.partyId == party.id }.forEach { vch ->
+        partyVouchers.forEach { vch ->
+            if (!isSupplier) {
                 rawItems.add(
                     RawMovement(
                         rawId = vch.id,
@@ -98,27 +152,7 @@ object CreditNotebookEngine {
                         paymentMethodArabic = vch.paymentMethod.labelArabic
                     )
                 )
-            }
-        } else {
-            // 1. فواتير المشتريات والذمم للمورد
-            invoices.filter { it.partyId == party.id }.forEach { inv ->
-                val amount = if (inv.remainingAmount > 0.001) inv.remainingAmount else inv.total
-                rawItems.add(
-                    RawMovement(
-                        rawId = inv.id,
-                        date = inv.date,
-                        type = StatementEntryType.PURCHASE_INVOICE,
-                        refNumber = inv.invoiceNumber,
-                        description = if (inv.notes.isNotBlank()) inv.notes else "فاتورة توريد مشتريات",
-                        debit = 0.0,
-                        credit = amount,
-                        paymentMethodArabic = inv.paymentMethod.labelArabic
-                    )
-                )
-            }
-
-            // 2. سندات الصرف والتسديد للمورد
-            vouchers.filter { it.partyId == party.id }.forEach { vch ->
+            } else {
                 rawItems.add(
                     RawMovement(
                         rawId = vch.id,
@@ -134,8 +168,8 @@ object CreditNotebookEngine {
             }
         }
 
-        // ترتيب الحركات تصاعدياً حسب التاريخ لاحتساب الرصيد التراكمي
-        val sortedMovements = rawItems.sortedBy { it.date }
+        // ترتيب الحركات تصاعدياً حسب التاريخ ثم المعرف لاحتساب الرصيد التراكمي بدقة
+        val sortedMovements = rawItems.sortedWith(compareBy({ it.date }, { it.rawId }))
 
         var cumulativeBalance = 0.0
         val timelineItems = mutableListOf<StatementItem>()
@@ -148,7 +182,7 @@ object CreditNotebookEngine {
             }
             timelineItems.add(
                 StatementItem(
-                    id = "${m.refNumber}_${m.date}",
+                    id = "${m.refNumber}_${m.date}_${m.rawId}",
                     rawId = m.rawId,
                     date = m.date,
                     dateFormatted = dateFormat.format(Date(m.date)),
@@ -168,30 +202,30 @@ object CreditNotebookEngine {
 
         val totalPurchases = if (!isSupplier) rawItems.sumOf { it.debit } else rawItems.sumOf { it.credit }
         val totalPaid = if (!isSupplier) rawItems.sumOf { it.credit } else rawItems.sumOf { it.debit }
-        val finalBalance = party.currentBalance
-        val isOver = party.creditLimit > 0 && finalBalance > party.creditLimit
+        val calculatedBalance = if (!isSupplier) cumulativeBalance else -cumulativeBalance
+        val isOver = party.creditLimit > 0 && calculatedBalance > party.creditLimit
         val lastDate = sortedMovements.lastOrNull()?.date
 
         val whatsAppText = if (!isSupplier) {
             generateWhatsAppReminderMessage(
                 customerName = party.name,
-                balance = finalBalance,
+                balance = calculatedBalance,
                 storeName = storeName
             )
         } else {
             generateSupplierWhatsAppMessage(
                 supplierName = party.name,
-                balance = finalBalance,
+                balance = calculatedBalance,
                 storeName = storeName
             )
         }
 
         return CustomerStatementSummary(
-            party = party,
-            totalInvoicesCount = invoices.count { it.partyId == party.id },
+            party = party.copy(currentBalance = calculatedBalance),
+            totalInvoicesCount = partyInvoices.size,
             totalPurchasesOnCredit = totalPurchases,
             totalPayments = totalPaid,
-            currentBalance = finalBalance,
+            currentBalance = calculatedBalance,
             creditLimit = party.creditLimit,
             isOverCreditLimit = isOver,
             lastActivityDate = lastDate,

@@ -5,6 +5,11 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+enum class VoucherType(val labelArabic: String) {
+    RECEIPT("سند قبض"), // قبض نقدية من عميل
+    PAYMENT("سند صرف")  // صرف نقدية لمورد
+}
+
 /**
  * جدول سندات القبض والدفع (Payment Vouchers)
  * يسجل عمليات سداد الديون والمقبوضات من عملاء الدفتر (الشكك)
@@ -29,11 +34,15 @@ import androidx.room.PrimaryKey
 data class PaymentVoucherEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val voucherNumber: String,                  // رقم السند التسلسلي (مثل: RCV-2026-0001)
+    val voucherNumber: String,                  // رقم السند التسلسلي (مثل: RCV-2026-0001 أو PAY-2026-0001)
     val partyId: Long,                          // العميل أو المورد
     val amount: Double,                         // المبلغ المسدد
+    val voucherType: VoucherType = VoucherType.RECEIPT, // نوع السند (سند قبض / سند صرف)
     val paymentMethod: PaymentMethod = PaymentMethod.CASH, // طريقة السداد: نقداً، شبكة، تحويل بنكي
     val date: Long = System.currentTimeMillis(),// تاريخ ووقت السداد
     val receivedBy: String = "كاشير 1",         // المستلم / الكاشير
     val notes: String = ""                      // ملاحظات وبيان السند
-)
+) {
+    val isPayment: Boolean
+        get() = voucherType == VoucherType.PAYMENT || voucherNumber.startsWith("PAY")
+}

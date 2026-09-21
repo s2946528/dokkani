@@ -491,7 +491,7 @@ private fun PartyItemCard(
     onEditParty: () -> Unit,
     onDeleteParty: () -> Unit,
     onSendWhatsApp: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     val balance = party.currentBalance
 
@@ -747,7 +747,7 @@ private fun PartyStatementView(
     onDeleteInvoice: (Long) -> Unit,
     onDeleteVoucher: (Long) -> Unit,
     onSendWhatsApp: (String, String) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     if (isLoading || statement == null) {
         Box(
@@ -918,9 +918,10 @@ private fun StatementRowCard(
     isAdmin: Boolean,
     onDeleteInvoice: (Long) -> Unit,
     onDeleteVoucher: (Long) -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     val isInvoice = item.type == StatementEntryType.SALE_INVOICE || item.type == StatementEntryType.PURCHASE_INVOICE
+    val isReturn = item.type == StatementEntryType.SALE_RETURN || item.type == StatementEntryType.PURCHASE_RETURN
 
     Card(
         shape = RoundedCornerShape(10.dp),
@@ -938,15 +939,27 @@ private fun StatementRowCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = CircleShape,
-                    color = if (isInvoice) Color(0xFFFEF2F2) else Color(0xFFF0FDF4),
-                    modifier = Modifier.size(34.dp)
+                    color = when (item.type) {
+                        StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFFEF2F2)
+                        StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFFEFF6FF)
+                        else -> Color(0xFFF0FDF4)
+                    },
+                    modifier = Modifier.size(38.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = if (isInvoice) "فاتورة" else "سند",
+                            text = when (item.type) {
+                                StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> "فاتورة"
+                                StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> "مرتجع"
+                                else -> "سند"
+                            },
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isInvoice) Color(0xFFDC2626) else Color(0xFF16A34A)
+                            color = when (item.type) {
+                                StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFDC2626)
+                                StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFF2563EB)
+                                else -> Color(0xFF16A34A)
+                            }
                         )
                     }
                 }
@@ -956,7 +969,7 @@ private fun StatementRowCard(
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = item.refNumber,
+                            text = "${item.type.labelArabic} #${item.refNumber}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = Color(0xFF0F172A)
@@ -1000,7 +1013,7 @@ private fun StatementRowCard(
                         )
                     }
                     Text(
-                        text = "الرصيد: ${"%.2f".format(abs(item.runningBalance))}",
+                        text = "الرصيد: ${"%.2f".format(abs(item.runningBalance))} $currencySymbol",
                         fontSize = 11.sp,
                         color = Color(0xFF64748B)
                     )
@@ -1041,7 +1054,7 @@ private fun PaymentVoucherDialog(
     onInputsChanged: (String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     val isSupplier = party?.type == PartyType.SUPPLIER
 

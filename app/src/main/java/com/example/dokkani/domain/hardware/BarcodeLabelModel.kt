@@ -27,7 +27,7 @@ data class BarcodeLabelData(
     val unitName: String,
     val barcode: String,
     val price: Double,
-    val currencySymbol: String = "ر.س",
+    val currencySymbol: String = "ر.ي",
     val isPriceInclusiveTax: Boolean = true,
     val taxRatePercent: Double = 15.0,
     val size: LabelPaperSize = LabelPaperSize.SIZE_38X25,

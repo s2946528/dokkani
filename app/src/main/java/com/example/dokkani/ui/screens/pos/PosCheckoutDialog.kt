@@ -75,7 +75,7 @@ fun PosCheckoutDialog(
     discountInput: String,
     openDrawerOnCash: Boolean,
     isProcessing: Boolean,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     onPaymentMethodSelect: (PaymentMethod) -> Unit,
     onCustomerSelect: (Long?) -> Unit,
     onPaidAmountChange: (String) -> Unit,

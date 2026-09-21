@@ -876,7 +876,7 @@ fun SystemSettingsScreen(
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = if (curr.isBaseCurrency) "1.0 ${curr.symbol}" else "1 ${curr.symbol} = ${curr.exchangeRateToBase} ${baseCurr?.symbol ?: "ر.س"}",
+                                        text = if (curr.isBaseCurrency) "1.0 ${curr.symbol}" else "1 ${curr.symbol} = ${curr.exchangeRateToBase} ${baseCurr?.symbol ?: "ر.ي"}",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -982,7 +982,7 @@ fun SystemSettingsScreen(
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "الرصيد: %.2f %s".format(p.currentBalance, baseCurr?.symbol ?: "ر.س"),
+                                        text = "الرصيد: %.2f %s".format(p.currentBalance, baseCurr?.symbol ?: "ر.ي"),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                         color = if (p.currentBalance >= 0) Color(0xFF0F5132) else Color(0xFFDC3545)
@@ -1076,7 +1076,7 @@ fun SystemSettingsScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text(
-                                                text = "%.2f %s".format(i.total, baseCurr?.symbol ?: "ر.س"),
+                                                text = "%.2f %s".format(i.total, baseCurr?.symbol ?: "ر.ي"),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF0F5132)

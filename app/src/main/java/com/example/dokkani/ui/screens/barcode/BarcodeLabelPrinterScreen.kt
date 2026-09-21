@@ -104,7 +104,7 @@ fun BarcodeLabelPrinterScreen(
     onBarcodeChanged: (String) -> Unit = {},
     onGenerateUniqueBarcode: () -> Unit = {},
     onPrintLabel: () -> Unit = {},
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -750,7 +750,7 @@ fun ThermalLabelCanvasPreview(
     showPrice: Boolean,
     showTaxNote: Boolean,
     paperSize: LabelPaperSize,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     modifier: Modifier = Modifier
 ) {
     val aspectRatio = paperSize.widthMm.toFloat() / paperSize.heightMm.toFloat()

@@ -32,7 +32,7 @@ import java.util.Locale
 fun AddEditAccountDialog(
     initialAccount: FinancialAccountEntity? = null,
     existingAccounts: List<FinancialAccountEntity> = emptyList(),
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     onSave: (FinancialAccountEntity) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -335,7 +335,7 @@ fun AddEditAccountDialog(
 @Composable
 fun AccountDeletionBlockedDialog(
     result: AccountUsageCheckResult,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     onDisableInstead: () -> Unit,
     onDismiss: () -> Unit
 ) {

@@ -16,6 +16,7 @@ import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.PaymentVoucherEntity
+import com.example.dokkani.data.local.entities.VoucherType
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
@@ -74,8 +75,8 @@ data class PosUiState(
     // فحص المخزون والضبط
     val systemSettings: SystemSettingsEntity? = null,
     val productStockMap: Map<Long, Double> = emptyMap(),
-    val currencySymbol: String = "ر.س",
-    val currencyName: String = "الريال السعودي",
+    val currencySymbol: String = "ر.ي",
+    val currencyName: String = "الريال اليمني",
 
     // الصندوق والشفت الحالي
     val shiftTotalSales: Double = 0.0,
@@ -302,14 +303,17 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
             vouchers.forEach { v ->
                 val party = partyDao.getPartyById(v.partyId)
+                val isPay = v.isPayment || (party?.type == PartyType.SUPPLIER && !v.voucherNumber.startsWith("RCV"))
+                val defaultName = if (isPay) "مورد عام" else "عميل عام"
+                val op = if (isPay) PosOperation.EXPENSE else PosOperation.RECEIPT
                 records.add(
                     PosTransactionRecord(
                         id = v.voucherNumber,
-                        partyName = party?.name ?: "حساب عميل",
+                        partyName = party?.name ?: defaultName,
                         date = dateFormat.format(Date(v.date)),
                         amount = v.amount,
                         status = "تم السداد",
-                        operation = PosOperation.RECEIPT,
+                        operation = op,
                         paymentMethod = v.paymentMethod,
                         notes = v.notes
                     )
@@ -363,7 +367,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- اختيار العميل أو المورد ---
     fun selectParty(party: PartyEntity?) {
-        _uiState.update { it.copy(selectedParty = party) }
+        if (party == null) {
+            _uiState.update { it.copy(selectedParty = null) }
+        } else {
+            viewModelScope.launch(Dispatchers.IO) {
+                val freshParty = partyDao.getPartyById(party.id) ?: party
+                _uiState.update { it.copy(selectedParty = freshParty) }
+            }
+        }
     }
 
     fun selectVoucherParty(party: PartyEntity?) {
@@ -841,17 +852,22 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
 
-                    val partyOldBal = state.selectedParty?.currentBalance
-                    val partyNewBal = if (isCredit && state.selectedParty != null) {
-                        val diff = when (state.activeOperation) {
-                            PosOperation.SALE -> remaining
-                            PosOperation.SALE_RETURN -> -state.cartSummary.finalTotal
-                            PosOperation.PURCHASE -> -remaining
-                            PosOperation.PURCHASE_RETURN -> state.cartSummary.finalTotal
-                            else -> 0.0
-                        }
-                        (partyOldBal ?: 0.0) + diff
-                    } else null
+                    val selPartyId = state.selectedParty?.id
+                    val freshPartyBefore = selPartyId?.let { partyDao.getPartyById(it) }
+                    val partyOldBal = freshPartyBefore?.currentBalance ?: state.selectedParty?.currentBalance
+                    val freshPartyAfter = selPartyId?.let { partyDao.getPartyById(it) }
+                    val partyNewBal = freshPartyAfter?.currentBalance ?: (
+                        if (isCredit && freshPartyBefore != null) {
+                            val diff = when (state.activeOperation) {
+                                PosOperation.SALE -> remaining
+                                PosOperation.SALE_RETURN -> -state.cartSummary.finalTotal
+                                PosOperation.PURCHASE -> -remaining
+                                PosOperation.PURCHASE_RETURN -> state.cartSummary.finalTotal
+                                else -> 0.0
+                            }
+                            (partyOldBal ?: 0.0) + diff
+                        } else partyOldBal
+                    )
 
                     val currentSettings = state.systemSettings
                     val storeName = currentSettings?.storeName?.ifBlank { "دكاني - تموينات ومخضار السعادة" } ?: "دكاني - تموينات ومخضار السعادة"
@@ -920,6 +936,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.update {
                         it.copy(
                             isProcessingCheckout = false,
+                            selectedParty = freshPartyAfter ?: it.selectedParty,
                             cartItems = emptyList(),
                             cartSummary = recalculateSummary(emptyList(), 0.0),
                             discount = 0.0,
@@ -1002,6 +1019,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                 voucherNumber = voucherNumber,
                                 partyId = party.id,
                                 amount = amount,
+                                voucherType = VoucherType.RECEIPT,
                                 paymentMethod = state.voucherPaymentMethod,
                                 date = timestamp,
                                 receivedBy = "كاشير 1",
@@ -1049,6 +1067,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     voucherNumber = voucherNumber,
                                     partyId = supplier.id,
                                     amount = amount,
+                                    voucherType = VoucherType.PAYMENT,
                                     paymentMethod = state.voucherPaymentMethod,
                                     date = timestamp,
                                     receivedBy = "كاشير 1",
@@ -1422,16 +1441,24 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             if (v != null) {
                                 val party = partyDao.getPartyById(v.partyId)
                                 if (party != null) {
-                                    partyDao.updateParty(party.copy(currentBalance = party.currentBalance + v.amount))
+                                    val isSupplier = party.type == PartyType.SUPPLIER || v.isPayment
+                                    val newBal = if (isSupplier) party.currentBalance - v.amount else party.currentBalance + v.amount
+                                    partyDao.updateParty(party.copy(currentBalance = newBal))
                                 }
                                 if (v.paymentMethod == PaymentMethod.CASH) {
-                                    val shifts = shiftDao.getAllShiftsSync()
-                                    val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                                    val currentShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull()
                                     if (currentShift != null) {
-                                        shiftDao.updateCollections(
-                                            currentShift.id,
-                                            (currentShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
-                                        )
+                                        if (v.isPayment) {
+                                            shiftDao.updateExpenses(
+                                                currentShift.id,
+                                                (currentShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                                            )
+                                        } else {
+                                            shiftDao.updateCollections(
+                                                currentShift.id,
+                                                (currentShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
+                                            )
+                                        }
                                     }
                                 }
                                 voucherDao.deleteVoucher(v)
@@ -1441,8 +1468,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             val exp = expenseDao.getAllExpensesSync().find { it.expenseNumber == record.id }
                             if (exp != null) {
                                 if (exp.paymentMethod == PaymentMethod.CASH) {
-                                    val shifts = shiftDao.getAllShiftsSync()
-                                    val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                                    val currentShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull()
                                     if (currentShift != null) {
                                         shiftDao.updateExpenses(
                                             currentShift.id,
@@ -1451,6 +1477,24 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     }
                                 }
                                 expenseDao.deleteExpense(exp)
+                            } else {
+                                val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
+                                if (v != null) {
+                                    val party = partyDao.getPartyById(v.partyId)
+                                    if (party != null) {
+                                        partyDao.updateParty(party.copy(currentBalance = party.currentBalance - v.amount))
+                                    }
+                                    if (v.paymentMethod == PaymentMethod.CASH) {
+                                        val currentShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull()
+                                        if (currentShift != null) {
+                                            shiftDao.updateExpenses(
+                                                currentShift.id,
+                                                (currentShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                                            )
+                                        }
+                                    }
+                                    voucherDao.deleteVoucher(v)
+                                }
                             }
                         }
                     }

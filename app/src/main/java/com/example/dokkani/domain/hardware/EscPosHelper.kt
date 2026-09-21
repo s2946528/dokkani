@@ -38,7 +38,7 @@ data class ReceiptPrintData(
     val customerOldBalance: Double? = null,
     val customerNewBalance: Double? = null,
     val showPreviousBalance: Boolean = true,
-    val currencySymbol: String = "ر.س",
+    val currencySymbol: String = "ر.ي",
     val footerText: String = "شكراً لتسوقكم من دكاني!",
     val qrCodePayload: String? = null
 )

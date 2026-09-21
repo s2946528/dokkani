@@ -61,7 +61,7 @@ import com.example.dokkani.domain.barcode.ScaleBarcodeResult
 fun PosScaleBarcodeDialog(
     detectedBarcode: ScaleBarcodeResult,
     availableProducts: List<ProductWithUnits>,
-    currencySymbol: String = "ر.س",
+    currencySymbol: String = "ر.ي",
     onConfirmProduct: (ProductWithUnits) -> Unit,
     onDismiss: () -> Unit
 ) {

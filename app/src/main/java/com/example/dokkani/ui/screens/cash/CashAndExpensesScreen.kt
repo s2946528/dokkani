@@ -206,7 +206,7 @@ fun CashAndExpensesScreen(
 private fun ExpensesContent(
     expenses: List<ExpenseEntity>,
     onOpenAddDialog: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     val totalExpenses = expenses.sumOf { it.amount }
     val cashExpenses = expenses.filter { it.paymentMethod == PaymentMethod.CASH }.sumOf { it.amount }
@@ -324,7 +324,7 @@ private fun ExpenseKpiCard(
  * بطاقة تفاصيل عنصر المصروف
  */
 @Composable
-private fun ExpenseItemCard(expense: ExpenseEntity, currencySymbol: String = "ر.س") {
+private fun ExpenseItemCard(expense: ExpenseEntity, currencySymbol: String = "ر.ي") {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale.getDefault()) }
     val dateString = remember(expense.date) { dateFormat.format(Date(expense.date)) }
 
@@ -436,7 +436,7 @@ private fun AddExpenseDialog(
     onInputsChanged: (String, String, String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    currencySymbol: String = "ر.س"
+    currencySymbol: String = "ر.ي"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -799,7 +799,7 @@ private fun ShiftReconciliationContent(
  * بطاقة نتيجة المطابقة المباشرة
  */
 @Composable
-private fun ReconciliationResultCard(result: CashReconciliationResult, currencySymbol: String = "ر.س") {
+private fun ReconciliationResultCard(result: CashReconciliationResult, currencySymbol: String = "ر.ي") {
     val bgColor: Color
     val textColor: Color
     val title: String
@@ -879,7 +879,7 @@ private fun ReconciliationResultCard(result: CashReconciliationResult, currencyS
  * بطاقة الشفت المغلق سابقاً
  */
 @Composable
-private fun ClosedShiftCard(shift: CashShiftEntity, currencySymbol: String = "ر.س") {
+private fun ClosedShiftCard(shift: CashShiftEntity, currencySymbol: String = "ر.ي") {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale.getDefault()) }
     val closedDateString = remember(shift.endTime) {
         shift.endTime?.let { dateFormat.format(Date(it)) } ?: "مفتوح"

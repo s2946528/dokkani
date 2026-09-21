@@ -328,7 +328,7 @@ private fun CapitalAndEquityTabContent(
                     modifier = Modifier.weight(1f),
                     title = "رأس المال الافتتاحي الآلي",
                     value = "${"%.2f".format(eq.calculatedInitialCapital)} $currencySymbol",
-                    subtitle = "(نقدية + بضاعة + ديون) - التزامات",
+                    subtitle = "(نقدية + بضاعة + أصول + ديون) - التزامات",
                     color = Color(0xFF1E3A8A),
                     icon = Icons.Default.Calculate
                 )
@@ -336,7 +336,7 @@ private fun CapitalAndEquityTabContent(
                     modifier = Modifier.weight(1f),
                     title = "صافي حقوق الملكية الإجمالي",
                     value = "${"%.2f".format(eq.netTotalEquity)} $currencySymbol",
-                    subtitle = "رأس المال + أصول + أرباح - مسحوبات",
+                    subtitle = "رأس المال + إيداعات + أرباح - مسحوبات",
                     color = Color(0xFF15803D),
                     icon = Icons.Default.AccountBalance
                 )
@@ -416,6 +416,12 @@ private fun CapitalAndEquityTabContent(
                         currencySymbol = currencySymbol
                     )
                     EquationRow(
+                        label = "(+) إجمالي الأصول الثابتة (ثلاجات، أرفف، موازين)",
+                        amount = eq.totalFixedAssetsValue,
+                        isPositive = true,
+                        currencySymbol = currencySymbol
+                    )
+                    EquationRow(
                         label = "(+) نقل القدم / خلو المحل (أصل تأسيسي غير ملموس)",
                         amount = eq.totalLeaseholdGoodwillValue,
                         isPositive = true,
@@ -453,6 +459,84 @@ private fun CapitalAndEquityTabContent(
                             color = Color(0xFF1E3A8A)
                         )
                     }
+                }
+            }
+        }
+
+        // بطاقة تفصيل صافي حقوق الملكية الإجمالي (بدون تضاعف الأصول)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color(0xFF15803D))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "تفصيل احتساب صافي حقوق الملكية الإجمالي",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color(0xFF0F172A)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    EquationRow(
+                        label = "(+) رأس المال الافتتاحي (شاملاً الأصول التأسيسية)",
+                        amount = eq.calculatedInitialCapital,
+                        isPositive = true,
+                        currencySymbol = currencySymbol
+                    )
+                    EquationRow(
+                        label = "(+) إيداعات رأس المال الإضافية",
+                        amount = eq.totalAdditionalCapitalDeposits,
+                        isPositive = true,
+                        currencySymbol = currencySymbol
+                    )
+                    EquationRow(
+                        label = "(+) صافي الأرباح التشغيلية المبقاة",
+                        amount = eq.netOperatingProfit,
+                        isPositive = eq.netOperatingProfit >= 0,
+                        currencySymbol = currencySymbol
+                    )
+                    EquationRow(
+                        label = "(-) مسحوبات المالك الشخصية (نقدية وبضاعة)",
+                        amount = eq.totalOwnerDrawings,
+                        isPositive = false,
+                        currencySymbol = currencySymbol
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0xFFCBD5E1))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "(=) صافي حقوق الملكية الإجمالي:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF15803D)
+                        )
+                        Text(
+                            text = "${"%.2f".format(eq.netTotalEquity)} $currencySymbol",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = Color(0xFF15803D)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "ملاحظة محاسبية: الأصول الثابتة ونقل القدم مدمجة أصلاً ضمن رأس المال الافتتاحي كأصول تأسيسية، ولا تُجمع ثانية منعاً للتضاعف المحاسبي.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF64748B),
+                        lineHeight = 16.sp
+                    )
                 }
             }
         }

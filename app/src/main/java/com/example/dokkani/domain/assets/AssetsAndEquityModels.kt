@@ -14,11 +14,11 @@ data class EquityCalculationResult(
     val supplierPayables: Double,                // ديون الموردين والالتزامات (الأرصدة الدائنة المستحقة على البقالة)
     val totalFixedAssetsValue: Double,           // إجمالي قيمة الأصول الثابتة (ثلاجات، أرفف، موازين، سيارات)
     val totalLeaseholdGoodwillValue: Double,     // إجمالي القيمة الدفترية لنقل القدم / الخلو كأصل غير ملموس
-    val calculatedInitialCapital: Double,        // رأس المال الافتتاحي الآلي المحسوب = (نقدية + بنوك + تقييم بضاعة + خلو + ديون عملاء) - ديون موردين
+    val calculatedInitialCapital: Double,        // رأس المال الافتتاحي الآلي المحسوب = (نقدية + بنوك + تقييم بضاعة + أصول ثابتة + خلو + ديون عملاء) - ديون موردين
     val totalOwnerDrawings: Double,              // إجمالي مسحوبات المالك الشخصية (نقدية + بضاعة بالتكلفة)
     val totalAdditionalCapitalDeposits: Double,  // إجمالي الإيداعات الإضافية لرأس المال
     val netOperatingProfit: Double,              // صافي الأرباح التشغيلية المبقاة
-    val netTotalEquity: Double                   // صافي حقوق الملكية الإجمالي = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + الأصول + الخلو + الأرباح المبقاة
+    val netTotalEquity: Double                   // صافي حقوق الملكية الإجمالي = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + الأرباح المبقاة (دون تضاعف الأصول)
 )
 
 /**

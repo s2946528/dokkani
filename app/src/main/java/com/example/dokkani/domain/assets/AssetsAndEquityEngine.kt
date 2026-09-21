@@ -17,8 +17,9 @@ import com.example.dokkani.data.local.entities.StockMovementEntity
 object AssetsAndEquityEngine {
 
     /**
-     * حساب رأس المال الافتتاحي وحقوق الملكية آلياً وفق المعادلة المحاسبية المعتمدة:
-     * رأس المال الافتتاحي = (نقدية الخزينة + أرصدة البنوك + تقييم بضاعة أول المدة + خلو/نقل القدم + ديون العملاء) - (ديون الموردين والالتزامات)
+     * حساب رأس المال الافتتاحي وحقوق الملكية آلياً وفق القواعد المحاسبية السليمة:
+     * 1. رأس المال الافتتاحي = (نقدية الخزينة + أرصدة البنوك + تقييم بضاعة أول المدة + الأصول الثابتة + خلو/نقل القدم + ديون العملاء) - (ديون الموردين والالتزامات)
+     * 2. صافي حقوق الملكية الإجمالي = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + صافي الأرباح التشغيلية المبقاة
      */
     fun calculateInitialCapitalAndEquity(
         cashInDrawer: Double,
@@ -65,9 +66,10 @@ object AssetsAndEquityEngine {
             .filter { it.status == "ACTIVE" }
             .sumOf { it.currentBookValue }
 
-        // 6. حساب رأس المال الافتتاحي الآلي
-        // رأس المال تلقائياً = (نقدية الخزينة + أرصدة البنوك + تقييم بضاعة أول المدة + الخلو كأصل تأسيس + ديون العملاء) - (ديون الموردين والالتزامات)
-        val calculatedCapital = (cashInDrawer + bankBalances + inventoryValuation + totalLeaseholdGoodwill + customerReceivables) - supplierPayables
+        // 6. حساب رأس المال الافتتاحي الآلي الصحيح محاسبياً:
+        // رأس المال الافتتاحي = إجمالي أصول التأسيس (نقدية الصندوق + أرصدة البنوك + تقييم بضاعة أول المدة + الأصول الثابتة + نقل القدم/الخلو + ديون العملاء) - الالتزامات (ديون الموردين)
+        val totalInitialAssets = cashInDrawer + bankBalances + inventoryValuation + totalFixedAssets + totalLeaseholdGoodwill + customerReceivables
+        val calculatedCapital = totalInitialAssets - supplierPayables
 
         // 7. مسحوبات المالك وإيداعات رأس المال
         val totalDrawings = ownerTransactions
@@ -78,8 +80,10 @@ object AssetsAndEquityEngine {
             .filter { it.type == OwnerTransactionType.CAPITAL_DEPOSIT }
             .sumOf { it.amount }
 
-        // 8. صافي حقوق الملكية الإجمالي = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + الأصول الثابتة + الخلو + صافي الأرباح
-        val netEquity = calculatedCapital + totalDeposits - totalDrawings + totalFixedAssets + netOperatingProfit
+        // 8. صافي حقوق الملكية الإجمالي السليم محاسبياً:
+        // صافي حقوق الملكية = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + صافي الأرباح التشغيلية
+        // تم تصحيح التضاعف المحاسبي (Double Counting): الأصول الثابتة لا تجمع مرة ثانية لأنها أصل من أصول المنشأة محسوب سلفاً ضمن رأس المال الافتتاحي
+        val netEquity = calculatedCapital + totalDeposits - totalDrawings + netOperatingProfit
 
         return EquityCalculationResult(
             cashInHandAndDrawer = cashInDrawer,

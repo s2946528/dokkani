@@ -415,6 +415,16 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 notes = state.expenseNotesInput
             )
             db.expenseDao().insertExpense(exp)
+
+            // تحديث عهدة الصندوق للشفت المفتوح عند المصروف النقدي
+            if (state.expensePaymentMethod == PaymentMethod.CASH) {
+                val openShift = db.cashShiftDao().getOpenShift()
+                if (openShift != null) {
+                    val newExpenses = openShift.totalCashExpenses + amount
+                    db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
+                }
+            }
+
             _uiState.update {
                 it.copy(
                     isSubmittingExpense = false,
@@ -443,30 +453,36 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         val opening = state.drawerOpeningCashInput.toDoubleOrNull() ?: 200.0
         val physical = state.drawerPhysicalCashInput.toDoubleOrNull() ?: 0.0
 
-        val invoices = state.invoices
-        val expenses = state.expenses
-        val vouchers = state.vouchers
+        viewModelScope.launch(Dispatchers.IO) {
+            val openShift = db.cashShiftDao().getOpenShift()
+            val startTime = openShift?.startTime ?: 0L
+            val endTime = System.currentTimeMillis()
 
-        val cashSalesList = invoices.filter { it.type == InvoiceType.SALE && it.paymentMethod == PaymentMethod.CASH }
-            .map { it.paidAmount }
-        val cashExpensesList = expenses.filter { it.paymentMethod == PaymentMethod.CASH }
-            .map { it.amount }
+            val invoices = db.invoiceDao().getAllInvoicesSync().filter { it.date >= startTime }
+            val expenses = db.expenseDao().getExpensesByDateRangeSync(startTime, endTime)
+            val vouchers = db.paymentVoucherDao().getAllVouchersSync().filter { it.date >= startTime }
 
-        val cashCollectionsList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && !it.isPayment }
-            .map { it.amount }
-        val cashVoucherExpensesList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && it.isPayment }
-            .map { it.amount }
+            val cashSalesList = invoices.filter { it.type == InvoiceType.SALE && it.paymentMethod == PaymentMethod.CASH }
+                .map { it.paidAmount }
+            val cashExpensesList = expenses.filter { it.paymentMethod == PaymentMethod.CASH }
+                .map { it.amount }
 
-        val totalCashExpensesList = cashExpensesList + cashVoucherExpensesList
+            val cashCollectionsList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && !it.isPayment }
+                .map { it.amount }
+            val cashVoucherExpensesList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && it.isPayment }
+                .map { it.amount }
 
-        val res = CashDrawerEngine.calculateReconciliation(
-            openingCash = opening,
-            cashSales = cashSalesList,
-            cashCollections = cashCollectionsList,
-            cashExpenses = totalCashExpensesList,
-            actualPhysicalCash = physical
-        )
-        _uiState.update { it.copy(reconciliationResult = res) }
+            val totalCashExpensesList = cashExpensesList + cashVoucherExpensesList
+
+            val res = CashDrawerEngine.calculateReconciliation(
+                openingCash = openShift?.openingCash ?: opening,
+                cashSales = cashSalesList.ifEmpty { listOf(openShift?.totalCashSales ?: 0.0) },
+                cashCollections = cashCollectionsList.ifEmpty { listOf(openShift?.totalCashCollections ?: 0.0) },
+                cashExpenses = totalCashExpensesList.ifEmpty { listOf(openShift?.totalCashExpenses ?: 0.0) },
+                actualPhysicalCash = physical
+            )
+            _uiState.update { it.copy(reconciliationResult = res) }
+        }
     }
 
     fun closeShiftAndSave() {
@@ -892,7 +908,16 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun deleteExpense(expense: ExpenseEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            db.expenseDao().deleteExpense(expense)
+            db.withTransaction {
+                if (expense.paymentMethod == PaymentMethod.CASH) {
+                    val openShift = db.cashShiftDao().getOpenShift()
+                    if (openShift != null) {
+                        val newExp = (openShift.totalCashExpenses - expense.amount).coerceAtLeast(0.0)
+                        db.cashShiftDao().updateExpenses(openShift.id, newExp)
+                    }
+                }
+                db.expenseDao().deleteExpense(expense)
+            }
         }
     }
 

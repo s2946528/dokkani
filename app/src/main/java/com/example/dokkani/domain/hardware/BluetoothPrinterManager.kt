@@ -378,7 +378,7 @@ class BluetoothPrinterManager(private val context: Context) {
         }
 
         if (data.showPreviousBalance && data.customerOldBalance != null && data.customerNewBalance != null) {
-            val partyTitle = if (data.invoiceTitle.contains("شراء")) "المورد" else "العميل"
+            val partyTitle = if (data.invoiceTitle.contains("شراء") || data.partyLabel.contains("المورد")) "المورد" else "العميل"
             sb.appendLine(sepSingle)
             sb.appendLine(twoCols("الرصيد السابق ($partyTitle):", "%.2f %s".format(data.customerOldBalance, data.currencySymbol), cols))
             sb.appendLine(twoCols("إجمالي الرصيد الحالي:", "%.2f %s".format(data.customerNewBalance, data.currencySymbol), cols))

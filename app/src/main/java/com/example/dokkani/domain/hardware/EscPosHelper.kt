@@ -225,7 +225,7 @@ object EscPosHelper {
 
         // كشف حساب العميل / المورد في حال الفواتير الآجلة (مع مراعاة تفعيل الخيار من الإعدادات)
         if (data.showPreviousBalance && data.customerOldBalance != null && data.customerNewBalance != null) {
-            val partyTitle = if (data.invoiceTitle.contains("شراء")) "المورد" else "العميل"
+            val partyTitle = if (data.invoiceTitle.contains("شراء") || data.partyLabel.contains("المورد")) "المورد" else "العميل"
             stream.write(createSeparator(cols, '.').toByteArray(charset))
             stream.write(formatTwoColumns("الرصيد السابق لـ $partyTitle:", "%.2f %s".format(data.customerOldBalance, data.currencySymbol), cols).toByteArray(charset))
             stream.write(formatTwoColumns("إجمالي الرصيد الحالي:", "%.2f %s".format(data.customerNewBalance, data.currencySymbol), cols).toByteArray(charset))

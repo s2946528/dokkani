@@ -296,7 +296,7 @@ fun PosReceiptDialog(
 
                         // رصيد العميل / المورد في الفواتير الآجلة حسب إعدادات النظام
                         if (receipt.showPreviousBalance && receipt.customerOldBalance != null && receipt.customerNewBalance != null) {
-                            val partyTitle = if (receipt.invoiceTitle.contains("شراء")) "المورد" else "العميل"
+                            val partyTitle = if (receipt.invoiceTitle.contains("شراء") || receipt.partyLabel.contains("المورد")) "المورد" else "العميل"
                             ReceiptDashedSeparator()
                             ReceiptRow("الرصيد السابق لـ $partyTitle:", "%.2f %s".format(receipt.customerOldBalance, receipt.currencySymbol))
                             ReceiptRow("إجمالي الرصيد الحالي:", "%.2f %s".format(receipt.customerNewBalance, receipt.currencySymbol))

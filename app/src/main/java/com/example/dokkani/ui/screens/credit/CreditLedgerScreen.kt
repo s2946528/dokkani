@@ -327,17 +327,22 @@ fun CreditLedgerScreen(
                             onEditParty = { editingParty = party },
                             onDeleteParty = { deletingParty = party },
                             onSendWhatsApp = {
+                                val currentStoreName = uiState.settings?.storeName.orEmpty().ifBlank { "دكاني" }
                                 val text = if (selectedTab == 0) {
                                     CreditNotebookEngine.generateWhatsAppReminderMessage(
                                         customerName = party.name,
                                         balance = party.currentBalance,
-                                        storeName = "تموينات دكاني"
+                                        storeName = currentStoreName,
+                                        currencySymbol = uiState.currencySymbol,
+                                        showDecimals = uiState.showDecimals
                                     )
                                 } else {
                                     CreditNotebookEngine.generateSupplierWhatsAppMessage(
                                         supplierName = party.name,
                                         balance = party.currentBalance,
-                                        storeName = "تموينات دكاني"
+                                        storeName = currentStoreName,
+                                        currencySymbol = uiState.currencySymbol,
+                                        showDecimals = uiState.showDecimals
                                     )
                                 }
                                 onSendWhatsAppReminder(context, party.phone, text)

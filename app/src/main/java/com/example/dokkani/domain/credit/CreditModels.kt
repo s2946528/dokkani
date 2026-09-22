@@ -1,6 +1,7 @@
 package com.example.dokkani.domain.credit
 
 import com.example.dokkani.data.local.entities.PartyEntity
+import com.example.dokkani.util.formatCurrency
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -61,7 +62,9 @@ object CreditNotebookEngine {
         party: PartyEntity,
         invoices: List<com.example.dokkani.data.local.entities.InvoiceEntity>,
         vouchers: List<com.example.dokkani.data.local.entities.PaymentVoucherEntity>,
-        storeName: String
+        storeName: String,
+        currencySymbol: String = "ر.ي",
+        showDecimals: Boolean = false
     ): CustomerStatementSummary {
         val rawItems = mutableListOf<RawMovement>()
         val isSupplier = party.type == com.example.dokkani.data.local.entities.PartyType.SUPPLIER
@@ -210,13 +213,17 @@ object CreditNotebookEngine {
             generateWhatsAppReminderMessage(
                 customerName = party.name,
                 balance = calculatedBalance,
-                storeName = storeName
+                storeName = storeName,
+                currencySymbol = currencySymbol,
+                showDecimals = showDecimals
             )
         } else {
             generateSupplierWhatsAppMessage(
                 supplierName = party.name,
                 balance = calculatedBalance,
-                storeName = storeName
+                storeName = storeName,
+                currencySymbol = currencySymbol,
+                showDecimals = showDecimals
             )
         }
 
@@ -237,13 +244,17 @@ object CreditNotebookEngine {
     fun generateWhatsAppReminderMessage(
         customerName: String,
         balance: Double,
-        storeName: String
+        storeName: String,
+        currencySymbol: String = "ر.ي",
+        showDecimals: Boolean = false
     ): String {
+        val cleanStoreName = storeName.ifBlank { "دكاني" }
+        val formattedBalance = balance.formatCurrency(showDecimals, currencySymbol)
         return """
             السلام عليكم ورحمة الله وبركاته، الأخ الكريم $customerName..
             
-            نود تذكيركم بلطف بأن رصيد حسابكم الحالي في دفتر الديون لدى ($storeName) هو:
-            💰 *${"%.2f".format(balance)} ريال سعودي*
+            نود تذكيركم بلطف بأن رصيد حسابكم الحالي في دفتر الديون لدى ($cleanStoreName) هو:
+            💰 *$formattedBalance*
             
             شاكرين ومقدرين لكم حسن التعامل والتفضل بالسداد في أقرب فرصة.
             دمتم بخير وعافية 🌹
@@ -253,15 +264,19 @@ object CreditNotebookEngine {
     fun generateSupplierWhatsAppMessage(
         supplierName: String,
         balance: Double,
-        storeName: String
+        storeName: String,
+        currencySymbol: String = "ر.ي",
+        showDecimals: Boolean = false
     ): String {
         val absBal = kotlin.math.abs(balance)
+        val cleanStoreName = storeName.ifBlank { "دكاني" }
+        val formattedBalance = absBal.formatCurrency(showDecimals, currencySymbol)
         return """
             السلام عليكم ورحمة الله وبركاته، المحترمون في $supplierName..
             
-            تحية طيبة وبعد من ($storeName)،
+            تحية طيبة وبعد من ($cleanStoreName)،
             نود الإفادة والتواصل بشأن مطابقة وتصفية الحساب القائم بيننا، والرصيد المسجل هو:
-            📊 *${"%.2f".format(absBal)} ريال سعودي*
+            📊 *$formattedBalance*
             
             نرجو التكرم بالتنسيق معنا لتأكيد الكشف وسداد المستحقات.
             شاكرين ومقدرين تعاملكم الراقي 🌸

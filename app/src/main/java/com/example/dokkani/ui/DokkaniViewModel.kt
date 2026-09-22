@@ -522,11 +522,17 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             val invoices = db.invoiceDao().getInvoicesForPartySync(partyId)
             val vouchers = db.paymentVoucherDao().getVouchersForPartySync(partyId)
 
+            val storeName = _uiState.value.settings?.storeName.orEmpty().ifBlank { db.systemSettingsDao().getSettingsSync()?.storeName.orEmpty() }.ifBlank { "دكاني" }
+            val symbol = _uiState.value.currencySymbol
+            val decimals = _uiState.value.showDecimals
+
             val summary = CreditNotebookEngine.buildCustomerStatement(
                 party = party,
                 invoices = invoices,
                 vouchers = vouchers,
-                storeName = "دكاني"
+                storeName = storeName,
+                currencySymbol = symbol,
+                showDecimals = decimals
             )
 
             if (kotlin.math.abs(party.currentBalance - summary.currentBalance) > 0.001) {

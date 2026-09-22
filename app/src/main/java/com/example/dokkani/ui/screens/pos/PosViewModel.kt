@@ -1711,24 +1711,11 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         val shift = _uiState.value.currentShift
         val expected = _uiState.value.cashInDrawer
         viewModelScope.launch(Dispatchers.IO) {
-            val startTime = shift?.startTime ?: 0L
-            val endTime = System.currentTimeMillis()
-
-            val shiftInvoices = invoiceDao.getAllInvoicesSync().filter { it.date in startTime..endTime && it.paymentMethod == PaymentMethod.CASH }
-            val shiftVouchers = voucherDao.getAllVouchersSync().filter { it.date in startTime..endTime && it.paymentMethod == PaymentMethod.CASH }
-            val shiftExpenses = expenseDao.getAllExpensesSync().filter { it.date in startTime..endTime && it.paymentMethod == PaymentMethod.CASH }
-
-            val cashSales = shiftInvoices.filter { it.type == InvoiceType.SALE }.map { it.paidAmount }
-            val cashCollections = shiftVouchers.filter { !it.isPayment }.map { it.amount }
-            val cashExpenses = shiftExpenses.map { it.amount } +
-                                shiftVouchers.filter { it.isPayment }.map { it.amount } +
-                                shiftInvoices.filter { it.type == InvoiceType.PURCHASE }.map { it.total }
-
             val recon = CashDrawerEngine.calculateReconciliation(
                 openingCash = shift?.openingCash ?: 200.0,
-                cashSales = cashSales.ifEmpty { listOf(shift?.totalCashSales ?: 0.0) },
-                cashCollections = cashCollections.ifEmpty { listOf(shift?.totalCashCollections ?: 0.0) },
-                cashExpenses = cashExpenses.ifEmpty { listOf(shift?.totalCashExpenses ?: 0.0) },
+                cashSales = listOf(shift?.totalCashSales ?: 0.0),
+                cashCollections = listOf(shift?.totalCashCollections ?: 0.0),
+                cashExpenses = listOf(shift?.totalCashExpenses ?: 0.0),
                 actualPhysicalCash = expected
             )
             _uiState.update {
@@ -1751,9 +1738,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         val actual = input.toDoubleOrNull() ?: 0.0
         val recon = CashDrawerEngine.calculateReconciliation(
             openingCash = shift?.openingCash ?: 200.0,
-            cashSales = if ((shift?.totalCashSales ?: 0.0) > 0) listOf(shift?.totalCashSales ?: 0.0) else emptyList(),
-            cashCollections = if ((shift?.totalCashCollections ?: 0.0) > 0) listOf(shift?.totalCashCollections ?: 0.0) else emptyList(),
-            cashExpenses = if ((shift?.totalCashExpenses ?: 0.0) > 0) listOf(shift?.totalCashExpenses ?: 0.0) else emptyList(),
+            cashSales = listOf(shift?.totalCashSales ?: 0.0),
+            cashCollections = listOf(shift?.totalCashCollections ?: 0.0),
+            cashExpenses = listOf(shift?.totalCashExpenses ?: 0.0),
             actualPhysicalCash = actual
         )
         _uiState.update {

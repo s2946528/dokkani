@@ -479,35 +479,16 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun calculateDrawerReconciliation() {
         val state = _uiState.value
-        val opening = state.drawerOpeningCashInput.toDoubleOrNull() ?: 200.0
         val physical = state.drawerPhysicalCashInput.toDoubleOrNull() ?: 0.0
 
         viewModelScope.launch(Dispatchers.IO) {
             val openShift = getOrCreateOpenShift(db.cashShiftDao())
-            val startTime = openShift.startTime
-            val endTime = System.currentTimeMillis()
-
-            val invoices = db.invoiceDao().getAllInvoicesSync().filter { it.date >= startTime }
-            val expenses = db.expenseDao().getExpensesByDateRangeSync(startTime, endTime)
-            val vouchers = db.paymentVoucherDao().getAllVouchersSync().filter { it.date >= startTime }
-
-            val cashSalesList = invoices.filter { it.type == InvoiceType.SALE && it.paymentMethod == PaymentMethod.CASH }
-                .map { it.paidAmount }
-            val cashExpensesList = expenses.filter { it.paymentMethod == PaymentMethod.CASH }
-                .map { it.amount }
-
-            val cashCollectionsList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && !it.isPayment }
-                .map { it.amount }
-            val cashVoucherExpensesList = vouchers.filter { it.paymentMethod == PaymentMethod.CASH && it.isPayment }
-                .map { it.amount }
-
-            val totalCashExpensesList = cashExpensesList + cashVoucherExpensesList
 
             val res = CashDrawerEngine.calculateReconciliation(
                 openingCash = openShift.openingCash,
-                cashSales = cashSalesList.ifEmpty { listOf(openShift.totalCashSales) },
-                cashCollections = cashCollectionsList.ifEmpty { listOf(openShift.totalCashCollections) },
-                cashExpenses = totalCashExpensesList.ifEmpty { listOf(openShift.totalCashExpenses) },
+                cashSales = listOf(openShift.totalCashSales),
+                cashCollections = listOf(openShift.totalCashCollections),
+                cashExpenses = listOf(openShift.totalCashExpenses),
                 actualPhysicalCash = physical
             )
             _uiState.update { it.copy(reconciliationResult = res) }

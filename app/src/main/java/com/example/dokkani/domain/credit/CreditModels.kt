@@ -15,7 +15,8 @@ enum class StatementEntryType(val labelArabic: String) {
     SALE_RETURN("مرتجع مبيعات"),
     PURCHASE_INVOICE("فاتورة مشتريات"),
     SUPPLIER_PAYMENT("سند صرف وتدفيع مورد"),
-    PURCHASE_RETURN("مرتجع مشتريات")
+    PURCHASE_RETURN("مرتجع مشتريات"),
+    OPENING_BALANCE("رصيد افتتاحي / سابق")
 }
 
 /**
@@ -171,6 +172,56 @@ object CreditNotebookEngine {
             }
         }
 
+        // 1. حساب الحركة الصافية من الفواتير والسندات المسجلة
+        val recordedNet = if (!isSupplier) {
+            rawItems.sumOf { it.debit - it.credit }
+        } else {
+            rawItems.sumOf { it.credit - it.debit }
+        }
+
+        // 2. الفرق بين الرصيد الفعلي المسجل للطرف وصافي الحركات الفعالية
+        val openingBalanceAmount = if (!isSupplier) {
+            party.currentBalance - recordedNet
+        } else {
+            party.currentBalance + recordedNet
+        }
+
+        // 3. إدراج بند رصيد افتتاحي إذا كان هناك فارق عن الحركات
+        if (kotlin.math.abs(openingBalanceAmount) > 0.001) {
+            val earliestDate = rawItems.minOfOrNull { it.date } ?: System.currentTimeMillis()
+            val openingDate = earliestDate - 1000L
+
+            if (!isSupplier) {
+                rawItems.add(
+                    RawMovement(
+                        rawId = 0L,
+                        date = openingDate,
+                        type = StatementEntryType.OPENING_BALANCE,
+                        refNumber = "OPENING",
+                        description = if (party.notes.isNotBlank()) party.notes else "رصيد افتتاحي / سابق مرحل",
+                        debit = if (openingBalanceAmount > 0) openingBalanceAmount else 0.0,
+                        credit = if (openingBalanceAmount < 0) kotlin.math.abs(openingBalanceAmount) else 0.0,
+                        paymentMethodArabic = "رصيد مرحل"
+                    )
+                )
+            } else {
+                val isSupplierLiability = openingBalanceAmount < 0
+                val absAmount = kotlin.math.abs(openingBalanceAmount)
+                rawItems.add(
+                    RawMovement(
+                        rawId = 0L,
+                        date = openingDate,
+                        type = StatementEntryType.OPENING_BALANCE,
+                        refNumber = "OPENING",
+                        description = if (party.notes.isNotBlank()) party.notes else "رصيد افتتاحي / سابق للمورد",
+                        debit = if (!isSupplierLiability) absAmount else 0.0,
+                        credit = if (isSupplierLiability) absAmount else 0.0,
+                        paymentMethodArabic = "رصيد مرحل"
+                    )
+                )
+            }
+        }
+
         // ترتيب الحركات تصاعدياً حسب التاريخ ثم المعرف لاحتساب الرصيد التراكمي بدقة
         val sortedMovements = rawItems.sortedWith(compareBy({ it.date }, { it.rawId }))
 
@@ -194,7 +245,7 @@ object CreditNotebookEngine {
                     description = m.description,
                     debit = m.debit,
                     credit = m.credit,
-                    runningBalance = cumulativeBalance,
+                    runningBalance = if (!isSupplier) cumulativeBalance else -cumulativeBalance,
                     paymentMethodArabic = m.paymentMethodArabic
                 )
             )
@@ -203,16 +254,17 @@ object CreditNotebookEngine {
         // عرض السجل الزمني تنازلياً للمستخدم (الأحدث أولاً)
         val finalTimeline = timelineItems.reversed()
 
-        val totalPurchases = if (!isSupplier) rawItems.sumOf { it.debit } else rawItems.sumOf { it.credit }
-        val totalPaid = if (!isSupplier) rawItems.sumOf { it.credit } else rawItems.sumOf { it.debit }
-        val calculatedBalance = if (!isSupplier) cumulativeBalance else -cumulativeBalance
-        val isOver = party.creditLimit > 0 && calculatedBalance > party.creditLimit
-        val lastDate = sortedMovements.lastOrNull()?.date
+        val nonOpeningMovements = rawItems.filter { it.type != StatementEntryType.OPENING_BALANCE }
+        val totalPurchases = if (!isSupplier) nonOpeningMovements.sumOf { it.debit } else nonOpeningMovements.sumOf { it.credit }
+        val totalPaid = if (!isSupplier) nonOpeningMovements.sumOf { it.credit } else nonOpeningMovements.sumOf { it.debit }
+        val currentBal = party.currentBalance
+        val isOver = party.creditLimit > 0 && currentBal > party.creditLimit
+        val lastDate = sortedMovements.lastOrNull { it.type != StatementEntryType.OPENING_BALANCE }?.date
 
         val whatsAppText = if (!isSupplier) {
             generateWhatsAppReminderMessage(
                 customerName = party.name,
-                balance = calculatedBalance,
+                balance = currentBal,
                 storeName = storeName,
                 currencySymbol = currencySymbol,
                 showDecimals = showDecimals
@@ -220,7 +272,7 @@ object CreditNotebookEngine {
         } else {
             generateSupplierWhatsAppMessage(
                 supplierName = party.name,
-                balance = calculatedBalance,
+                balance = currentBal,
                 storeName = storeName,
                 currencySymbol = currencySymbol,
                 showDecimals = showDecimals
@@ -228,11 +280,11 @@ object CreditNotebookEngine {
         }
 
         return CustomerStatementSummary(
-            party = party.copy(currentBalance = calculatedBalance),
+            party = party,
             totalInvoicesCount = partyInvoices.size,
             totalPurchasesOnCredit = totalPurchases,
             totalPayments = totalPaid,
-            currentBalance = calculatedBalance,
+            currentBalance = currentBal,
             creditLimit = party.creditLimit,
             isOverCreditLimit = isOver,
             lastActivityDate = lastDate,

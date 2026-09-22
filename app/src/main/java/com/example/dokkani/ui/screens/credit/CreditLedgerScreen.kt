@@ -947,6 +947,7 @@ private fun StatementRowCard(
                     color = when (item.type) {
                         StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFFEF2F2)
                         StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFFEFF6FF)
+                        StatementEntryType.OPENING_BALANCE -> Color(0xFFF1F5F9)
                         else -> Color(0xFFF0FDF4)
                     },
                     modifier = Modifier.size(38.dp)
@@ -956,6 +957,7 @@ private fun StatementRowCard(
                             text = when (item.type) {
                                 StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> "فاتورة"
                                 StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> "مرتجع"
+                                StatementEntryType.OPENING_BALANCE -> "رصيد"
                                 else -> "سند"
                             },
                             fontSize = 10.sp,
@@ -963,6 +965,7 @@ private fun StatementRowCard(
                             color = when (item.type) {
                                 StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFDC2626)
                                 StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFF2563EB)
+                                StatementEntryType.OPENING_BALANCE -> Color(0xFF475569)
                                 else -> Color(0xFF16A34A)
                             }
                         )
@@ -973,8 +976,9 @@ private fun StatementRowCard(
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val refText = if (item.type == StatementEntryType.OPENING_BALANCE) "" else " #${item.refNumber}"
                         Text(
-                            text = "${item.type.labelArabic} #${item.refNumber}",
+                            text = "${item.type.labelArabic}$refText",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = Color(0xFF0F172A)
@@ -1024,7 +1028,7 @@ private fun StatementRowCard(
                     )
                 }
 
-                if (isAdmin) {
+                if (isAdmin && item.type != StatementEntryType.OPENING_BALANCE && item.rawId > 0) {
                     Spacer(modifier = Modifier.width(6.dp))
                     IconButton(
                         onClick = {

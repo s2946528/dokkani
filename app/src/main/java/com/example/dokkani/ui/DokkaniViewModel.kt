@@ -535,10 +535,6 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 showDecimals = decimals
             )
 
-            if (kotlin.math.abs(party.currentBalance - summary.currentBalance) > 0.001) {
-                db.partyDao().updateParty(party.copy(currentBalance = summary.currentBalance))
-            }
-
             _uiState.update { it.copy(customerStatementSummary = summary, isLoadingStatement = false) }
         }
     }

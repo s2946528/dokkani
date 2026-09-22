@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.SessionManager
+import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.repository.DokkaniRepository
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
@@ -399,6 +400,36 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private suspend fun getOrCreateOpenShift(dao: CashShiftDao): CashShiftEntity {
+        var openShift = dao.getOpenShift()
+        if (openShift == null) {
+            val lastShift = dao.getLastShift()
+            if (lastShift != null && lastShift.status == "OPEN") {
+                openShift = lastShift
+            } else {
+                val now = System.currentTimeMillis()
+                val opening = lastShift?.actualPhysicalCash ?: lastShift?.expectedCashInDrawer ?: 200.0
+                val count = dao.countShifts() + 1
+                val newShift = CashShiftEntity(
+                    shiftNumber = "SHF-%04d".format(count),
+                    cashierName = "كاشير 1",
+                    startTime = now,
+                    openingCash = opening,
+                    totalCashSales = 0.0,
+                    totalCashCollections = 0.0,
+                    totalCashExpenses = 0.0,
+                    expectedCashInDrawer = opening,
+                    actualPhysicalCash = opening,
+                    status = "OPEN",
+                    notes = "فتح شفت تلقائي للنظام"
+                )
+                val id = dao.insertShift(newShift)
+                openShift = newShift.copy(id = id)
+            }
+        }
+        return openShift
+    }
+
     fun submitExpense() {
         val state = _uiState.value
         val amount = state.expenseAmountInput.toDoubleOrNull() ?: return
@@ -418,11 +449,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
             // تحديث عهدة الصندوق للشفت المفتوح عند المصروف النقدي
             if (state.expensePaymentMethod == PaymentMethod.CASH) {
-                val openShift = db.cashShiftDao().getOpenShift()
-                if (openShift != null) {
-                    val newExpenses = openShift.totalCashExpenses + amount
-                    db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
-                }
+                val openShift = getOrCreateOpenShift(db.cashShiftDao())
+                val newExpenses = openShift.totalCashExpenses + amount
+                db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
             }
 
             _uiState.update {
@@ -454,8 +483,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         val physical = state.drawerPhysicalCashInput.toDoubleOrNull() ?: 0.0
 
         viewModelScope.launch(Dispatchers.IO) {
-            val openShift = db.cashShiftDao().getOpenShift()
-            val startTime = openShift?.startTime ?: 0L
+            val openShift = getOrCreateOpenShift(db.cashShiftDao())
+            val startTime = openShift.startTime
             val endTime = System.currentTimeMillis()
 
             val invoices = db.invoiceDao().getAllInvoicesSync().filter { it.date >= startTime }
@@ -475,10 +504,10 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             val totalCashExpensesList = cashExpensesList + cashVoucherExpensesList
 
             val res = CashDrawerEngine.calculateReconciliation(
-                openingCash = openShift?.openingCash ?: opening,
-                cashSales = cashSalesList.ifEmpty { listOf(openShift?.totalCashSales ?: 0.0) },
-                cashCollections = cashCollectionsList.ifEmpty { listOf(openShift?.totalCashCollections ?: 0.0) },
-                cashExpenses = totalCashExpensesList.ifEmpty { listOf(openShift?.totalCashExpenses ?: 0.0) },
+                openingCash = openShift.openingCash,
+                cashSales = cashSalesList.ifEmpty { listOf(openShift.totalCashSales) },
+                cashCollections = cashCollectionsList.ifEmpty { listOf(openShift.totalCashCollections) },
+                cashExpenses = totalCashExpensesList.ifEmpty { listOf(openShift.totalCashExpenses) },
                 actualPhysicalCash = physical
             )
             _uiState.update { it.copy(reconciliationResult = res) }
@@ -611,17 +640,15 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
             // 2. تحديث عهدة الصندوق للشفت المفتوح فوراً عند الدفع النقدي
             if (state.voucherPaymentMethod == PaymentMethod.CASH) {
-                val openShift = db.cashShiftDao().getOpenShift()
-                if (openShift != null) {
-                    if (isSupplier) {
-                        // سند صرف للمورد -> يضاف لمصاريف الشفت ويخصم من النقدية المتوقعة بالدرج
-                        val newExpenses = openShift.totalCashExpenses + amount
-                        db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
-                    } else {
-                        // سند قبض من عميل -> يضاف لمقبوضات الشفت ويزيد النقدية المتوقعة بالدرج
-                        val newCollections = openShift.totalCashCollections + amount
-                        db.cashShiftDao().updateCollections(openShift.id, newCollections)
-                    }
+                val openShift = getOrCreateOpenShift(db.cashShiftDao())
+                if (isSupplier) {
+                    // سند صرف للمورد -> يضاف لمصاريف الشفت ويخصم من النقدية المتوقعة بالدرج
+                    val newExpenses = openShift.totalCashExpenses + amount
+                    db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
+                } else {
+                    // سند قبض من عميل -> يضاف لمقبوضات الشفت ويزيد النقدية المتوقعة بالدرج
+                    val newCollections = openShift.totalCashCollections + amount
+                    db.cashShiftDao().updateCollections(openShift.id, newCollections)
                 }
             }
 
@@ -910,11 +937,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {
                 if (expense.paymentMethod == PaymentMethod.CASH) {
-                    val openShift = db.cashShiftDao().getOpenShift()
-                    if (openShift != null) {
-                        val newExp = (openShift.totalCashExpenses - expense.amount).coerceAtLeast(0.0)
-                        db.cashShiftDao().updateExpenses(openShift.id, newExp)
-                    }
+                    val openShift = getOrCreateOpenShift(db.cashShiftDao())
+                    val newExp = (openShift.totalCashExpenses - expense.amount).coerceAtLeast(0.0)
+                    db.cashShiftDao().updateExpenses(openShift.id, newExp)
                 }
                 db.expenseDao().deleteExpense(expense)
             }
@@ -1026,14 +1051,21 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                         if (currentShift != null) {
                             when (inv.type) {
                                 InvoiceType.SALE -> {
-                                    val newSales = (currentShift.totalCashSales - inv.total).coerceAtLeast(0.0)
+                                    val newSales = currentShift.totalCashSales - inv.total
                                     db.cashShiftDao().updateSales(currentShift.id, newSales)
                                 }
                                 InvoiceType.PURCHASE -> {
                                     val newExp = (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
                                     db.cashShiftDao().updateExpenses(currentShift.id, newExp)
                                 }
-                                else -> {}
+                                InvoiceType.SALE_RETURN -> {
+                                    val newSales = currentShift.totalCashSales + inv.total
+                                    db.cashShiftDao().updateSales(currentShift.id, newSales)
+                                }
+                                InvoiceType.PURCHASE_RETURN -> {
+                                    val newColl = (currentShift.totalCashCollections - inv.total).coerceAtLeast(0.0)
+                                    db.cashShiftDao().updateCollections(currentShift.id, newColl)
+                                }
                             }
                         }
                     }
@@ -1058,15 +1090,13 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                         db.partyDao().updateParty(party.copy(currentBalance = newBal))
                     }
                     if (v.paymentMethod == PaymentMethod.CASH) {
-                        val openShift = db.cashShiftDao().getOpenShift()
-                        if (openShift != null) {
-                            if (isPay) {
-                                val newExp = (openShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
-                                db.cashShiftDao().updateExpenses(openShift.id, newExp)
-                            } else {
-                                val newCollections = (openShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
-                                db.cashShiftDao().updateCollections(openShift.id, newCollections)
-                            }
+                        val openShift = getOrCreateOpenShift(db.cashShiftDao())
+                        if (isPay) {
+                            val newExp = (openShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                            db.cashShiftDao().updateExpenses(openShift.id, newExp)
+                        } else {
+                            val newCollections = (openShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
+                            db.cashShiftDao().updateCollections(openShift.id, newCollections)
                         }
                     }
                     val accountType = when (v.paymentMethod) {

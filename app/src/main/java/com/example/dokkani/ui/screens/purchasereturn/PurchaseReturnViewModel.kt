@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
+import com.example.dokkani.data.local.dao.CashShiftDao
+import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceStatus
@@ -87,6 +89,36 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
     private val partyDao = db.partyDao()
     private val stockMovementDao = db.stockMovementDao()
     private val shiftDao = db.cashShiftDao()
+
+    private suspend fun getOrCreateOpenShift(dao: CashShiftDao): CashShiftEntity {
+        var openShift = dao.getOpenShift()
+        if (openShift == null) {
+            val lastShift = dao.getLastShift()
+            if (lastShift != null && lastShift.status == "OPEN") {
+                openShift = lastShift
+            } else {
+                val now = System.currentTimeMillis()
+                val opening = lastShift?.actualPhysicalCash ?: lastShift?.expectedCashInDrawer ?: 200.0
+                val count = dao.countShifts() + 1
+                val newShift = CashShiftEntity(
+                    shiftNumber = "SHF-%04d".format(count),
+                    cashierName = "كاشير 1",
+                    startTime = now,
+                    openingCash = opening,
+                    totalCashSales = 0.0,
+                    totalCashCollections = 0.0,
+                    totalCashExpenses = 0.0,
+                    expectedCashInDrawer = opening,
+                    actualPhysicalCash = opening,
+                    status = "OPEN",
+                    notes = "فتح شفت تلقائي للنظام"
+                )
+                val id = dao.insertShift(newShift)
+                openShift = newShift.copy(id = id)
+            }
+        }
+        return openShift
+    }
     private val currencyDao = db.currencyDao()
 
     private val _uiState = MutableStateFlow(PurchaseReturnUiState())
@@ -382,14 +414,9 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                         partyDao.updateBalance(originalInvoice.partyId, totalReturnAmount)
                     } else if (state.paymentMethod == PaymentMethod.CASH) {
                         // استرداد النقدية من المورد وإيداعها في الصندوق / شفت الكاشير المفتوح
-                        val openShift = shiftDao.getOpenShift()
-                        if (openShift != null) {
-                            val updatedShift = openShift.copy(
-                                totalCashCollections = openShift.totalCashCollections + totalReturnAmount,
-                                expectedCashInDrawer = openShift.expectedCashInDrawer + totalReturnAmount
-                            )
-                            shiftDao.updateShift(updatedShift)
-                        }
+                        val openShift = getOrCreateOpenShift(shiftDao)
+                        val newColl = openShift.totalCashCollections + totalReturnAmount
+                        shiftDao.updateCollections(openShift.id, newColl)
                     }
                 }
 

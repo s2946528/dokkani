@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
+import com.example.dokkani.data.local.dao.CashShiftDao
+import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
@@ -146,6 +148,36 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
     private val invoiceDao = db.invoiceDao()
     private val stockMovementDao = db.stockMovementDao()
     private val shiftDao = db.cashShiftDao()
+
+    private suspend fun getOrCreateOpenShift(dao: CashShiftDao): CashShiftEntity {
+        var openShift = dao.getOpenShift()
+        if (openShift == null) {
+            val lastShift = dao.getLastShift()
+            if (lastShift != null && lastShift.status == "OPEN") {
+                openShift = lastShift
+            } else {
+                val now = System.currentTimeMillis()
+                val opening = lastShift?.actualPhysicalCash ?: lastShift?.expectedCashInDrawer ?: 200.0
+                val count = dao.countShifts() + 1
+                val newShift = CashShiftEntity(
+                    shiftNumber = "SHF-%04d".format(count),
+                    cashierName = "كاشير 1",
+                    startTime = now,
+                    openingCash = opening,
+                    totalCashSales = 0.0,
+                    totalCashCollections = 0.0,
+                    totalCashExpenses = 0.0,
+                    expectedCashInDrawer = opening,
+                    actualPhysicalCash = opening,
+                    status = "OPEN",
+                    notes = "فتح شفت تلقائي للنظام"
+                )
+                val id = dao.insertShift(newShift)
+                openShift = newShift.copy(id = id)
+            }
+        }
+        return openShift
+    }
 
     private val _uiState = MutableStateFlow(PurchaseUiState())
     val uiState: StateFlow<PurchaseUiState> = _uiState.asStateFlow()
@@ -542,15 +574,9 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                     // 5. خصم المبلغ من الصندوق إذا كان الشراء نقداً
                     if (state.paymentMethod == PaymentMethod.CASH) {
-                        val openShift = shiftDao.getOpenShift()
-                        if (openShift != null) {
-                            shiftDao.updateShift(
-                                openShift.copy(
-                                    totalCashExpenses = openShift.totalCashExpenses + finalTotalLocal,
-                                    expectedCashInDrawer = openShift.expectedCashInDrawer - finalTotalLocal
-                                )
-                            )
-                        }
+                        val openShift = getOrCreateOpenShift(shiftDao)
+                        val newExp = openShift.totalCashExpenses + finalTotalLocal
+                        shiftDao.updateExpenses(openShift.id, newExp)
                     }
 
                     val updatedSupplier = state.selectedSupplier?.id?.let { partyDao.getPartyById(it) }
@@ -742,11 +768,9 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                     // 4. عكس نقدية الصندوق للشفت المفتوح إذا كان الدفع نقداً
                     if (inv.paymentMethod == PaymentMethod.CASH) {
-                        val openShift = shiftDao.getOpenShift()
-                        if (openShift != null) {
-                            val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
-                            shiftDao.updateShift(openShift.copy(totalCashExpenses = newExp))
-                        }
+                        val openShift = getOrCreateOpenShift(shiftDao)
+                        val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                        shiftDao.updateExpenses(openShift.id, newExp)
                     }
 
                     // 5. حذف بنود الفاتورة والفاتورة نفسها
@@ -922,11 +946,9 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                     // 4. عكس منصرفات الصندوق القديمة
                     if (inv.paymentMethod == PaymentMethod.CASH) {
-                        val openShift = shiftDao.getOpenShift()
-                        if (openShift != null) {
-                            val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
-                            shiftDao.updateShift(openShift.copy(totalCashExpenses = newExp))
-                        }
+                        val openShift = getOrCreateOpenShift(shiftDao)
+                        val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                        shiftDao.updateExpenses(openShift.id, newExp)
                     }
 
                     // 5. بناء التعديلات الجديدة وتطبيق سعر الصرف
@@ -1017,15 +1039,9 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                     // 8. تطبيق منصرفات الصندوق الجديدة
                     if (method == PaymentMethod.CASH) {
-                        val openShift = shiftDao.getOpenShift()
-                        if (openShift != null) {
-                            shiftDao.updateShift(
-                                openShift.copy(
-                                    totalCashExpenses = openShift.totalCashExpenses + totalLocal,
-                                    expectedCashInDrawer = openShift.expectedCashInDrawer - totalLocal
-                                )
-                            )
-                        }
+                        val openShift = getOrCreateOpenShift(shiftDao)
+                        val newExp = openShift.totalCashExpenses + totalLocal
+                        shiftDao.updateExpenses(openShift.id, newExp)
                     }
                 }
 

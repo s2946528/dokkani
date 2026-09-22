@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
+import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.ExpenseEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
@@ -144,6 +145,36 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     private val voucherDao = db.paymentVoucherDao()
     private val expenseDao = db.expenseDao()
     private val shiftDao = db.cashShiftDao()
+
+    private suspend fun getOrCreateOpenShift(dao: CashShiftDao): CashShiftEntity {
+        var openShift = dao.getOpenShift()
+        if (openShift == null) {
+            val lastShift = dao.getLastShift()
+            if (lastShift != null && lastShift.status == "OPEN") {
+                openShift = lastShift
+            } else {
+                val now = System.currentTimeMillis()
+                val opening = lastShift?.actualPhysicalCash ?: lastShift?.expectedCashInDrawer ?: 200.0
+                val count = dao.countShifts() + 1
+                val newShift = CashShiftEntity(
+                    shiftNumber = "SHF-%04d".format(count),
+                    cashierName = "كاشير 1",
+                    startTime = now,
+                    openingCash = opening,
+                    totalCashSales = 0.0,
+                    totalCashCollections = 0.0,
+                    totalCashExpenses = 0.0,
+                    expectedCashInDrawer = opening,
+                    actualPhysicalCash = opening,
+                    status = "OPEN",
+                    notes = "فتح شفت تلقائي للنظام"
+                )
+                val id = dao.insertShift(newShift)
+                openShift = newShift.copy(id = id)
+            }
+        }
+        return openShift
+    }
     private val settingsDao = db.systemSettingsDao()
     private val currencyDao = db.currencyDao()
 
@@ -807,43 +838,25 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
                     // 4. تحديث صندوق الكاشير إذا كانت نقداً
                     if (state.paymentMethod == PaymentMethod.CASH) {
-                        val openShift = shiftDao.getOpenShift()
-                        if (openShift != null) {
-                            when (state.activeOperation) {
-                                PosOperation.SALE -> {
-                                    shiftDao.updateShift(
-                                        openShift.copy(
-                                            totalCashSales = openShift.totalCashSales + state.cartSummary.finalTotal,
-                                            expectedCashInDrawer = openShift.expectedCashInDrawer + state.cartSummary.finalTotal
-                                        )
-                                    )
-                                }
-                                PosOperation.SALE_RETURN -> {
-                                    shiftDao.updateShift(
-                                        openShift.copy(
-                                            totalCashSales = openShift.totalCashSales - state.cartSummary.finalTotal,
-                                            expectedCashInDrawer = openShift.expectedCashInDrawer - state.cartSummary.finalTotal
-                                        )
-                                    )
-                                }
-                                PosOperation.PURCHASE -> {
-                                    shiftDao.updateShift(
-                                        openShift.copy(
-                                            totalCashExpenses = openShift.totalCashExpenses + state.cartSummary.finalTotal,
-                                            expectedCashInDrawer = openShift.expectedCashInDrawer - state.cartSummary.finalTotal
-                                        )
-                                    )
-                                }
-                                PosOperation.PURCHASE_RETURN -> {
-                                    shiftDao.updateShift(
-                                        openShift.copy(
-                                            totalCashCollections = openShift.totalCashCollections + state.cartSummary.finalTotal,
-                                            expectedCashInDrawer = openShift.expectedCashInDrawer + state.cartSummary.finalTotal
-                                        )
-                                    )
-                                }
-                                else -> {}
+                        val openShift = getOrCreateOpenShift(shiftDao)
+                        when (state.activeOperation) {
+                            PosOperation.SALE -> {
+                                val newSales = openShift.totalCashSales + state.cartSummary.finalTotal
+                                shiftDao.updateSales(openShift.id, newSales)
                             }
+                            PosOperation.SALE_RETURN -> {
+                                val newSales = (openShift.totalCashSales - state.cartSummary.finalTotal).coerceAtLeast(0.0)
+                                shiftDao.updateSales(openShift.id, newSales)
+                            }
+                            PosOperation.PURCHASE -> {
+                                val newExp = openShift.totalCashExpenses + state.cartSummary.finalTotal
+                                shiftDao.updateExpenses(openShift.id, newExp)
+                            }
+                            PosOperation.PURCHASE_RETURN -> {
+                                val newColl = openShift.totalCashCollections + state.cartSummary.finalTotal
+                                shiftDao.updateCollections(openShift.id, newColl)
+                            }
+                            else -> {}
                         }
                     }
 
@@ -1028,11 +1041,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
                         // تحديث حركة الصندوق الشفت النشط إذا كان نقداً
                         if (state.voucherPaymentMethod == PaymentMethod.CASH) {
-                            val openShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull { it.status == "OPEN" }
-                            if (openShift != null) {
-                                val newCollections = openShift.totalCashCollections + amount
-                                shiftDao.updateCollections(openShift.id, newCollections)
-                            }
+                            val openShift = getOrCreateOpenShift(shiftDao)
+                            val newCollections = openShift.totalCashCollections + amount
+                            shiftDao.updateCollections(openShift.id, newCollections)
                         }
 
                         _uiState.update {
@@ -1090,11 +1101,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
                         // إنقاص رصيد النقدية في الدرج الشفت النشط إذا كان نقداً
                         if (state.voucherPaymentMethod == PaymentMethod.CASH) {
-                            val openShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull { it.status == "OPEN" }
-                            if (openShift != null) {
-                                val newExpenses = openShift.totalCashExpenses + amount
-                                shiftDao.updateExpenses(openShift.id, newExpenses)
-                            }
+                            val openShift = getOrCreateOpenShift(shiftDao)
+                            val newExpenses = openShift.totalCashExpenses + amount
+                            shiftDao.updateExpenses(openShift.id, newExpenses)
                         }
 
                         _uiState.update {
@@ -1424,13 +1433,20 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                         when (inv.type) {
                                             InvoiceType.SALE -> shiftDao.updateSales(
                                                 currentShift.id,
-                                                (currentShift.totalCashSales - inv.total).coerceAtLeast(0.0)
+                                                currentShift.totalCashSales - inv.total
                                             )
                                             InvoiceType.PURCHASE -> shiftDao.updateExpenses(
                                                 currentShift.id,
                                                 (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
                                             )
-                                            else -> {}
+                                            InvoiceType.SALE_RETURN -> shiftDao.updateSales(
+                                                currentShift.id,
+                                                currentShift.totalCashSales + inv.total
+                                            )
+                                            InvoiceType.PURCHASE_RETURN -> shiftDao.updateCollections(
+                                                currentShift.id,
+                                                (currentShift.totalCashCollections - inv.total).coerceAtLeast(0.0)
+                                            )
                                         }
                                     }
                                 }
@@ -1609,7 +1625,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 db.withTransaction {
-                    val openShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull { it.status == "OPEN" }
+                    val openShift = getOrCreateOpenShift(shiftDao)
                     if (record.operation == PosOperation.RECEIPT) {
                         val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
                         if (v != null) {
@@ -1617,14 +1633,12 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             val updated = v.copy(notes = notes, paymentMethod = paymentMethod)
                             voucherDao.updateVoucher(updated)
 
-                            if (openShift != null) {
-                                if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
-                                    val newColl = (openShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
-                                    shiftDao.updateCollections(openShift.id, newColl)
-                                } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
-                                    val newColl = openShift.totalCashCollections + v.amount
-                                    shiftDao.updateCollections(openShift.id, newColl)
-                                }
+                            if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
+                                val newColl = (openShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
+                                shiftDao.updateCollections(openShift.id, newColl)
+                            } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
+                                val newColl = openShift.totalCashCollections + v.amount
+                                shiftDao.updateCollections(openShift.id, newColl)
                             }
                         }
                     } else if (record.operation == PosOperation.EXPENSE) {
@@ -1634,14 +1648,12 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             val updated = exp.copy(notes = notes, paymentMethod = paymentMethod)
                             expenseDao.updateExpense(updated)
 
-                            if (openShift != null) {
-                                if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
-                                    val newExp = (openShift.totalCashExpenses - exp.amount).coerceAtLeast(0.0)
-                                    shiftDao.updateExpenses(openShift.id, newExp)
-                                } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
-                                    val newExp = openShift.totalCashExpenses + exp.amount
-                                    shiftDao.updateExpenses(openShift.id, newExp)
-                                }
+                            if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
+                                val newExp = (openShift.totalCashExpenses - exp.amount).coerceAtLeast(0.0)
+                                shiftDao.updateExpenses(openShift.id, newExp)
+                            } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
+                                val newExp = openShift.totalCashExpenses + exp.amount
+                                shiftDao.updateExpenses(openShift.id, newExp)
                             }
                         } else {
                             val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
@@ -1650,14 +1662,12 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                 val updated = v.copy(notes = notes, paymentMethod = paymentMethod)
                                 voucherDao.updateVoucher(updated)
 
-                                if (openShift != null) {
-                                    if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
-                                        val newExp = (openShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
-                                        shiftDao.updateExpenses(openShift.id, newExp)
-                                    } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
-                                        val newExp = openShift.totalCashExpenses + v.amount
-                                        shiftDao.updateExpenses(openShift.id, newExp)
-                                    }
+                                if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
+                                    val newExp = (openShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                                    shiftDao.updateExpenses(openShift.id, newExp)
+                                } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
+                                    val newExp = openShift.totalCashExpenses + v.amount
+                                    shiftDao.updateExpenses(openShift.id, newExp)
                                 }
                             }
                         }

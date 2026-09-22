@@ -53,6 +53,9 @@ import com.example.dokkani.data.local.entities.FinancialAccountType
 import com.example.dokkani.data.local.entities.ChartOfAccountsDefaults
 import com.example.dokkani.domain.assets.AssetsAndEquityEngine
 import com.example.dokkani.domain.assets.EquityCalculationResult
+import com.example.dokkani.util.formatAmount
+import com.example.dokkani.util.formatCurrency
+import com.example.dokkani.util.formatQuantity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -226,6 +229,11 @@ data class DokkaniUiState(
     val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.ي"
     val currencyName: String get() = baseCurrency?.name ?: "الريال اليمني"
     val currencyId: Long get() = baseCurrency?.id ?: 1L
+    val showDecimals: Boolean get() = settings?.showDecimals ?: false
+
+    fun formatCurrency(amount: Double): String = amount.formatCurrency(showDecimals, currencySymbol)
+    fun formatAmount(amount: Double): String = amount.formatAmount(showDecimals)
+    fun formatQuantity(qty: Double): String = qty.formatQuantity(showDecimals)
 }
 
 class DokkaniViewModel(application: Application) : AndroidViewModel(application) {
@@ -947,6 +955,18 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 lastUpdated = System.currentTimeMillis()
             )
             db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
+    fun updateShowDecimals(show: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                showDecimals = show,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+            sessionManager.setShowDecimals(show)
         }
     }
 

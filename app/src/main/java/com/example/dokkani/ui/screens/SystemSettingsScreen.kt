@@ -63,6 +63,7 @@ fun SystemSettingsScreen(
     onDeleteInvoice: (Long) -> Unit = {},
     onUpdateStoreProfile: (storeName: String, storeAddress: String, storePhone: String, taxNumber: String, invoiceFooterText: String, showPreviousBalance: Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onUpdateShowPreviousBalance: (Boolean) -> Unit = {},
+    onUpdateShowDecimals: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
@@ -288,6 +289,58 @@ fun SystemSettingsScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // بطاقة التحكم في عرض الكسور العشرية (Decimal Places Control)
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth().testTag("decimals_settings_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "إعدادات عرض الكسور العشرية (Decimal Places)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = if (settings?.showDecimals == true)
+                                            "مفعل: يتم إظهار المبالغ والأسعار بالكسور العشرية (مثال: 5000.00)"
+                                        else
+                                            "معطل (الافتراضي): يتم إظهار المبالغ والأسعار كأعداد صحيحة بدون كسور (مثال: 5000)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = settings?.showDecimals ?: false,
+                                onCheckedChange = { if (isAdmin) onUpdateShowDecimals(it) },
+                                enabled = isAdmin,
+                                modifier = Modifier.testTag("show_decimals_switch")
+                            )
                         }
                     }
                 }

@@ -28,6 +28,7 @@ data class SystemSettingsEntity(
     val purchaseTaxRate: Double = 0.0,                     // نسبة ضريبة المشتريات الافتراضية (0.0% افتراضياً)
     val enableProduceShrinkageTracking: Boolean = true,    // تفعيل احتساب الهدر والتالف للخضار المشكل
     val enableNegativeStock: Boolean = false,              // السماح بالبيع بالسالب في حال تأخر إدخال الفواتير
+    val showDecimals: Boolean = false,                     // التحكم المركزي في إظهار الكسور العشرية (معطلة افتراضياً false)
     val invoiceFooterText: String = "شكراً لزيارتكم دكاني - تسوقكم يسعدنا!", // رسالة ذيل الفاتورة
     val lastUpdated: Long = System.currentTimeMillis()     // وقت آخر تعديل للإعدادات
 )

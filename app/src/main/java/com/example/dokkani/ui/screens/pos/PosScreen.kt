@@ -1138,6 +1138,7 @@ private fun PosCartPanel(
                         PosCartItemRow(
                             item = item,
                             currencySymbol = uiState.currencySymbol,
+                            showDecimals = uiState.showDecimals,
                             onQuantityChange = { newQty -> viewModel.updateCartQuantity(item.cartItemId, newQty) },
                             onUnitPriceChange = { newPrice -> viewModel.updateCartItemPrice(item.cartItemId, newPrice) },
                             onUnitChange = { newUnit -> viewModel.changeCartItemUnit(item.cartItemId, newUnit) },
@@ -1841,6 +1842,7 @@ private fun PosInvoiceSectionOld(
                             PosCartItemRow(
                                 item = item,
                                 currencySymbol = uiState.currencySymbol,
+                                showDecimals = uiState.showDecimals,
                                 onQuantityChange = { newQty -> viewModel.updateCartQuantity(item.cartItemId, newQty) },
                                 onUnitPriceChange = { newPrice -> viewModel.updateCartItemPrice(item.cartItemId, newPrice) },
                                 onUnitChange = { newUnit -> viewModel.changeCartItemUnit(item.cartItemId, newUnit) },

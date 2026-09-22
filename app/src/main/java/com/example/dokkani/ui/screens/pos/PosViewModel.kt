@@ -130,7 +130,9 @@ data class PosUiState(
     val historySearchQuery: String = "",
     val historyFilter: String = "ALL",
     val isBottomHistoryExpanded: Boolean = true
-)
+) {
+    val showDecimals: Boolean get() = systemSettings?.showDecimals ?: false
+}
 
 class PosViewModel(application: Application) : AndroidViewModel(application) {
 

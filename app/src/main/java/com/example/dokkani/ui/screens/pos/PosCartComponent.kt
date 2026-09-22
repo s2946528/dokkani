@@ -67,6 +67,9 @@ import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.domain.pos.CartSummary
 import com.example.dokkani.domain.pos.PosCartItem
+import com.example.dokkani.util.formatAmount
+import com.example.dokkani.util.formatCurrency
+import com.example.dokkani.util.formatQuantity
 
 /**
  * مكون سلة المبيعات المتقدم لنقطة البيع (Advanced POS Shopping Cart)
@@ -78,6 +81,7 @@ fun PosCartComponent(
     cartItems: List<PosCartItem>,
     cartSummary: CartSummary,
     currencySymbol: String = "ر.ي",
+    showDecimals: Boolean = false,
     onQuantityChange: (cartItemId: String, newQty: Double) -> Unit,
     onUnitPriceChange: (cartItemId: String, newPrice: Double) -> Unit = { _, _ -> },
     onUnitChange: (cartItemId: String, newUnit: ProductUnitEntity) -> Unit = { _, _ -> },
@@ -261,7 +265,7 @@ fun PosCartComponent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "%.2f %s".format(cartSummary.subtotal, currencySymbol),
+                        text = cartSummary.subtotal.formatCurrency(showDecimals, currencySymbol),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -278,7 +282,7 @@ fun PosCartComponent(
                             color = MaterialTheme.colorScheme.error
                         )
                         Text(
-                            text = "-%.2f %s".format(cartSummary.discount, currencySymbol),
+                            text = "-${cartSummary.discount.formatCurrency(showDecimals, currencySymbol)}",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.error
@@ -298,7 +302,7 @@ fun PosCartComponent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "%.2f %s".format(cartSummary.taxAmount, currencySymbol),
+                            text = cartSummary.taxAmount.formatCurrency(showDecimals, currencySymbol),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -321,7 +325,7 @@ fun PosCartComponent(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "%.2f %s".format(cartSummary.finalTotal, currencySymbol),
+                        text = cartSummary.finalTotal.formatCurrency(showDecimals, currencySymbol),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary
@@ -367,6 +371,7 @@ fun PosCartComponent(
 fun PosCartItemRow(
     item: PosCartItem,
     currencySymbol: String,
+    showDecimals: Boolean = false,
     onQuantityChange: (Double) -> Unit,
     onUnitPriceChange: (Double) -> Unit = {},
     onUnitChange: (ProductUnitEntity) -> Unit = {},
@@ -520,13 +525,13 @@ fun PosCartItemRow(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "سعر الشراء بالفاتورة الأصلية: %.2f %s".format(item.originalInvoiceCostPrice, currencySymbol),
+                            text = "سعر الشراء بالفاتورة الأصلية: ${item.originalInvoiceCostPrice.formatCurrency(showDecimals, currencySymbol)}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF1B5E20)
                         )
                         Text(
-                            text = "الكمية المشتراة: %.2f %s".format(item.originalInvoiceQuantity, item.unitName),
+                            text = "الكمية المشتراة: ${item.originalInvoiceQuantity.formatQuantity(showDecimals)} ${item.unitName}",
                             fontSize = 10.sp,
                             color = Color(0xFF2E7D32)
                         )
@@ -608,7 +613,7 @@ fun PosCartItemRow(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "%.2f %s / %s".format(item.unitPrice, currencySymbol, item.unitName),
+                                    text = "${item.unitPrice.formatCurrency(showDecimals, currencySymbol)} / ${item.unitName}",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -742,7 +747,7 @@ fun PosCartItemRow(
                         color = MaterialTheme.colorScheme.outline
                     )
                     Text(
-                        text = "%.2f %s".format(item.totalPrice, currencySymbol),
+                        text = item.totalPrice.formatCurrency(showDecimals, currencySymbol),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary

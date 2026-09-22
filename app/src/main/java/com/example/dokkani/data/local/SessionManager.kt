@@ -20,6 +20,17 @@ class SessionManager(private val context: Context) {
         val CURRENT_USER_ROLE = stringPreferencesKey("current_user_role")
         val CURRENT_USER_FULL_NAME = stringPreferencesKey("current_user_full_name")
         val ONBOARDING_COMPLETED = androidx.datastore.preferences.core.booleanPreferencesKey("onboarding_completed")
+        val SHOW_DECIMALS = androidx.datastore.preferences.core.booleanPreferencesKey("show_decimals")
+    }
+
+    val showDecimals: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[SHOW_DECIMALS] ?: false
+    }
+
+    suspend fun setShowDecimals(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SHOW_DECIMALS] = show
+        }
     }
 
     val isOnboardingCompleted: Flow<Boolean> = context.dataStore.data.map { preferences ->

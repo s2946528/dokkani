@@ -482,7 +482,8 @@ fun DokkaniApp(
                                     onDeleteParty = viewModel::deleteParty,
                                     onDeleteInvoice = viewModel::deleteInvoice,
                                     onUpdateStoreProfile = viewModel::updateStoreProfile,
-                                    onUpdateShowPreviousBalance = viewModel::updateShowPreviousBalance
+                                    onUpdateShowPreviousBalance = viewModel::updateShowPreviousBalance,
+                                    onUpdateShowDecimals = viewModel::updateShowDecimals
                                 )
                             }
                             "المستخدمين والصلاحيات" -> {

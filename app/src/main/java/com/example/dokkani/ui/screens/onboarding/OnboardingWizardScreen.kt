@@ -153,6 +153,7 @@ fun OnboardingWizardScreen(
         var newProdCategory by remember { mutableStateOf("تموينات عامة") }
         var newProdBarcode by remember { mutableStateOf("") }
         var newProdUnit by remember { mutableStateOf("حبة/قطعة") }
+        var newProdIsBaseUnit by remember { mutableStateOf(true) }
         var newProdQty by remember { mutableStateOf("") }
         var newProdCost by remember { mutableStateOf("") }
         var newProdPrice by remember { mutableStateOf("") }
@@ -481,6 +482,8 @@ fun OnboardingWizardScreen(
                                             onNewProdBarcodeChange = { newProdBarcode = it },
                                             newProdUnit = newProdUnit,
                                             onNewProdUnitChange = { newProdUnit = it },
+                                            newProdIsBaseUnit = newProdIsBaseUnit,
+                                            onNewProdIsBaseUnitChange = { newProdIsBaseUnit = it },
                                             newProdQty = newProdQty,
                                             onNewProdQtyChange = { newProdQty = it },
                                             newProdCost = newProdCost,
@@ -504,7 +507,8 @@ fun OnboardingWizardScreen(
                                                         costPrice = cost,
                                                         sellingPrice = price,
                                                         barcode = barcode,
-                                                        unitName = unit
+                                                        unitName = unit,
+                                                        isBaseUnit = newProdIsBaseUnit
                                                     )
 
                                                     // التحقق الذكي من التكرار عبر الباركود أولاً ثم الاسم
@@ -527,10 +531,24 @@ fun OnboardingWizardScreen(
                                                             totalQty = totalQty
                                                         )
                                                     } else {
-                                                        openingItems = openingItems + newItem
+                                                        // عند الحفظ: إذا تم تفعيل خيار الوحدة الأساسية للصنف، يتم تحويل أي وحدة أساسية سابقة لنفس الصنف إلى فرعية
+                                                        val updatedOpeningItems = if (newProdIsBaseUnit) {
+                                                            openingItems.map { existing ->
+                                                                if (existing.name.trim().equals(name, ignoreCase = true)) {
+                                                                    existing.copy(isBaseUnit = false)
+                                                                } else {
+                                                                    existing
+                                                                }
+                                                            }
+                                                        } else {
+                                                            openingItems
+                                                        }
+
+                                                        openingItems = updatedOpeningItems + newItem
                                                         newProdName = ""
                                                         newProdBarcode = ""
                                                         newProdUnit = "حبة/قطعة"
+                                                        newProdIsBaseUnit = true
                                                         newProdQty = ""
                                                         newProdCost = ""
                                                         newProdPrice = ""
@@ -2243,6 +2261,8 @@ private fun StepFlexibleOpeningBalances(
     onNewProdBarcodeChange: (String) -> Unit,
     newProdUnit: String,
     onNewProdUnitChange: (String) -> Unit,
+    newProdIsBaseUnit: Boolean = true,
+    onNewProdIsBaseUnitChange: (Boolean) -> Unit = {},
     newProdQty: String,
     onNewProdQtyChange: (String) -> Unit,
     newProdCost: String,
@@ -2444,7 +2464,35 @@ private fun StepFlexibleOpeningBalances(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // خيار تعيين كـ وحدة أساسية - موقعه مكانياً بين حقل "اسم الوحدة" وبين حقل "التكلفة"
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onNewProdIsBaseUnitChange(!newProdIsBaseUnit) }
+                                    .background(
+                                        if (newProdIsBaseUnit) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                        else Color.Transparent
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = newProdIsBaseUnit,
+                                    onCheckedChange = { onNewProdIsBaseUnitChange(it) }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "تعيين كـ وحدة أساسية للصنف",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             // 4. التكلفة وسعر البيع
                             Row(
@@ -2541,6 +2589,20 @@ private fun StepFlexibleOpeningBalances(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(item.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                                            if (item.isBaseUnit) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = MaterialTheme.colorScheme.primaryContainer
+                                                ) {
+                                                    Text(
+                                                        text = "وحدة أساسية",
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
                                             if (item.barcode.isNotBlank()) {
                                                 Surface(
                                                     shape = RoundedCornerShape(4.dp),

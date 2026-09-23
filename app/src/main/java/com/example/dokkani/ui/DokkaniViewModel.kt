@@ -11,6 +11,7 @@ import com.example.dokkani.data.repository.DokkaniRepository
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.CurrencyExchangeHistoryEntity
 import com.example.dokkani.data.local.entities.ExpenseEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
@@ -106,7 +107,8 @@ data class OpeningBalanceItem(
     val costPrice: Double,
     val sellingPrice: Double,
     val barcode: String = "",
-    val unitName: String = "حبة/قطعة"
+    val unitName: String = "حبة/قطعة",
+    val isBaseUnit: Boolean = true
 )
 
 data class OpeningBalanceCustomer(
@@ -143,6 +145,7 @@ data class DokkaniUiState(
     val invoices: List<InvoiceEntity> = emptyList(),
     val vouchers: List<PaymentVoucherEntity> = emptyList(),
     val currencies: List<CurrencyEntity> = emptyList(),
+    val exchangeRateLogs: List<CurrencyExchangeHistoryEntity> = emptyList(),
     val baseCurrency: CurrencyEntity? = null,
     val settings: SystemSettingsEntity? = null,
 
@@ -358,6 +361,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             db.currencyDao().getAllCurrencies().collectLatest { currencies ->
                 _uiState.update { it.copy(currencies = currencies) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.currencyExchangeHistoryDao().getAllLogsFlow().collectLatest { logs ->
+                _uiState.update { it.copy(exchangeRateLogs = logs) }
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -1056,7 +1064,15 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun saveProductUnit(unit: ProductUnitEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            db.productDao().insertUnit(unit)
+            db.withTransaction {
+                if (unit.isBaseUnit && unit.productId > 0) {
+                    val existingUnits = db.productDao().getUnitsForProductSync(unit.productId)
+                    existingUnits.filter { it.isBaseUnit && it.id != unit.id }.forEach { prevBaseUnit ->
+                        db.productDao().updateUnit(prevBaseUnit.copy(isBaseUnit = false))
+                    }
+                }
+                db.productDao().insertUnit(unit)
+            }
         }
     }
 
@@ -1101,27 +1117,51 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun saveCurrency(currency: CurrencyEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            if (currency.isBaseCurrency) {
-                val allCurrencies = db.currencyDao().getAllCurrenciesSync()
-                val updatedCurrencies = mutableListOf<CurrencyEntity>()
-                var handledTarget = false
-
-                allCurrencies.forEach { curr ->
-                    if (curr.id == currency.id || (currency.id == 0L && curr.code.equals(currency.code, ignoreCase = true))) {
-                        updatedCurrencies.add(currency.copy(isBaseCurrency = true, exchangeRateToBase = 1.0))
-                        handledTarget = true
-                    } else {
-                        updatedCurrencies.add(curr.copy(isBaseCurrency = false))
-                    }
-                }
-
-                if (!handledTarget) {
-                    updatedCurrencies.add(currency.copy(isBaseCurrency = true, exchangeRateToBase = 1.0))
-                }
-
-                db.currencyDao().insertCurrencies(updatedCurrencies)
+            val existing = if (currency.id > 0) {
+                db.currencyDao().getCurrencyById(currency.id)
             } else {
-                db.currencyDao().insertCurrency(currency)
+                db.currencyDao().getAllCurrenciesSync().find { it.code.equals(currency.code, ignoreCase = true) }
+            }
+
+            // شرط أساسي: عدم إظهار أو تسجيل أي سجلات جديدة في الجدول إلا في حال حدث تغيير فعلي وتطوير في قيمة سعر الصرف
+            val isRateChanged = existing == null || existing.exchangeRateToBase != currency.exchangeRateToBase
+
+            db.withTransaction {
+                if (currency.isBaseCurrency) {
+                    val allCurrencies = db.currencyDao().getAllCurrenciesSync()
+                    val updatedCurrencies = mutableListOf<CurrencyEntity>()
+                    var handledTarget = false
+
+                    allCurrencies.forEach { curr ->
+                        if (curr.id == currency.id || (currency.id == 0L && curr.code.equals(currency.code, ignoreCase = true))) {
+                            updatedCurrencies.add(currency.copy(isBaseCurrency = true, exchangeRateToBase = 1.0))
+                            handledTarget = true
+                        } else {
+                            updatedCurrencies.add(curr.copy(isBaseCurrency = false))
+                        }
+                    }
+
+                    if (!handledTarget) {
+                        updatedCurrencies.add(currency.copy(isBaseCurrency = true, exchangeRateToBase = 1.0))
+                    }
+
+                    db.currencyDao().insertCurrencies(updatedCurrencies)
+                } else {
+                    db.currencyDao().insertCurrency(currency)
+                }
+
+                if (isRateChanged && !currency.isBaseCurrency && currency.exchangeRateToBase > 0.0) {
+                    db.currencyExchangeHistoryDao().insertLog(
+                        CurrencyExchangeHistoryEntity(
+                            currencyId = currency.id,
+                            currencyName = currency.name,
+                            currencyCode = currency.code,
+                            newExchangeRate = currency.exchangeRateToBase,
+                            oldExchangeRate = existing?.exchangeRateToBase ?: 0.0,
+                            changeTimestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
             }
         }
     }
@@ -1570,15 +1610,29 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 if (!isNewGrocery && openingItems.isNotEmpty()) {
                     openingItems.forEachIndexed { index, item ->
                         val code = "INIT-${1000 + index}"
-                        val prodId = db.productDao().insertProduct(
-                            ProductEntity(
-                                code = code,
-                                name = item.name,
-                                category = item.category,
-                                isWeighted = false,
-                                minStockAlert = 5.0
+                        val existingProds = db.productDao().getProductsSync().filter { it.name.trim().equals(item.name.trim(), ignoreCase = true) }
+                        val prodId = if (existingProds.isNotEmpty()) {
+                            existingProds.first().id
+                        } else {
+                            db.productDao().insertProduct(
+                                ProductEntity(
+                                    code = code,
+                                    name = item.name,
+                                    category = item.category,
+                                    isWeighted = false,
+                                    minStockAlert = 5.0
+                                )
                             )
-                        )
+                        }
+
+                        // إذا تم تفعيل خيار الوحدة الأساسية لهذا الصنف، يقوم النظام بفحص الوحدات المرتبطة وتحويل الوحدة الأساسية السابقة إلى فرعية
+                        if (item.isBaseUnit) {
+                            val existingUnits = db.productDao().getUnitsForProductSync(prodId)
+                            existingUnits.filter { it.isBaseUnit }.forEach { prevUnit ->
+                                db.productDao().updateUnit(prevUnit.copy(isBaseUnit = false))
+                            }
+                        }
+
                         val itemBarcode = if (item.barcode.isNotBlank()) item.barcode.trim() else "628${(System.currentTimeMillis() + index).toString().takeLast(9)}"
                         val itemUnitName = if (item.unitName.isNotBlank()) item.unitName.trim() else "حبة/قطعة"
                         val unitId = db.productDao().insertUnit(
@@ -1589,7 +1643,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                                 barcode = itemBarcode,
                                 costPrice = item.costPrice,
                                 sellingPrice = item.sellingPrice,
-                                isBaseUnit = true
+                                isBaseUnit = item.isBaseUnit
                             )
                         )
                         // قيد حركة مخزون بضاعة أول المدة

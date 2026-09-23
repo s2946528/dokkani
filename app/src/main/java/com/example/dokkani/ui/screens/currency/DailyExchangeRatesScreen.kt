@@ -1,6 +1,7 @@
 package com.example.dokkani.ui.screens.currency
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
@@ -57,11 +59,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.CurrencyExchangeHistoryEntity
 import com.example.dokkani.data.local.entities.ForeignCurrencyPricingMode
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.ui.screens.crud.AddEditCurrencyDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * واجهة إدارة العملات وأسعار الصرف بنظام التبويبات
@@ -72,6 +78,7 @@ import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
 @Composable
 fun DailyExchangeRatesScreen(
     currencies: List<CurrencyEntity>,
+    exchangeRateLogs: List<CurrencyExchangeHistoryEntity> = emptyList(),
     settings: SystemSettingsEntity?,
     currentUserRole: UserRole = UserRole.ADMIN,
     onSaveCurrency: (CurrencyEntity) -> Unit,
@@ -110,7 +117,7 @@ fun DailyExchangeRatesScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "إدارة العملات",
+                            text = "العملات",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -156,6 +163,7 @@ fun DailyExchangeRatesScreen(
 
                 1 -> ExchangeRatesAndPoliciesTab(
                     currencies = currencies,
+                    exchangeRateLogs = exchangeRateLogs,
                     baseCurrency = baseCurrency,
                     settings = settings,
                     isAdmin = isAdmin,
@@ -488,6 +496,7 @@ private fun CurrencyCardItem(
 @Composable
 private fun ExchangeRatesAndPoliciesTab(
     currencies: List<CurrencyEntity>,
+    exchangeRateLogs: List<CurrencyExchangeHistoryEntity> = emptyList(),
     baseCurrency: CurrencyEntity,
     settings: SystemSettingsEntity?,
     isAdmin: Boolean,
@@ -706,6 +715,117 @@ private fun ExchangeRatesAndPoliciesTab(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- قسم سجل النشاط ---
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("exchange_rate_activity_log_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "سجل النشاط",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    HorizontalDivider()
+
+                    if (exchangeRateLogs.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "لا توجد سجلات تغيير في أسعار الصرف حتى الآن.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    } else {
+                        val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+
+                        // رأس جدول سجل النشاط
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "تاريخ التغير",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1.2f)
+                            )
+                            Text(
+                                text = "اسم العملة",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1.2f)
+                            )
+                            Text(
+                                text = "سعر العملة الجديد",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        exchangeRateLogs.forEach { log ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = dateFormat.format(Date(log.changeTimestamp)),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1.2f)
+                                )
+                                Text(
+                                    text = "${log.currencyName} (${log.currencyCode})",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1.2f)
+                                )
+                                Text(
+                                    text = "${log.newExchangeRate} ${baseCurrency.symbol}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         }
                     }
                 }

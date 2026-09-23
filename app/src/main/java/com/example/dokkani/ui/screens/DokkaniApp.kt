@@ -111,7 +111,7 @@ fun DokkaniApp(
         NavTabItem("التقارير", Icons.Default.Analytics, setOf(UserRole.ADMIN)),
         NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الترخيص والحماية", Icons.Default.Security, setOf(UserRole.ADMIN)),
-        NavTabItem("أسعار الصرف اليومية", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+        NavTabItem("إدارة العملات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
         NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN))
     )
@@ -560,9 +560,10 @@ fun DokkaniApp(
                                     onDismissHrErrorMessage = viewModel::dismissHrErrorMessage
                                 )
                             }
-                            "أسعار الصرف اليومية" -> {
+                            "إدارة العملات" -> {
                                 com.example.dokkani.ui.screens.currency.DailyExchangeRatesScreen(
                                     currencies = uiState.currencies,
+                                    exchangeRateLogs = uiState.exchangeRateLogs,
                                     settings = uiState.settings,
                                     currentUserRole = currentUserRole,
                                     onSaveCurrency = viewModel::saveCurrency,

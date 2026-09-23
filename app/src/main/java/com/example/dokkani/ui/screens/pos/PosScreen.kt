@@ -705,44 +705,65 @@ private fun PosProductsPanel(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // تصنيفات سريعة وقائمة الفرز والترتيب
+            // تصنيفات سريعة
             val categories = uiState.categories.ifEmpty { listOf("الكل") }
-            Row(
+            LazyRow(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(categories) { cat ->
+                    val isSelected = uiState.selectedCategory == cat
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setSelectedCategory(cat) },
+                        label = {
+                            Text(
+                                cat,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        leadingIcon = if (isSelected) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // أداة الفرز والترتيب أفقياً ومستقلا بين التصنيفات وشبكة الأصناف
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                LazyRow(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(categories) { cat ->
-                        val isSelected = uiState.selectedCategory == cat
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.setSelectedCategory(cat) },
-                            label = {
-                                Text(
-                                    cat,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
-                            },
-                            leadingIcon = if (isSelected) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Sort,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "ترتيب الأصناف حسب:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-
-                Spacer(modifier = Modifier.width(6.dp))
 
                 ProductSortSelector(
                     selectedOption = uiState.sortOption,
@@ -1506,27 +1527,48 @@ private fun PosInvoiceSectionOld(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // تصنيفات سريعة وقائمة الفرز
+                // تصنيفات سريعة
                 val categories = uiState.categories.ifEmpty { listOf("الكل") }
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(categories) { cat ->
+                        FilterChip(
+                            selected = uiState.selectedCategory == cat,
+                            onClick = { viewModel.setSelectedCategory(cat) },
+                            label = { Text(cat, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // أداة الفرز والترتيب أفقياً بين التصنيفات وشبكة الأصناف
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    LazyRow(
-                        modifier = Modifier.weight(1f),
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(categories) { cat ->
-                            FilterChip(
-                                selected = uiState.selectedCategory == cat,
-                                onClick = { viewModel.setSelectedCategory(cat) },
-                                label = { Text(cat, fontSize = 11.sp) }
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Sort,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "ترتيب الأصناف حسب:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-
-                    Spacer(modifier = Modifier.width(4.dp))
 
                     ProductSortSelector(
                         selectedOption = uiState.sortOption,

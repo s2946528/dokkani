@@ -62,6 +62,8 @@ import com.example.dokkani.data.local.entities.SalaryAdjustmentLogEntity
 
 import com.example.dokkani.data.local.dao.AuditLogDao
 import com.example.dokkani.data.local.entities.AuditLogEntity
+import com.example.dokkani.data.local.dao.CurrencyExchangeHistoryDao
+import com.example.dokkani.data.local.entities.CurrencyExchangeHistoryEntity
 
 /**
  * قاعدة البيانات الرئيسية لنظام دكاني (Dokkani Database)
@@ -92,9 +94,10 @@ import com.example.dokkani.data.local.entities.AuditLogEntity
         EmployeeTransactionEntity::class,
         PayrollRecordEntity::class,
         SalaryAdjustmentLogEntity::class,
-        AuditLogEntity::class
+        AuditLogEntity::class,
+        CurrencyExchangeHistoryEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -122,6 +125,7 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun payrollRecordDao(): PayrollRecordDao
     abstract fun salaryAdjustmentLogDao(): SalaryAdjustmentLogDao
     abstract fun auditLogDao(): AuditLogDao
+    abstract fun currencyExchangeHistoryDao(): CurrencyExchangeHistoryDao
 
     companion object {
         @Volatile

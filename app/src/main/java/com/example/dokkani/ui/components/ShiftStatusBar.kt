@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +68,8 @@ fun ShiftStatusBar(
         if (bankAndWalletAccountsSum > 0.0) bankAndWalletAccountsSum else shiftDigitalSales
     }
 
+    val scrollState = rememberScrollState()
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -79,36 +82,33 @@ fun ShiftStatusBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(scrollState)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. عنصر إجمالي الصندوق
+            // 1. عنصر إجمالي النقدية (مبسط بدون أيقونات أو بيانات فرعية)
             ShiftStatusCard(
-                title = "إجمالي الصندوق",
+                title = "إجمالي النقدية",
                 amount = cashInDrawer,
                 currencySymbol = currencySymbol,
-                icon = Icons.Default.Payments,
                 containerColor = Color(0xFFE8F5E9),
                 contentColor = Color(0xFF1B5E20),
                 accentColor = Color(0xFF2E7D32),
-                subtext = "نقداً 🔍",
                 onClick = onOpenCashBreakdown,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.widthIn(min = 135.dp)
             )
 
-            // 2. عنصر إجمالي البنوك (يشمل البنوك والمحافظ والشبكات)
+            // 2. عنصر إجمالي البنوك (مبسط بدون أيقونات أو بيانات فرعية)
             ShiftStatusCard(
                 title = "إجمالي البنوك",
                 amount = totalDigitalInShift,
                 currencySymbol = currencySymbol,
-                icon = Icons.Default.AccountBalance,
                 containerColor = Color(0xFFE3F2FD),
                 contentColor = Color(0xFF0D47A1),
                 accentColor = Color(0xFF1565C0),
-                subtext = "بنوك/محافظ/شبكات 📊",
                 onClick = onOpenBankBreakdown,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.widthIn(min = 135.dp)
             )
 
             // 3. زر إغلاق الشفت
@@ -119,8 +119,8 @@ fun ShiftStatusBar(
                     containerColor = Color(0xFFD32F2F),
                     contentColor = Color.White
                 ),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                modifier = Modifier.height(48.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.height(44.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -171,78 +171,41 @@ private fun ShiftStatusCard(
     title: String,
     amount: Double,
     currencySymbol: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
     containerColor: Color,
     contentColor: Color,
     accentColor: Color,
-    subtext: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         color = containerColor,
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f)),
         modifier = modifier
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.Start
         ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(accentColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = accentColor,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = title,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = "%.2f %s".format(amount, currencySymbol),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = subtext,
-                    fontSize = 9.sp,
-                    color = accentColor,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Icon(
-                imageVector = Icons.Default.ChevronLeft,
-                contentDescription = null,
-                tint = accentColor.copy(alpha = 0.6f),
-                modifier = Modifier.size(16.dp)
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = contentColor.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "%.2f %s".format(amount, currencySymbol),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

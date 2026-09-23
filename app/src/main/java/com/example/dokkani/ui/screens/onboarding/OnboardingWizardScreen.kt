@@ -52,6 +52,7 @@ import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.ui.screens.crud.AddEditCurrencyDialog
 import com.example.dokkani.ui.screens.crud.AddEditUnitDialog
+import com.example.dokkani.ui.screens.crud.CurrencyDropdownSelector
 import com.example.dokkani.ui.screens.crud.UnitDropdownSelector
 import com.example.dokkani.ui.DokkaniViewModel
 import com.example.dokkani.ui.FixedAssetInput
@@ -469,6 +470,8 @@ fun OnboardingWizardScreen(
 
                                         3 -> StepFlexibleOpeningBalances(
                                             currencySymbol = activeCurrencySymbol,
+                                            currencies = uiState.currencies,
+                                            onSaveCurrency = { currency -> viewModel.saveCurrency(currency) },
                                             openingItems = openingItems,
                                             newProdName = newProdName,
                                             onNewProdNameChange = { newProdName = it },
@@ -2229,6 +2232,8 @@ private fun AssetCategoryInput(
 @Composable
 private fun StepFlexibleOpeningBalances(
     currencySymbol: String,
+    currencies: List<CurrencyEntity> = emptyList(),
+    onSaveCurrency: (CurrencyEntity) -> Unit = {},
     openingItems: List<OpeningBalanceItem>,
     newProdName: String,
     onNewProdNameChange: (String) -> Unit,
@@ -2269,6 +2274,12 @@ private fun StepFlexibleOpeningBalances(
 ) {
     var subTab by remember { mutableIntStateOf(0) }
     var showAddUnitDialog by remember { mutableStateOf(false) }
+    var showAddCurrencyDialog by remember { mutableStateOf(false) }
+    var selectedCurrency by remember(currencies) {
+        mutableStateOf<CurrencyEntity?>(
+            currencies.find { it.isBaseCurrency } ?: currencies.firstOrNull()
+        )
+    }
 
     if (showAddUnitDialog) {
         AddEditUnitDialog(
@@ -2277,12 +2288,21 @@ private fun StepFlexibleOpeningBalances(
             onSaveUnit = { unit ->
                 onSaveUnit(unit)
                 onNewProdUnitChange(unit.unitName)
-                if (unit.costPrice > 0.0) onNewProdCostChange(unit.costPrice.toString())
-                if (unit.sellingPrice > 0.0) onNewProdPriceChange(unit.sellingPrice.toString())
-                if (unit.barcode.isNotBlank()) onNewProdBarcodeChange(unit.barcode)
                 showAddUnitDialog = false
             },
             onDismiss = { showAddUnitDialog = false }
+        )
+    }
+
+    if (showAddCurrencyDialog) {
+        AddEditCurrencyDialog(
+            initialCurrency = null,
+            onSaveCurrency = { newCurrency ->
+                onSaveCurrency(newCurrency)
+                selectedCurrency = newCurrency
+                showAddCurrencyDialog = false
+            },
+            onDismiss = { showAddCurrencyDialog = false }
         )
     }
 
@@ -2347,15 +2367,16 @@ private fun StepFlexibleOpeningBalances(
                             .fillMaxWidth()
                             .padding(bottom = 12.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Text(
                                 text = "إدخال صنف جديد للجرد الافتتاحي",
-                                fontSize = 13.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
+                            // 1. رمز الباركود (مسح أو إدخال)
                             BarcodeTextField(
                                 value = newProdBarcode,
                                 onValueChange = onNewProdBarcodeChange,
@@ -2366,8 +2387,9 @@ private fun StepFlexibleOpeningBalances(
                                 shape = RoundedCornerShape(10.dp)
                             )
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
+                            // 2. اسم الصنف والكمية
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2386,13 +2408,45 @@ private fun StepFlexibleOpeningBalances(
                                     label = { Text("الكمية *") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
-                                    modifier = Modifier.weight(0.6f),
+                                    modifier = Modifier.weight(0.7f),
                                     shape = RoundedCornerShape(10.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
+                            // 3. الوحدة والعملة (فصل الوحدة في صف متوازن مع العملة لتجنب التكديس)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                UnitDropdownSelector(
+                                    selectedUnit = newProdUnit,
+                                    onUnitSelected = onNewProdUnitChange,
+                                    label = "الوحدة *",
+                                    availableUnitsList = availableUnitsList.ifEmpty { listOf("حبة/قطعة", "حبة", "كرتون", "كيلو", "درزن", "صندوق", "سحارة", "ربطة", "عبوة", "باكيت", "طرد", "جرام", "لتر", "متر", "شوال") },
+                                    onAddNewUnitClick = { showAddUnitDialog = true },
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                CurrencyDropdownSelector(
+                                    selectedCurrency = selectedCurrency,
+                                    currencies = currencies.ifEmpty {
+                                        listOf(
+                                            selectedCurrency ?: CurrencyEntity(code = "YER", name = "ريال يمني", symbol = currencySymbol.ifBlank { "ر.ي" }, exchangeRateToBase = 1.0, isBaseCurrency = true)
+                                        )
+                                    },
+                                    onCurrencySelected = { curr -> selectedCurrency = curr },
+                                    onAddNewCurrencyClick = { showAddCurrencyDialog = true },
+                                    onSaveCurrency = onSaveCurrency,
+                                    label = "العملة *",
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // 4. التكلفة وسعر البيع
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2400,7 +2454,7 @@ private fun StepFlexibleOpeningBalances(
                                 OutlinedTextField(
                                     value = newProdCost,
                                     onValueChange = onNewProdCostChange,
-                                    label = { Text("التكلفة") },
+                                    label = { Text("التكلفة (${selectedCurrency?.symbol ?: currencySymbol})") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
                                     modifier = Modifier.weight(1f),
@@ -2409,23 +2463,15 @@ private fun StepFlexibleOpeningBalances(
                                 OutlinedTextField(
                                     value = newProdPrice,
                                     onValueChange = onNewProdPriceChange,
-                                    label = { Text("سعر البيع") },
+                                    label = { Text("سعر البيع (${selectedCurrency?.symbol ?: currencySymbol})") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(10.dp)
                                 )
-                                UnitDropdownSelector(
-                                    selectedUnit = newProdUnit,
-                                    onUnitSelected = onNewProdUnitChange,
-                                    label = "الوحدة *",
-                                    availableUnitsList = availableUnitsList.ifEmpty { listOf("حبة/قطعة", "حبة", "كرتون", "كيلو", "درزن", "صندوق", "سحارة", "ربطة", "عبوة", "باكيت", "طرد", "جرام", "لتر", "متر", "شوال") },
-                                    onAddNewUnitClick = { showAddUnitDialog = true },
-                                    modifier = Modifier.weight(0.8f)
-                                )
                             }
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             Button(
                                 onClick = onAddItem,

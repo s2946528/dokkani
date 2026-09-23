@@ -1026,7 +1026,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // --- CRUD Management Actions ---
-    fun saveProduct(product: ProductEntity, baseUnitName: String = "حبة", cost: Double = 0.0, sell: Double = 0.0, barcode: String = "") {
+    fun saveProduct(product: ProductEntity, baseUnitName: String = "حبة", cost: Double = 0.0, sell: Double = 0.0, barcode: String = "", isBaseUnit: Boolean = true) {
         viewModelScope.launch(Dispatchers.IO) {
             val prodId = db.productDao().insertProduct(product)
             if (product.id == 0L) {
@@ -1037,7 +1037,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     barcode = barcode,
                     costPrice = cost,
                     sellingPrice = sell,
-                    isBaseUnit = true
+                    isBaseUnit = isBaseUnit
                 )
                 db.productDao().insertUnit(baseUnit)
             }

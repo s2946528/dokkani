@@ -87,7 +87,7 @@ data class FlattenedUnitItem(
 fun ProductsAndUnitsScreen(
     productsWithUnits: List<ProductWithUnits>,
     currentUserRole: UserRole = UserRole.ADMIN,
-    onSaveProduct: (ProductEntity, String, Double, Double, String) -> Unit = { _, _, _, _, _ -> },
+    onSaveProduct: (ProductEntity, String, Double, Double, String, Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onDeleteProduct: (Long) -> Unit = {},
     onSaveUnit: (ProductUnitEntity) -> Unit = {},
     onDeleteUnit: (ProductUnitEntity) -> Unit = {},
@@ -444,329 +444,18 @@ fun ProductsAndUnitsScreen(
 
                 1 -> {
                     // ==========================================
-                    // التبويب الثاني: الوحدات (إدارة وحدات القياس والعبوات)
+                    // التبويب الثاني: الوحدات العامة (إدارة الوحدات العامة بالكامل)
                     // ==========================================
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Default.Layers,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(26.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = "إدارة وحدات القياس والعبوات",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-
-                                        if (isAdmin) {
-                                            Button(
-                                                onClick = { showSelectProductForNewUnitDialog = true },
-                                                shape = RoundedCornerShape(8.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                            ) {
-                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("إضافة وحدة جديدة", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(12.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        val baseUnitsCount = allFlattenedUnits.count { it.unit.isBaseUnit }
-                                        val subUnitsCount = allFlattenedUnits.count { !it.unit.isBaseUnit }
-
-                                        Surface(
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = MaterialTheme.colorScheme.surface
-                                        ) {
-                                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("إجمالي الوحدات", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                                                Text("${allFlattenedUnits.size}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                            }
-                                        }
-
-                                        Surface(
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = MaterialTheme.colorScheme.surface
-                                        ) {
-                                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("وحدات أساسية", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                                                Text("$baseUnitsCount", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-                                            }
-                                        }
-
-                                        Surface(
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = MaterialTheme.colorScheme.surface
-                                        ) {
-                                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("كراتين وعبوات", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                                                Text("$subUnitsCount", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        item {
-                            BarcodeTextField(
-                                value = unitSearchQuery,
-                                onValueChange = { unitSearchQuery = it },
-                                label = "بحث باسم الوحدة أو الصنف أو مسح باركود الوحدة",
-                                placeholder = "اكتب (كرتون، حبة، درزن...) أو امسح الباركود...",
-                                onBarcodeScanned = { scannedCode -> unitSearchQuery = scannedCode },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = unitFilterType == 0,
-                                    onClick = { unitFilterType = 0 },
-                                    label = { Text("جميع الوحدات (${allFlattenedUnits.size})") }
-                                )
-                                FilterChip(
-                                    selected = unitFilterType == 1,
-                                    onClick = { unitFilterType = 1 },
-                                    label = { Text("الأساسية فقط") }
-                                )
-                                FilterChip(
-                                    selected = unitFilterType == 2,
-                                    onClick = { unitFilterType = 2 },
-                                    label = { Text("الكراتين والعبوات") }
-                                )
-                            }
-                        }
-
-                        item {
-                            Text(
-                                text = "نتائج الوحدات والعبوات المعتمدة (${filteredUnits.size}):",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        if (filteredUnits.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 32.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(Icons.Default.LayersClear, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.LightGray)
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("لا توجد وحدات قياس تطابق معايير البحث", fontSize = 13.sp, color = Color.Gray)
-                                    }
-                                }
-                            }
-                        } else {
-                            items(filteredUnits) { item ->
-                                val unit = item.unit
-                                val prod = item.product
-                                Card(
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    border = BorderStroke(1.dp, if (unit.isBaseUnit) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(modifier = Modifier.padding(14.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    color = if (unit.isBaseUnit) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
-                                                ) {
-                                                    Text(
-                                                        text = unit.unitName,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (unit.isBaseUnit) Color(0xFF2E7D32) else Color(0xFFE65100),
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    )
-                                                }
-
-                                                Spacer(modifier = Modifier.width(8.dp))
-
-                                                if (unit.isBaseUnit) {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(4.dp),
-                                                        color = MaterialTheme.colorScheme.primary
-                                                    ) {
-                                                        Text(
-                                                            text = "وحدة أساسية",
-                                                            fontSize = 10.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Color.White,
-                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                        )
-                                                    }
-                                                } else {
-                                                    Text(
-                                                        text = "معامل التحويل: ${unit.conversionFactor}",
-                                                        fontSize = 11.sp,
-                                                        color = MaterialTheme.colorScheme.outline,
-                                                        fontWeight = FontWeight.Medium
-                                                    )
-                                                }
-                                            }
-
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                if (onPrintLabel != null) {
-                                                    IconButton(
-                                                        onClick = { onPrintLabel(prod.id, unit.id) },
-                                                        modifier = Modifier.size(32.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Print,
-                                                            contentDescription = "طباعة ملصق",
-                                                            tint = Color(0xFF198754),
-                                                            modifier = Modifier.size(18.dp)
-                                                        )
-                                                    }
-                                                }
-
-                                                if (isAdmin) {
-                                                    IconButton(
-                                                        onClick = { editingUnit = unit },
-                                                        modifier = Modifier.size(32.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Edit,
-                                                            contentDescription = "تعديل الوحدة",
-                                                            tint = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(18.dp)
-                                                        )
-                                                    }
-
-                                                    IconButton(
-                                                        onClick = { deletingUnit = unit },
-                                                        modifier = Modifier.size(32.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Delete,
-                                                            contentDescription = "حذف الوحدة",
-                                                            tint = MaterialTheme.colorScheme.error,
-                                                            modifier = Modifier.size(18.dp)
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.outline)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "الصنف التابع له: ${prod.name} (${prod.category})",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-
-                                        if (unit.barcode.isNotBlank()) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF1976D2))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = "الباركود: ${unit.barcode}",
-                                                    fontSize = 12.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = Color(0xFF1976D2),
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column {
-                                                Text("سعر التكلفة والشراء:", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
-                                                Text(
-                                                    "%.2f %s".format(unit.costPrice, currencySymbol),
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-
-                                            Column {
-                                                Text("سعر البيع المعتمد:", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
-                                                Text(
-                                                    "%.2f %s".format(unit.sellingPrice, currencySymbol),
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF2E7D32)
-                                                )
-                                            }
-
-                                            val margin = if (unit.costPrice > 0) ((unit.sellingPrice - unit.costPrice) / unit.costPrice) * 100 else 0.0
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Text("هامش الربح التقديري:", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
-                                                Text(
-                                                    "%.1f%%".format(margin),
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (margin >= 0) Color(0xFF1976D2) else MaterialTheme.colorScheme.error
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    val allUnits = remember(productsWithUnits) {
+                        productsWithUnits.flatMap { it.units }
+                            .distinctBy { if (it.id > 0) it.id else it.unitName.trim().lowercase() }
                     }
+                    UnitsManagementScreen(
+                        units = allUnits,
+                        currentUserRole = currentUserRole,
+                        onSaveUnit = onSaveUnit,
+                        onDeleteUnit = onDeleteUnit
+                    )
                 }
 
                 2 -> {
@@ -1064,8 +753,8 @@ fun ProductsAndUnitsScreen(
     if (showAddProductDialog || editingProduct != null) {
         AddEditProductDialog(
             initialProduct = editingProduct,
-            onSaveProduct = { prod, baseName, cost, sell, barcode ->
-                onSaveProduct(prod, baseName, cost, sell, barcode)
+            onSaveProduct = { prod, baseName, cost, sell, barcode, isBaseUnit ->
+                onSaveProduct(prod, baseName, cost, sell, barcode, isBaseUnit)
                 showAddProductDialog = false
                 editingProduct = null
             },

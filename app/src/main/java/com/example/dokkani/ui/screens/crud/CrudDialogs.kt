@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -203,12 +204,134 @@ fun UnitDropdownSelector(
 }
 
 /**
+ * مكون اختيار العملة من قائمة منسدلة تعبأ من قاعدة البيانات مع خيار إضافة عملة جديدة في الذيل
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CurrencyDropdownSelector(
+    selectedCurrency: CurrencyEntity?,
+    currencies: List<CurrencyEntity>,
+    onCurrencySelected: (CurrencyEntity) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "العملة *",
+    onAddNewCurrencyClick: (() -> Unit)? = null,
+    onSaveCurrency: ((CurrencyEntity) -> Unit)? = null
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showAddCurrencyDialog by remember { mutableStateOf(false) }
+
+    if (showAddCurrencyDialog && onSaveCurrency != null) {
+        AddEditCurrencyDialog(
+            initialCurrency = null,
+            onSaveCurrency = { newCurrency ->
+                onSaveCurrency(newCurrency)
+                onCurrencySelected(newCurrency)
+                showAddCurrencyDialog = false
+            },
+            onDismiss = { showAddCurrencyDialog = false }
+        )
+    }
+
+    val displayValue = if (selectedCurrency != null) {
+        "${selectedCurrency.name} (${selectedCurrency.symbol})"
+    } else {
+        "اختر العملة"
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = displayValue,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            currencies.forEach { curr ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${curr.name} (${curr.symbol})",
+                                fontWeight = if (curr.id == selectedCurrency?.id || curr.code == selectedCurrency?.code) FontWeight.Bold else FontWeight.Normal
+                            )
+                            if (curr.isBaseCurrency) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Text(
+                                        text = "الأساسية",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    onClick = {
+                        onCurrencySelected(curr)
+                        expanded = false
+                    }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "+ إضافة عملة جديدة...",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    if (onAddNewCurrencyClick != null) {
+                        onAddNewCurrencyClick()
+                    } else {
+                        showAddCurrencyDialog = true
+                    }
+                }
+            )
+        }
+    }
+}
+
+/**
  * حوار إضافة / تعديل صنف
  */
 @Composable
 fun AddEditProductDialog(
     initialProduct: ProductEntity? = null,
-    onSaveProduct: (ProductEntity, String, Double, Double, String) -> Unit, // Product, baseUnitName, cost, sell, barcode
+    onSaveProduct: (ProductEntity, String, Double, Double, String, Boolean) -> Unit, // Product, baseUnitName, cost, sell, barcode, isBaseUnit
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf(initialProduct?.name ?: "") }
@@ -222,6 +345,7 @@ fun AddEditProductDialog(
     
     // Base unit initial values if creating new product
     var baseUnitName by remember { mutableStateOf("حبة") }
+    var isBaseUnit by remember { mutableStateOf(true) }
     var costPrice by remember { mutableStateOf("0") }
     var sellingPrice by remember { mutableStateOf("0") }
     var barcode by remember { mutableStateOf("") }
@@ -300,7 +424,7 @@ fun AddEditProductDialog(
                 if (initialProduct == null) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     Text(
-                        text = "الوحدة الأساسية للصنف:",
+                        text = "الوحدة الخاصة للصنف:",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -309,9 +433,29 @@ fun AddEditProductDialog(
                     UnitDropdownSelector(
                         selectedUnit = baseUnitName,
                         onUnitSelected = { baseUnitName = it },
-                        label = "اسم الوحدة الأساسية للصنف *",
+                        label = "اسم الوحدة للصنف *",
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    // خيار تعيين كـ وحدة أساسية للصنف
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)
+                    ) {
+                        Checkbox(
+                            checked = isBaseUnit,
+                            onCheckedChange = { isBaseUnit = it }
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "تعيين كـ وحدة أساسية للصنف",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
@@ -370,7 +514,8 @@ fun AddEditProductDialog(
                             baseUnitName.ifBlank { "حبة" }.trim(),
                             costPrice.toDoubleOrNull() ?: 0.0,
                             sellingPrice.toDoubleOrNull() ?: 0.0,
-                            barcode.trim()
+                            barcode.trim(),
+                            isBaseUnit
                         )
                     }
                 }
@@ -388,123 +533,69 @@ fun AddEditProductDialog(
 }
 
 /**
- * حوار إضافة / تعديل وحدة لصنف
+ * حوار إضافة / تعديل وحدة عامة
  */
 @Composable
 fun AddEditUnitDialog(
-    productId: Long,
+    productId: Long = 0L,
     initialUnit: ProductUnitEntity? = null,
     onSaveUnit: (ProductUnitEntity) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var unitName by remember { mutableStateOf(initialUnit?.unitName ?: "درزن") }
-    var conversionFactor by remember { mutableStateOf(initialUnit?.conversionFactor?.toLong()?.toString() ?: "12") }
-    var barcode by remember { mutableStateOf(initialUnit?.barcode ?: "") }
-    var costPrice by remember { mutableStateOf(initialUnit?.costPrice?.toLong()?.toString() ?: "0") }
-    var sellingPrice by remember { mutableStateOf(initialUnit?.sellingPrice?.toLong()?.toString() ?: "0") }
-    var isBaseUnit by remember { mutableStateOf(initialUnit?.isBaseUnit ?: false) }
-
-    val scrollState = rememberScrollState()
+    var unitName by remember { mutableStateOf(initialUnit?.unitName ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (initialUnit == null) "إضافة وحدة جديدة للصنف" else "تعديل الوحدة",
+                text = if (initialUnit == null) "إضافة وحدة جديدة" else "تعديل اسم الوحدة",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                UnitDropdownSelector(
-                    selectedUnit = unitName,
-                    onUnitSelected = { unitName = it },
-                    label = "اسم الوحدة الفرعية (كرتون، درزن، صندوق...) *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-
                 OutlinedTextField(
-                    value = conversionFactor,
-                    onValueChange = { conversionFactor = filterIntegerInput(it) },
-                    label = { Text("معامل التحويل للوحدة الأساسية (مثال: كرتون = 24)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    value = unitName,
+                    onValueChange = { unitName = it },
+                    label = { Text("اسم الوحدة *") },
+                    placeholder = { Text("مثال: حبة، كرتون، كيلو، درزن، صندوق...") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )
-
-                BarcodeTextField(
-                    value = barcode,
-                    onValueChange = { barcode = it },
-                    label = "باركود الوحدة للماسح الضوئي",
-                    placeholder = "امسح باركود العبوة/الوحدة بالكاميرا...",
-                    onBarcodeScanned = { scannedCode ->
-                        barcode = scannedCode
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = costPrice,
-                        onValueChange = { costPrice = filterIntegerInput(it) },
-                        label = { Text("سعر الشراء (ر.ي)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    OutlinedTextField(
-                        value = sellingPrice,
-                        onValueChange = { sellingPrice = filterIntegerInput(it) },
-                        label = { Text("سعر البيع (ر.ي)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isBaseUnit, onCheckedChange = { isBaseUnit = it })
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("تعيين كـ وحدة أساسية للصنف", fontSize = 14.sp)
-                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     if (unitName.isNotBlank()) {
-                        val unit = (initialUnit ?: ProductUnitEntity(
+                        val unitToSave = initialUnit?.copy(
+                            unitName = unitName.trim()
+                        ) ?: ProductUnitEntity(
+                            id = 0L,
                             productId = productId,
                             unitName = unitName.trim(),
-                            conversionFactor = conversionFactor.toDoubleOrNull() ?: 1.0,
-                            barcode = barcode.trim(),
-                            costPrice = costPrice.toDoubleOrNull() ?: 0.0,
-                            sellingPrice = sellingPrice.toDoubleOrNull() ?: 0.0,
-                            isBaseUnit = isBaseUnit
-                        )).copy(
-                            unitName = unitName.trim(),
-                            conversionFactor = conversionFactor.toDoubleOrNull() ?: 1.0,
-                            barcode = barcode.trim(),
-                            costPrice = costPrice.toDoubleOrNull() ?: 0.0,
-                            sellingPrice = sellingPrice.toDoubleOrNull() ?: 0.0,
-                            isBaseUnit = isBaseUnit
+                            conversionFactor = 1.0,
+                            isBaseUnit = false,
+                            costPrice = 0.0,
+                            sellingPrice = 0.0,
+                            barcode = ""
                         )
-                        onSaveUnit(unit)
+                        onSaveUnit(unitToSave)
                     }
-                }
+                },
+                enabled = unitName.isNotBlank(),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text("حفظ الوحدة")
+                Text(if (initialUnit == null) "حفظ الوحدة" else "تحديث")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
+            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
                 Text("إلغاء")
             }
         },
@@ -639,11 +730,11 @@ fun AddEditCurrencyDialog(
     onSaveCurrency: (CurrencyEntity) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var code by remember { mutableStateOf(initialCurrency?.code ?: "YER") }
-    var name by remember { mutableStateOf(initialCurrency?.name ?: "ريال يمني") }
-    var symbol by remember { mutableStateOf(initialCurrency?.symbol ?: "ر.ي") }
+    var code by remember { mutableStateOf(initialCurrency?.code ?: "") }
+    var name by remember { mutableStateOf(initialCurrency?.name ?: "") }
+    var symbol by remember { mutableStateOf(initialCurrency?.symbol ?: "") }
     var exchangeRate by remember { mutableStateOf(initialCurrency?.exchangeRateToBase?.toString() ?: "1.0") }
-    var isBaseCurrency by remember { mutableStateOf(initialCurrency?.isBaseCurrency ?: false) }
+    val isBaseCurrency = initialCurrency?.isBaseCurrency ?: false
     var isDefault by remember { mutableStateOf(initialCurrency?.isDefault ?: false) }
 
     AlertDialog(
@@ -671,7 +762,7 @@ fun AddEditCurrencyDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = code,
-                        onValueChange = { code = it },
+                        onValueChange = { code = it.uppercase() },
                         label = { Text("رمز ISO (Code)") },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
@@ -695,44 +786,38 @@ fun AddEditCurrencyDialog(
                     shape = RoundedCornerShape(8.dp)
                 )
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                if (isBaseCurrency) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Switch(
-                            checked = isBaseCurrency,
-                            onCheckedChange = { checked ->
-                                isBaseCurrency = checked
-                                if (checked) {
-                                    exchangeRate = "1.0"
-                                    isDefault = true
-                                }
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "تعيين كـ العملة الأساسية للنظام المحاسبي",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "سيتم اعتماد هذه العملة لجميع الحسابات وتقارير القوائم المالية.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "هذه هي العملة الأساسية المعتمدة للنظام (تغيير العملة الأساسية متاح حصرياً في معالج التهيئة الأولي).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isDefault, onCheckedChange = { isDefault = it })
+                    Checkbox(
+                        checked = isDefault || isBaseCurrency,
+                        onCheckedChange = { if (!isBaseCurrency) isDefault = it },
+                        enabled = !isBaseCurrency
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("العملة الافتراضية للمعاملات والفواتير", fontSize = 14.sp)
                 }
@@ -744,25 +829,27 @@ fun AddEditCurrencyDialog(
                     if (name.isNotBlank()) {
                         val finalRate = if (isBaseCurrency) 1.0 else (exchangeRate.toDoubleOrNull() ?: 1.0)
                         val currency = (initialCurrency ?: CurrencyEntity(
-                            code = code.trim(),
+                            code = code.ifBlank { name.take(3) }.trim().uppercase(),
                             name = name.trim(),
-                            symbol = symbol.trim(),
+                            symbol = symbol.ifBlank { code }.trim(),
                             exchangeRateToBase = finalRate,
                             isBaseCurrency = isBaseCurrency,
                             isDefault = isDefault || isBaseCurrency
                         )).copy(
-                            code = code.trim(),
+                            code = code.ifBlank { name.take(3) }.trim().uppercase(),
                             name = name.trim(),
-                            symbol = symbol.trim(),
+                            symbol = symbol.ifBlank { code }.trim(),
                             exchangeRateToBase = finalRate,
                             isBaseCurrency = isBaseCurrency,
                             isDefault = isDefault || isBaseCurrency
                         )
                         onSaveCurrency(currency)
                     }
-                }
+                },
+                enabled = name.isNotBlank(),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text("حفظ العملة")
+                Text(if (initialCurrency == null) "حفظ العملة" else "تحديث")
             }
         },
         dismissButton = {

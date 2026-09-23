@@ -35,6 +35,9 @@ interface FinancialAccountDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(accounts: List<FinancialAccountEntity>)
 
+    @Query("UPDATE financial_accounts SET currentBalance = currentBalance + :delta WHERE id = :id")
+    suspend fun updateBalance(id: Long, delta: Double)
+
     @Update
     suspend fun updateAccount(account: FinancialAccountEntity)
 

@@ -1,6 +1,7 @@
 package com.example.dokkani.ui.screens.credit
 
 import android.content.Context
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -115,7 +116,7 @@ fun CreditLedgerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF8F9FA))
+                .background(MaterialTheme.colorScheme.background)
                 .padding(12.dp)
         ) {
             // شريط العنوان الرئيسي المباشر
@@ -129,7 +130,7 @@ fun CreditLedgerScreen(
                         text = "العملاء والموردين",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = if (selectedTab == 0)
@@ -137,7 +138,7 @@ fun CreditLedgerScreen(
                         else
                             "متابعة الذمم المالية للموردين، المبالغ المستحقة لهم، وحركات ومشتريات الموردين",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF64748B)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -145,7 +146,7 @@ fun CreditLedgerScreen(
                     Button(
                         onClick = { showAddPartyDialog = true },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedTab == 0) Color(0xFF0F5132) else Color(0xFF0284C7)
+                            containerColor = if (selectedTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                         ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -161,7 +162,7 @@ fun CreditLedgerScreen(
             // نظام التبويبات (Tabs)
             TabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -522,7 +523,8 @@ private fun PartyItemCard(
 
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -556,34 +558,34 @@ private fun PartyItemCard(
                             text = party.name,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = Color(0xFF0F172A)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Phone,
                                 contentDescription = null,
-                                tint = Color(0xFF94A3B8),
+                                tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(12.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = if (party.phone.isNotBlank()) party.phone else "بدون جوال",
                                 fontSize = 12.sp,
-                                color = Color(0xFF64748B)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (party.taxNumber.isNotBlank()) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Icon(
                                     imageVector = Icons.Default.Badge,
                                     contentDescription = null,
-                                    tint = Color(0xFF94A3B8),
+                                    tint = MaterialTheme.colorScheme.outline,
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
                                     text = "ضريبي: ${party.taxNumber}",
                                     fontSize = 11.sp,
-                                    color = Color(0xFF64748B)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }

@@ -95,44 +95,46 @@ fun SplashScreen(
                     .scale(scaleAnim.value)
                     .alpha(alphaAnim.value)
             ) {
-                // Supermarket Logo
+                // Dokkani Official Logo
                 Box(
                     modifier = Modifier
-                        .size(160.dp)
-                        .shadow(16.dp, CircleShape)
+                        .size(180.dp)
+                        .shadow(20.dp, CircleShape)
                         .clip(CircleShape)
                         .background(Color.White)
-                        .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                        .border(3.5.dp, Color(0xFF15803D), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.img_supermarket_logo),
-                        contentDescription = "شعار دكاني",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                        painter = painterResource(id = R.drawable.ic_dokkani_official_logo),
+                        contentDescription = "شعار دكاني المعتمد",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp),
+                        contentScale = ContentScale.Fit
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
                 // Title Text
                 Text(
-                    text = "مرحبا بكم في تطبيق دكاني",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = "دكاني | نقاط البيع",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
-                    lineHeight = 32.sp
+                    lineHeight = 34.sp
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Subtitle Text
                 Text(
-                    text = "لإدارة حسابات السوبرات والمشاريع الصغيرة",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "محاسبك الأمين نقاط البيع وإدارة التموينات",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFD97706), // Gold color
                     textAlign = TextAlign.Center,
                     lineHeight = 22.sp
                 )

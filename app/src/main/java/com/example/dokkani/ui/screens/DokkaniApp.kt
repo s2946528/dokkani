@@ -1,5 +1,6 @@
 package com.example.dokkani.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,7 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Surface
+import com.example.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountBalance
@@ -25,6 +32,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -67,6 +75,8 @@ import com.example.dokkani.ui.screens.pos.PosScreen
 import com.example.dokkani.ui.screens.purchase.PurchaseScreen
 import com.example.dokkani.ui.screens.reports.ReportsDashboardScreen
 import com.example.dokkani.ui.screens.users.UserManagementScreen
+import androidx.compose.material.icons.filled.Badge
+import com.example.dokkani.ui.screens.hr.HrAndPayrollScreen
 import kotlinx.coroutines.launch
 
 data class NavTabItem(
@@ -93,12 +103,15 @@ fun DokkaniApp(
         NavTabItem("المنتجات والوحدات", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("التكلفة والخضار", Icons.Default.Calculate, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("إدارة الشفتات والدرج", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("دليل الحسابات والبنوك", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("العملاء والموردين", Icons.Default.People, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("شؤون العمال والرواتب", Icons.Default.Badge, setOf(UserRole.ADMIN)),
         NavTabItem("الأصول والملكية", Icons.Default.AccountBalance, setOf(UserRole.ADMIN)),
         NavTabItem("التقارير", Icons.Default.Analytics, setOf(UserRole.ADMIN)),
         NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الترخيص والحماية", Icons.Default.Security, setOf(UserRole.ADMIN)),
+        NavTabItem("أسعار الصرف اليومية", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
         NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN))
     )
@@ -122,12 +135,20 @@ fun DokkaniApp(
                             .fillMaxWidth()
                             .padding(vertical = 12.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Storefront,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp)
-                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_dokkani_unified_logo),
+                                contentDescription = "شعار دكاني الموحد",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
@@ -173,6 +194,11 @@ fun DokkaniApp(
                                 selected = isSelected,
                                 onClick = {
                                     viewModel.selectTab(originalIndex)
+                                    if (tab.title == "إدارة الشفتات والدرج") {
+                                        viewModel.selectCashSubTab(1)
+                                    } else if (tab.title == "الخزينة والمصروفات") {
+                                        viewModel.selectCashSubTab(0)
+                                    }
                                     scope.launch { drawerState.close() }
                                 },
                                 colors = NavigationDrawerItemDefaults.colors(
@@ -317,6 +343,45 @@ fun DokkaniApp(
                                     onDrawerInputsChanged = viewModel::updateDrawerInputs,
                                     onCalculateDrawerReconciliation = viewModel::calculateDrawerReconciliation,
                                     onCloseShiftAndSave = viewModel::closeShiftAndSave,
+                                    onOpenShiftSettlementDialog = viewModel::openShiftSettlementDialog,
+                                    onDismissShiftSettlementDialog = viewModel::dismissShiftSettlementDialog,
+                                    onUpdateSettlementInputs = viewModel::updateSettlementInputs,
+                                    onSubmitShiftSettlement = viewModel::submitShiftSettlement,
+                                    onAccountsSearchChanged = viewModel::setAccountsSearchQuery,
+                                    onAccountsFilterTypeChanged = viewModel::setAccountsFilterType,
+                                    onOpenAddAccountDialog = viewModel::openAddAccountDialog,
+                                    onOpenEditAccountDialog = viewModel::openEditAccountDialog,
+                                    onDismissAddEditAccountDialog = viewModel::dismissAddEditAccountDialog,
+                                    onSaveAccount = viewModel::saveFinancialAccount,
+                                    onToggleAccountActive = viewModel::toggleFinancialAccountActive,
+                                    onRequestDeleteAccount = viewModel::requestDeleteFinancialAccount,
+                                    onConfirmDeleteAccount = viewModel::confirmDeleteFinancialAccount,
+                                    onDisableAccountInstead = viewModel::disableAccountInstead,
+                                    onDismissAccountDeleteDialogs = viewModel::dismissAccountDeleteDialogs
+                                )
+                            }
+                            "إدارة الشفتات والدرج" -> {
+                                androidx.compose.runtime.LaunchedEffect(Unit) {
+                                    viewModel.selectCashSubTab(1)
+                                }
+                                CashAndExpensesScreen(
+                                    expenses = uiState.expenses,
+                                    cashShifts = uiState.cashShifts,
+                                    uiState = uiState,
+                                    currentUserRole = currentUserRole,
+                                    onSelectSubTab = viewModel::selectCashSubTab,
+                                    onOpenAddExpenseDialog = viewModel::openAddExpenseDialog,
+                                    onDismissAddExpenseDialog = viewModel::dismissAddExpenseDialog,
+                                    onExpenseInputsChanged = viewModel::updateExpenseInputs,
+                                    onSubmitExpense = viewModel::submitExpense,
+                                    onDeleteExpense = viewModel::deleteExpense,
+                                    onDrawerInputsChanged = viewModel::updateDrawerInputs,
+                                    onCalculateDrawerReconciliation = viewModel::calculateDrawerReconciliation,
+                                    onCloseShiftAndSave = viewModel::closeShiftAndSave,
+                                    onOpenShiftSettlementDialog = viewModel::openShiftSettlementDialog,
+                                    onDismissShiftSettlementDialog = viewModel::dismissShiftSettlementDialog,
+                                    onUpdateSettlementInputs = viewModel::updateSettlementInputs,
+                                    onSubmitShiftSettlement = viewModel::submitShiftSettlement,
                                     onAccountsSearchChanged = viewModel::setAccountsSearchQuery,
                                     onAccountsFilterTypeChanged = viewModel::setAccountsFilterType,
                                     onOpenAddAccountDialog = viewModel::openAddAccountDialog,
@@ -464,6 +529,49 @@ fun DokkaniApp(
                                     onGenerateKeyGenCode = viewModel::generateKeyGenCode
                                 )
                             }
+                            "شؤون العمال والرواتب" -> {
+                                HrAndPayrollScreen(
+                                    uiState = uiState,
+                                    currentUserRole = currentUserRole,
+                                    onSelectSubTab = viewModel::selectHrSubTab,
+                                    onOpenAddEmployeeDialog = viewModel::openAddEmployeeDialog,
+                                    onDismissAddEmployeeDialog = viewModel::dismissAddEmployeeDialog,
+                                    onEmployeeInputsChanged = viewModel::updateEmployeeInputs,
+                                    onSaveEmployee = viewModel::saveEmployee,
+                                    onToggleEmployeeActive = viewModel::toggleEmployeeActive,
+                                    onOpenAttendanceDialog = viewModel::openAttendanceDialog,
+                                    onDismissAttendanceDialog = viewModel::dismissAttendanceDialog,
+                                    onAttendanceInputsChanged = viewModel::updateAttendanceInputs,
+                                    onSaveAttendance = viewModel::saveAttendance,
+                                    onOpenHrTransactionDialog = viewModel::openHrTransactionDialog,
+                                    onDismissHrTransactionDialog = viewModel::dismissHrTransactionDialog,
+                                    onHrTransactionInputsChanged = viewModel::updateHrTransactionInputs,
+                                    onSaveHrTransaction = viewModel::saveHrTransaction,
+                                    onGeneratePayrollRun = viewModel::generateMonthlyPayrollRun,
+                                    onPayoutPayrollRecord = viewModel::payoutPayrollRecord,
+                                    onCancelPayrollPayout = { record -> viewModel.cancelPayrollPayout(record, currentUserRole) },
+                                    onOpenAdjustSalaryDialog = viewModel::openAdjustSalaryDialog,
+                                    onDismissAdjustSalaryDialog = viewModel::dismissAdjustSalaryDialog,
+                                    onAdjustSalaryInputsChanged = viewModel::updateAdjustSalaryInputs,
+                                    onSaveSalaryAdjustment = viewModel::saveSalaryAdjustment,
+                                    onOpenEmployeeDocumentDialog = viewModel::openEmployeeDocumentDialog,
+                                    onDismissEmployeeDocumentDialog = viewModel::dismissEmployeeDocumentDialog,
+                                    onUpdateEmployeePhotoPath = viewModel::updateEmployeePhotoPath,
+                                    onDismissHrErrorMessage = viewModel::dismissHrErrorMessage
+                                )
+                            }
+                            "أسعار الصرف اليومية" -> {
+                                com.example.dokkani.ui.screens.currency.DailyExchangeRatesScreen(
+                                    currencies = uiState.currencies,
+                                    settings = uiState.settings,
+                                    currentUserRole = currentUserRole,
+                                    onSaveCurrency = viewModel::saveCurrency,
+                                    onSetBaseCurrency = viewModel::setAsBaseCurrency,
+                                    onDeleteCurrency = viewModel::deleteCurrency,
+                                    onUpdateForeignPricingMode = viewModel::updateForeignCurrencyPricingMode,
+                                    onUpdateEnableDailyExchangePrompt = viewModel::updateEnableDailyExchangeRatePrompt
+                                )
+                            }
                             "إعدادات النظام" -> {
                                 SystemSettingsScreen(
                                     settings = uiState.settings,
@@ -483,7 +591,9 @@ fun DokkaniApp(
                                     onDeleteInvoice = viewModel::deleteInvoice,
                                     onUpdateStoreProfile = viewModel::updateStoreProfile,
                                     onUpdateShowPreviousBalance = viewModel::updateShowPreviousBalance,
-                                    onUpdateShowDecimals = viewModel::updateShowDecimals
+                                    onUpdateShowDecimals = viewModel::updateShowDecimals,
+                                    onUpdateAutoLockSettings = viewModel::updateAutoLockSettings,
+                                    onUpdatePasswordPolicySettings = viewModel::updatePasswordPolicySettings
                                 )
                             }
                             "المستخدمين والصلاحيات" -> {

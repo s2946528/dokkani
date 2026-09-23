@@ -59,7 +59,7 @@ fun UserCard(user: UserEntity, onEdit: () -> Unit, onToggleStatus: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (user.isActive) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = if (user.isActive) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -69,13 +69,33 @@ fun UserCard(user: UserEntity, onEdit: () -> Unit, onToggleStatus: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text(text = user.fullName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = user.fullName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (user.isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = if (user.isActive) "مفعل" else "معطل",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            color = if (user.isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
                 Text(text = "اسم الدخول: ${user.username}", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     text = "الصلاحية: ${user.role.name}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
+                if (user.mustChangePin) {
+                    Text(
+                        text = "مطلوب تغيير الرمز عند أول تسجيل دخول",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
             Row {
                 IconButton(onClick = onEdit) {
@@ -101,6 +121,7 @@ fun UserAddEditDialog(viewModel: UserManagementViewModel) {
     val pinCode by viewModel.pinCode.collectAsState()
     val role by viewModel.role.collectAsState()
     val isActive by viewModel.isActive.collectAsState()
+    val mustChangePin by viewModel.mustChangePin.collectAsState()
     val editingUser by viewModel.editingUser.collectAsState()
 
     var expanded by remember { mutableStateOf(false) }
@@ -127,13 +148,26 @@ fun UserAddEditDialog(viewModel: UserManagementViewModel) {
                 OutlinedTextField(
                     value = pinCode,
                     onValueChange = { 
-                        if (it.length <= 4 && it.all { char -> char.isDigit() }) viewModel.updatePinCode(it) 
+                        if (it.length <= 16) viewModel.updatePinCode(it) 
                     },
-                    label = { Text("رمز PIN (4 أرقام)") },
+                    label = { Text("رمز الدخول PIN / كلمة المرور") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "تنبيه إرشادي: يُسمح بالأرقام، الحروف والرموز. وفقاً لسياسة النظام المعتمدة.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
 
                 ExposedDropdownMenuBox(
                     expanded = expanded,
@@ -165,7 +199,12 @@ fun UserAddEditDialog(viewModel: UserManagementViewModel) {
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = isActive, onCheckedChange = { viewModel.updateIsActive(it) })
-                    Text("حساب مفعل")
+                    Text("حساب مفعل (نشط)")
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = mustChangePin, onCheckedChange = { viewModel.updateMustChangePin(it) })
+                    Text("إجبار تغيير رمز PIN عند أول تسجيل دخول")
                 }
             }
         },

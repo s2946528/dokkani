@@ -94,7 +94,7 @@ fun ReportsDashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(MaterialTheme.colorScheme.background)
             .padding(12.dp)
     ) {
         // شريط العنوان وأزرار التحديث
@@ -108,12 +108,12 @@ fun ReportsDashboardScreen(
                     text = "التقارير المالية ولوحة المؤشرات",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E293B)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "أرباح وخسائر P&L، تحليل تكلفة COGS، والأصناف الأعلى ربحية والصلاحيات",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF64748B)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -121,7 +121,7 @@ fun ReportsDashboardScreen(
                 if (uiState.isLoadingReports) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = Color(0xFF0F5132))
+                    Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -131,8 +131,8 @@ fun ReportsDashboardScreen(
         // شريط التبويبات الفرعية
         TabRow(
             selectedTabIndex = uiState.reportSubTab,
-            containerColor = Color.White,
-            contentColor = Color(0xFF0F5132),
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier.fillMaxWidth().testTag("reports_subtab_row")
         ) {
             Tab(

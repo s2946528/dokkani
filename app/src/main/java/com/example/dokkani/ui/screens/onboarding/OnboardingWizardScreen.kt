@@ -1,11 +1,13 @@
 package com.example.dokkani.ui.screens.onboarding
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,11 +15,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -27,17 +32,27 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.dokkani.ui.components.BarcodeTextField
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.ProductUnitEntity
+import com.example.dokkani.ui.screens.crud.AddEditCurrencyDialog
+import com.example.dokkani.ui.screens.crud.AddEditUnitDialog
+import com.example.dokkani.ui.screens.crud.UnitDropdownSelector
 import com.example.dokkani.ui.DokkaniViewModel
 import com.example.dokkani.ui.FixedAssetInput
 import com.example.dokkani.ui.OpeningBalanceCustomer
@@ -57,6 +72,15 @@ enum class WizardPhase {
     STEPS,            // Step-by-Step setup screens
     COMPLETION        // Final Completion Screen
 }
+
+data class DuplicateItemDialogData(
+    val existingIndex: Int,
+    val existingItem: OpeningBalanceItem,
+    val newItem: OpeningBalanceItem,
+    val existingQty: Double,
+    val newQty: Double,
+    val totalQty: Double
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,23 +117,26 @@ fun OnboardingWizardScreen(
         var cashierPin by remember { mutableStateOf("1234") }
 
         // رأس المال والنقدية
-        var initialCapital by remember { mutableStateOf("15000.0") }
-        var openingCash by remember { mutableStateOf("500.0") }
-        var bankBalance by remember { mutableStateOf("0.0") }
+        var initialCapital by remember { mutableStateOf("15000") }
+        var openingCash by remember { mutableStateOf("500") }
+        var bankBalance by remember { mutableStateOf("0") }
         var valuationMethod by remember { mutableStateOf(CostValuationMethod.WAC) }
 
-        // العقارات والإيجار
+        // العقارات والإيجار ونقل قدم (خلو)
         var propertyStatus by remember { mutableStateOf(PropertyStatus.OWNED) }
-        var monthlyRent by remember { mutableStateOf("1000.0") }
+        var monthlyRent by remember { mutableStateOf("1000") }
         var prepaidMonths by remember { mutableStateOf("6") }
         var contractStartDate by remember { mutableStateOf("2026-01-01") }
+        var leaseholdAmount by remember { mutableStateOf("") }
+        var leaseholdYears by remember { mutableStateOf("5") }
+        var leaseholdNotes by remember { mutableStateOf("") }
 
         // الأصول الثابتة والديكور
-        var refrigCost by remember { mutableStateOf("4500.0") }
-        var shelvesCost by remember { mutableStateOf("2500.0") }
-        var posDevicesCost by remember { mutableStateOf("1800.0") }
-        var acLightingCost by remember { mutableStateOf("2000.0") }
-        var otherAssetsCost by remember { mutableStateOf("0.0") }
+        var refrigCost by remember { mutableStateOf("4500") }
+        var shelvesCost by remember { mutableStateOf("2500") }
+        var posDevicesCost by remember { mutableStateOf("1800") }
+        var acLightingCost by remember { mutableStateOf("2000") }
+        var otherAssetsCost by remember { mutableStateOf("0") }
 
         // بضاعة أول المدة
         var openingItems by remember {
@@ -128,6 +155,7 @@ fun OnboardingWizardScreen(
         var newProdQty by remember { mutableStateOf("") }
         var newProdCost by remember { mutableStateOf("") }
         var newProdPrice by remember { mutableStateOf("") }
+        var duplicateDialogData by remember { mutableStateOf<DuplicateItemDialogData?>(null) }
 
         // ديون العملاء
         var customers by remember {
@@ -167,8 +195,8 @@ fun OnboardingWizardScreen(
                             Text(
                                 text = when (wizardPhase) {
                                     WizardPhase.WELCOME -> "معالج دكاني المحاسبي"
-                                    WizardPhase.PATH_SELECTION -> "اختر سيناريو النشاط المحاسبي"
-                                    WizardPhase.STEPS -> if (setupMode == GrocerySetupMode.NEW_GROCERY) "إعداد بقالة جديدة [أ]" else "ترحيل بقالة قائمة [ب]"
+                                    WizardPhase.PATH_SELECTION -> "اختر نوع النشاط المحاسبي"
+                                    WizardPhase.STEPS -> if (setupMode == GrocerySetupMode.NEW_GROCERY) "إعداد مشروع جديد [أ]" else "ترحيل مشروع قائم [ب]"
                                     WizardPhase.COMPLETION -> "اكتمل إعداد وتجهيز النظام"
                                 },
                                 fontSize = 16.sp,
@@ -197,7 +225,9 @@ fun OnboardingWizardScreen(
                     Surface(
                         tonalElevation = 8.dp,
                         color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
                     ) {
                         Row(
                             modifier = Modifier
@@ -324,6 +354,10 @@ fun OnboardingWizardScreen(
                                                 selectedBaseCurrency = curr
                                                 viewModel.setAsBaseCurrency(curr)
                                             },
+                                            onSaveCurrency = { newCurrency ->
+                                                viewModel.saveCurrency(newCurrency)
+                                                selectedBaseCurrency = newCurrency
+                                            },
                                             capitalText = initialCapital,
                                             onCapitalChange = { initialCapital = it },
                                             valuationMethod = valuationMethod,
@@ -341,6 +375,12 @@ fun OnboardingWizardScreen(
                                             onPrepaidMonthsChange = { prepaidMonths = it },
                                             contractStartDate = contractStartDate,
                                             onContractStartDateChange = { contractStartDate = it },
+                                            leaseholdAmount = leaseholdAmount,
+                                            onLeaseholdAmountChange = { leaseholdAmount = it },
+                                            leaseholdYears = leaseholdYears,
+                                            onLeaseholdYearsChange = { leaseholdYears = it },
+                                            leaseholdNotes = leaseholdNotes,
+                                            onLeaseholdNotesChange = { leaseholdNotes = it },
                                             currencySymbol = activeCurrencySymbol
                                         )
 
@@ -380,6 +420,10 @@ fun OnboardingWizardScreen(
                                                 selectedBaseCurrency = curr
                                                 viewModel.setAsBaseCurrency(curr)
                                             },
+                                            onSaveCurrency = { newCurrency ->
+                                                viewModel.saveCurrency(newCurrency)
+                                                selectedBaseCurrency = newCurrency
+                                            },
                                             capitalText = initialCapital,
                                             onCapitalChange = { initialCapital = it },
                                             valuationMethod = valuationMethod,
@@ -399,6 +443,12 @@ fun OnboardingWizardScreen(
                                             onMonthlyRentChange = { monthlyRent = it },
                                             prepaidMonths = prepaidMonths,
                                             onPrepaidMonthsChange = { prepaidMonths = it },
+                                            leaseholdAmount = leaseholdAmount,
+                                            onLeaseholdAmountChange = { leaseholdAmount = it },
+                                            leaseholdYears = leaseholdYears,
+                                            onLeaseholdYearsChange = { leaseholdYears = it },
+                                            leaseholdNotes = leaseholdNotes,
+                                            onLeaseholdNotesChange = { leaseholdNotes = it },
                                             currencySymbol = activeCurrencySymbol
                                         )
 
@@ -435,25 +485,53 @@ fun OnboardingWizardScreen(
                                             newProdPrice = newProdPrice,
                                             onNewProdPriceChange = { newProdPrice = it },
                                             onAddItem = {
+                                                val barcode = newProdBarcode.trim()
+                                                val name = newProdName.trim()
                                                 val qty = newProdQty.toDoubleOrNull() ?: 0.0
                                                 val cost = newProdCost.toDoubleOrNull() ?: 0.0
                                                 val price = newProdPrice.toDoubleOrNull() ?: cost
-                                                if (newProdName.isNotBlank() && qty > 0.0) {
-                                                    openingItems = openingItems + OpeningBalanceItem(
-                                                        name = newProdName.trim(),
-                                                        category = newProdCategory.trim(),
+                                                val unit = newProdUnit.trim().ifBlank { "حبة/قطعة" }
+                                                val category = newProdCategory.trim().ifBlank { "تموينات عامة" }
+
+                                                if ((name.isNotBlank() || barcode.isNotBlank()) && qty > 0.0) {
+                                                    val newItem = OpeningBalanceItem(
+                                                        name = name.ifBlank { "صنف $barcode" },
+                                                        category = category,
                                                         quantity = qty,
                                                         costPrice = cost,
                                                         sellingPrice = price,
-                                                        barcode = newProdBarcode.trim(),
-                                                        unitName = newProdUnit.trim().ifBlank { "حبة/قطعة" }
+                                                        barcode = barcode,
+                                                        unitName = unit
                                                     )
-                                                    newProdName = ""
-                                                    newProdBarcode = ""
-                                                    newProdUnit = "حبة/قطعة"
-                                                    newProdQty = ""
-                                                    newProdCost = ""
-                                                    newProdPrice = ""
+
+                                                    // التحقق الذكي من التكرار عبر الباركود أولاً ثم الاسم
+                                                    val existingIndex = openingItems.indexOfFirst { existing ->
+                                                        (barcode.isNotBlank() && existing.barcode.isNotBlank() && existing.barcode == barcode) ||
+                                                        (name.isNotBlank() && existing.name.trim().equals(name, ignoreCase = true))
+                                                    }
+
+                                                    if (existingIndex != -1) {
+                                                        val existingItem = openingItems[existingIndex]
+                                                        val existingQty = existingItem.quantity
+                                                        val totalQty = existingQty + qty
+
+                                                        duplicateDialogData = DuplicateItemDialogData(
+                                                            existingIndex = existingIndex,
+                                                            existingItem = existingItem,
+                                                            newItem = newItem,
+                                                            existingQty = existingQty,
+                                                            newQty = qty,
+                                                            totalQty = totalQty
+                                                        )
+                                                    } else {
+                                                        openingItems = openingItems + newItem
+                                                        newProdName = ""
+                                                        newProdBarcode = ""
+                                                        newProdUnit = "حبة/قطعة"
+                                                        newProdQty = ""
+                                                        newProdCost = ""
+                                                        newProdPrice = ""
+                                                    }
                                                 }
                                             },
                                             onRemoveItem = { item ->
@@ -492,7 +570,9 @@ fun OnboardingWizardScreen(
                                                     newSuppBalance = ""
                                                 }
                                             },
-                                            onRemoveSupplier = { s -> suppliers = suppliers.filter { it != s } }
+                                            onRemoveSupplier = { s -> suppliers = suppliers.filter { it != s } },
+                                            onSaveUnit = { unit -> viewModel.saveProductUnit(unit) },
+                                            availableUnitsList = (uiState.allUnits.map { it.unitName } + uiState.products.flatMap { p -> p.units.map { u -> u.unitName } } + listOf("حبة/قطعة", "حبة", "كرتون", "كيلو", "درزن", "صندوق", "سحارة", "ربطة", "عبوة", "باكيت", "طرد", "جرام", "لتر", "متر", "شوال")).filter { it.isNotBlank() }.distinct()
                                         )
 
                                         4 -> StepSecurityAndUsers(
@@ -520,6 +600,8 @@ fun OnboardingWizardScreen(
                                 propertyStatus = propertyStatus,
                                 monthlyRent = monthlyRent,
                                 prepaidMonths = prepaidMonths,
+                                leaseholdAmount = leaseholdAmount,
+                                leaseholdYears = leaseholdYears,
                                 isSubmitting = isSubmitting,
                                 onLaunchSystem = {
                                     if (!isSubmitting) {
@@ -530,7 +612,7 @@ fun OnboardingWizardScreen(
                                             FixedAssetInput("أجهزة نقاط البيع والباربود", "أجهزة وموازين", posDevicesCost.toDoubleOrNull() ?: 0.0),
                                             FixedAssetInput("أجهزة تكييف وإضاءة", "تكييف وإضاءة", acLightingCost.toDoubleOrNull() ?: 0.0),
                                             FixedAssetInput("أصول وتجهيزات أخرى", "أصول أخرى", otherAssetsCost.toDoubleOrNull() ?: 0.0)
-                                        ).filter { it.purchaseCost > 0.0 }
+                                         ).filter { it.purchaseCost > 0.0 }
 
                                         viewModel.completeOnboarding(
                                             selectedBaseCurrency = selectedBaseCurrency ?: uiState.baseCurrency,
@@ -546,6 +628,9 @@ fun OnboardingWizardScreen(
                                             propertyStatus = propertyStatus,
                                             monthlyRent = monthlyRent.toDoubleOrNull() ?: 0.0,
                                             prepaidMonths = prepaidMonths.toIntOrNull() ?: 0,
+                                            leaseholdAmount = leaseholdAmount.toDoubleOrNull() ?: 0.0,
+                                            leaseholdYears = leaseholdYears.toIntOrNull() ?: 5,
+                                            leaseholdNotes = leaseholdNotes,
                                             fixedAssets = fixedAssetList,
                                             openingItems = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) openingItems else emptyList(),
                                             openingCustomers = if (setupMode == GrocerySetupMode.EXISTING_GROCERY) customers else emptyList(),
@@ -559,98 +644,511 @@ fun OnboardingWizardScreen(
                     }
                 }
             }
+
+            // --- نافذة التنبيه والدمج الذكي للصنف المكرر (Confirmation Dialog) ---
+            duplicateDialogData?.let { dialogData ->
+                val existingQtyStr = if (dialogData.existingQty % 1.0 == 0.0) dialogData.existingQty.toInt().toString() else "%.2f".format(dialogData.existingQty)
+                val newQtyStr = if (dialogData.newQty % 1.0 == 0.0) dialogData.newQty.toInt().toString() else "%.2f".format(dialogData.newQty)
+                val totalQtyStr = if (dialogData.totalQty % 1.0 == 0.0) dialogData.totalQty.toInt().toString() else "%.2f".format(dialogData.totalQty)
+
+                AlertDialog(
+                    onDismissRequest = { duplicateDialogData = null },
+                    icon = {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.MergeType,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = "تأكيد دمج الكمية للصنف المكرر",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = dialogData.existingItem.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    if (dialogData.existingItem.barcode.isNotBlank()) {
+                                        Text(
+                                            text = "رمز الباركود: ${dialogData.existingItem.barcode}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = "هذا الصنف تم إدخاله مسبقاً بكمية ($existingQtyStr). هل تريد دمج الكمية الجديدة ($newQtyStr) لتصبح الإجمالي ($totalQtyStr ${dialogData.existingItem.unitName})؟",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 19.sp,
+                                textAlign = TextAlign.Start
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val updatedList = openingItems.toMutableList()
+                                val prevItem = updatedList[dialogData.existingIndex]
+                                val mergedItem = prevItem.copy(
+                                    quantity = dialogData.totalQty,
+                                    costPrice = if (dialogData.newItem.costPrice > 0) dialogData.newItem.costPrice else prevItem.costPrice,
+                                    sellingPrice = if (dialogData.newItem.sellingPrice > 0) dialogData.newItem.sellingPrice else prevItem.sellingPrice
+                                )
+                                updatedList[dialogData.existingIndex] = mergedItem
+                                openingItems = updatedList
+
+                                newProdName = ""
+                                newProdBarcode = ""
+                                newProdUnit = "حبة/قطعة"
+                                newProdQty = ""
+                                newProdCost = ""
+                                newProdPrice = ""
+                                duplicateDialogData = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("نعم", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    },
+                    dismissButton = {
+                        OutlinedButton(
+                            onClick = { duplicateDialogData = null },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("لا", fontSize = 14.sp)
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
         }
     }
 }
 }
 
-// --- Component 1: Entry Point Welcome Screen ---
+
+
+// --- Component 1: Entry Point Welcome Screen with 5-Page Educational Pager ---
+private data class OnboardingSlideData(
+    val badge: String,
+    val title: String,
+    val description: String,
+    val imageRes: Int,
+    val isModuleGrid: Boolean = false,
+    val modules: List<Pair<String, ImageVector>> = emptyList()
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StepWelcomeScreen(onStartClick: () -> Unit) {
+    val coroutineScope = rememberCoroutineScope()
+    val slides = remember {
+        listOf(
+            OnboardingSlideData(
+                badge = "توعية مالية",
+                title = "من أكل وما حسب.. فقر وما دري",
+                description = "إدارة أموالك بدون حساب دقيق تؤدي لتآكل أرباحك بصمت. التخطيط والرقابة المالية اليومية هما أساس نمو واستقرار تجارتك.",
+                imageRes = R.drawable.img_onboarding_1_loss
+            ),
+            OnboardingSlideData(
+                badge = "واقع الدفاتر الورقية",
+                title = "كفاية خسائر الدفاتر",
+                description = "وداعاً لأخطاء الورق والنسيان! الأخطاء الحسابية الخفية تكلفك أرباحك كل يوم، ومعرفة أرباحك الحقيقية أصبحت مهمة متعبة ومكلفة.",
+                imageRes = R.drawable.img_onboarding_2_notebook
+            ),
+            OnboardingSlideData(
+                badge = "توفير المرونة والتكاليف",
+                title = "لا تكاليف باهظة",
+                description = "وداعاً لأجهزة الكمبيوتر وقارئات الباركود المكلفة! النظام المحاسبي الاحترافي لم يعد مخصصاً للشركات الكبرى فقط، بل في متناول يديك.",
+                imageRes = R.drawable.img_onboarding_3_pc
+            ),
+            OnboardingSlideData(
+                badge = "منظومة إدارية متكاملة",
+                title = "نظام إداري متكامل بين يديك",
+                description = "منظومة شاملة تدير كافة أقسام وأنشطة مشروعك بكفاءة عالية واحترافية متناهية:",
+                imageRes = R.drawable.img_onboarding_4_modules,
+                isModuleGrid = true,
+                modules = listOf(
+                    "إدارة المخزون والأصناف ونقاط البيع" to Icons.Default.Inventory,
+                    "إدارة المشتريات والموردين" to Icons.Default.ShoppingBag,
+                    "شؤون الموظفين والعمال وأجورهم" to Icons.Default.People,
+                    "الأستاذ العام ودليل الحسابات" to Icons.Default.AccountTree,
+                    "إدارة المستخدمين وتحديد الصلاحيات" to Icons.Default.Security,
+                    "تقارير دقيقة للأرباح والخسائر" to Icons.Default.Analytics
+                )
+            ),
+            OnboardingSlideData(
+                badge = "الحل المحاسبي الذكي",
+                title = "مشروعك في جيبك",
+                description = "هاتفك الذكي هو نظامك الكامل الآن! كاميرا هاتفك تقرأ الباركود، وحساباتك وأرباحك تظهر أمامك بلحظتها. ابدأ الآن وتولى إدارة متجرك بكل ثقة!",
+                imageRes = R.drawable.img_onboarding_5_success
+            )
+        )
+    }
+
+    val pagerState = rememberPagerState(pageCount = { slides.size })
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+            .navigationBarsPadding()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(90.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Storefront,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "مرحباً بك في نظام دكاني الذكي",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center
-            )
-
-            Text(
-                text = "منظومة محاسبية متكاملة لنقاط البيع وإدارة البقالات والتموينات بأعلى دقة",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Highlight Cards
-            FeatureHighlightCard(
-                title = "مسار تأسيس بقالة جديدة",
-                desc = "تجهيز تلقائي للعملة، رأس المال، عقارات وإيجار المحل، والأصول الثابتة.",
-                icon = Icons.Default.AddBusiness
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            FeatureHighlightCard(
-                title = "مسار ترحيل بقالة قائمة",
-                desc = "ترحيل مرن للدفاتر الورقية، بضاعة أول المدة، ديون العملاء، ومستحقات الموردين.",
-                icon = Icons.Default.MenuBook
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            FeatureHighlightCard(
-                title = "رقابة مالية وسياسات تقييم معتمدة",
-                desc = "دعم كامل للمتوسط المرجح WAC، الوارد أولاً FIFO، والوارد أخيراً LIFO مع أمان الكاشير.",
-                icon = Icons.Default.Assessment
-            )
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        Button(
-            onClick = onStartClick,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ),
-            shape = RoundedCornerShape(12.dp),
+        // --- الشريط العلوي (Top Control Bar) ---
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("ابدأ إعداد متجرك الآن", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF15803D)),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_dokkani_official_logo),
+                            contentDescription = "شعار دكاني",
+                            modifier = Modifier
+                                .size(32.dp)
+                                .padding(2.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+                Text(
+                    text = "دكاني | نقاط البيع",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // مؤشر رقم الصفحة
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = "${pagerState.currentPage + 1} من ${slides.size}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+
+                // زر "تخطي"
+                if (pagerState.currentPage < slides.size - 1) {
+                    TextButton(
+                        onClick = onStartClick,
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text(
+                            text = "تخطي",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- محتوى Pager ---
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) { pageIndex ->
+            val slide = slides[pageIndex]
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // --- الرسم التوضيحي (Illustration Card) ---
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(210.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = slide.imageRes),
+                                contentDescription = slide.title,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // --- شارة التبويب (Badge Chip) ---
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = slide.badge,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // --- العنوان / المثل ---
+                    Text(
+                        text = slide.title,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 28.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // --- الوصف ---
+                    Text(
+                        text = slide.description,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+
+                    // --- شبكة أقسام النظام (في الشاشة الرابعة) ---
+                    if (slide.isModuleGrid) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            slide.modules.chunked(2).forEach { rowModules ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    rowModules.forEach { (moduleTitle, moduleIcon) ->
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            imageVector = moduleIcon,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Text(
+                                                    text = moduleTitle,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    lineHeight = 15.sp,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- الشريط السفلي لعلامات الترقيم والأزرار (Bottom Control Bar) ---
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 4.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // مؤشرات النقاط الديناميكية (Dynamic Dots Indicator)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 14.dp)
+                ) {
+                    repeat(slides.size) { index ->
+                        val isSelected = pagerState.currentPage == index
+                        val width by animateDpAsState(
+                            targetValue = if (isSelected) 28.dp else 8.dp,
+                            label = "dotWidth"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .height(8.dp)
+                                .width(width)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outlineVariant
+                                )
+                        )
+                    }
+                }
+
+                // الأزرار السفليّة
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (pagerState.currentPage > 0) {
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.4f)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("السابق", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (pagerState.currentPage < slides.size - 1) {
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier.weight(if (pagerState.currentPage > 0) 0.6f else 1f)
+                        ) {
+                            Text("التالي", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                    } else {
+                        // الشاشة الأخيرة: زر "ابدأ الآن"
+                        Button(
+                            onClick = onStartClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                        ) {
+                            Icon(Icons.Default.RocketLaunch, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("ابدأ الآن وإعداد المتجر", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -697,13 +1195,14 @@ private fun StepPathSelection(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 12.dp),
+            .padding(vertical = 12.dp)
+            .navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
             Text(
-                text = "اختر سيناريو نشاطك للبدء",
+                text = "اختر نوع نشاطك للبدء",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -720,22 +1219,22 @@ private fun StepPathSelection(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Branch A: New Grocery
+            // Branch A: New Project / Business
             SetupModeCard(
-                title = "[أ] بقالة جديدة كلياً (New Business Setup)",
-                description = "إعداد شامل متسلسل لبيئة المتجر: العملة الأساسية، رأس المال الافتتاحي، عقارات وإيجارات المحل، الأصول الثابتة والديكور، وأمان المستخدمين.",
+                title = "[أ] مشروع جديد كلياً (New Business Setup)",
+                description = "إعداد شامل متسلسل لبيئة النشاط التجاري: العملة الأساسية، رأس المال الافتتاحي، عقارات وإيجارات المحل أو المقر، الأصول الثابتة والتجهيزات، وأمان المستخدمين.",
                 icon = Icons.Default.Storefront,
                 isSelected = selectedMode == GrocerySetupMode.NEW_GROCERY,
-                badge = "موصى به للمتاجر الحديثة",
+                badge = "موصى به للمشاريع والمتاجر الحديثة",
                 onClick = { onSelectMode(GrocerySetupMode.NEW_GROCERY) }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Branch B: Existing Grocery Migration
+            // Branch B: Existing Business Migration
             SetupModeCard(
-                title = "[ب] بقالة قائمة / نقل الدفاتر والجرد (Migration)",
-                description = "ترحيل مرن وخطوة بخطوة: نقدية الدرج والبنوك، الجرد الافتتاحي للبضائع، ديون الزبائن الورقية، ومستحقات الموردين دون إلزام تقييدي.",
+                title = "[ب] مشروع قائم / نقل الدفاتر والجرد (Migration)",
+                description = "ترحيل مرن وخطوة بخطوة: نقدية الدرج والبنوك، الجرد الافتتاحي للبضائع، ديون العملاء والزبائن، ومستحقات الموردين دون إلزام تقييدي.",
                 icon = Icons.Default.MenuBook,
                 isSelected = selectedMode == GrocerySetupMode.EXISTING_GROCERY,
                 badge = "ترحيل الدفاتر والأرصدة القائمة",
@@ -838,19 +1337,34 @@ private fun SetupModeCard(
     }
 }
 
-// --- Step: Currency, Capital & Inventory Valuation ---
+// --- Step: Currency & Inventory Valuation ---
 @Composable
 private fun StepCurrencyCapitalValuation(
     currencies: List<CurrencyEntity>,
     selectedCurrency: CurrencyEntity?,
     onSelectCurrency: (CurrencyEntity) -> Unit,
-    capitalText: String,
-    onCapitalChange: (String) -> Unit,
+    onSaveCurrency: (CurrencyEntity) -> Unit = {},
+    capitalText: String = "",
+    onCapitalChange: (String) -> Unit = {},
     valuationMethod: CostValuationMethod,
     onValuationMethodChange: (CostValuationMethod) -> Unit,
-    currencySymbol: String,
-    isNewGrocery: Boolean
+    currencySymbol: String = "",
+    isNewGrocery: Boolean = true
 ) {
+    var showAddCurrencyDialog by remember { mutableStateOf(false) }
+
+    if (showAddCurrencyDialog) {
+        AddEditCurrencyDialog(
+            initialCurrency = null,
+            onSaveCurrency = { newCurrency ->
+                onSaveCurrency(newCurrency)
+                onSelectCurrency(newCurrency)
+                showAddCurrencyDialog = false
+            },
+            onDismiss = { showAddCurrencyDialog = false }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -858,18 +1372,18 @@ private fun StepCurrencyCapitalValuation(
             .padding(vertical = 8.dp)
     ) {
         Text(
-            text = "العملة الأساسية ورأس المال وسياسة المخزون",
-            fontSize = 16.sp,
+            text = "العملة الأساسية وسياسة تقييم المخزون",
+            fontSize = 17.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "تحديد العملة المعتمدة في القوائم ورأس المال وسياسة تقييم التكلفة:",
-            fontSize = 12.sp,
+            text = "تحديد العملة المعتمدة في القوائم والتقارير وسياسة تقييم تكلفة المخزون المحاسبية:",
+            fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Currency Selector Card
         Card(
@@ -878,16 +1392,27 @@ private fun StepCurrencyCapitalValuation(
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(text = "1. اختيار العملة الأساسية للنظام:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(modifier = Modifier.height(8.dp))
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "1. اختيار العملة الأساسية للنظام:",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "تُستخدم هذه العملة في قياس رأس المال وإصدار الفواتير والتقارير المالية.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(currencies) { curr ->
                         val isSel = selectedCurrency?.id == curr.id || (selectedCurrency == null && curr.isBaseCurrency)
                         FilterChip(
                             selected = isSel,
                             onClick = { onSelectCurrency(curr) },
-                            label = { Text("${curr.name} (${curr.symbol})") },
+                            label = { Text("${curr.name} (${curr.symbol})", fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal) },
                             leadingIcon = if (isSel) {
                                 { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
                             } else null,
@@ -899,24 +1424,23 @@ private fun StepCurrencyCapitalValuation(
                             )
                         )
                     }
+                    item {
+                        FilterChip(
+                            selected = false,
+                            onClick = { showAddCurrencyDialog = true },
+                            label = { Text("+ إضافة عملة جديدة", fontWeight = FontWeight.Bold) },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                labelColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Initial Capital / Book Capital Input
-        OutlinedTextField(
-            value = capitalText,
-            onValueChange = onCapitalChange,
-            label = { Text(if (isNewGrocery) "رأس المال الافتتاحي للنقدية والخزينة" else "رأس المال الدفتري / القائم الفعلي") },
-            suffix = { Text(currencySymbol) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Text(
             text = "2. سياسة تقييم المخزون والتكلفة المحاسبية:",
@@ -924,27 +1448,33 @@ private fun StepCurrencyCapitalValuation(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "تحديد الآلية التي يستند إليها النظام في حساب تكلفة البضاعة المباعة وقيمة البضاعة المتبقية:",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Valuation Method 1: WAC
         ValuationPolicyCard(
-            title = "المتوسط المرجح (Weighted Average - WAC) [الافتراضي]",
-            note = "يقوم باحتساب متوسط تكلفة الشراء المرجحة للوحدات المتبقية تلقائياً عند كل توريد. الموصى به للبقالات والسوبرماركت لكثرة الأصناف وتذبذب الأسعار.",
+            title = "المتوسط المرجح (Weighted Average - WAC) [الافتراضي والأنسب]",
+            note = "يقوم باحتساب متوسط تكلفة الشراء المرجحة للوحدات المتبقية تلقائياً عند كل توريد. الموصى به للمشاريع والمتاجر لكثرة الأصناف وتذبذب الأسعار.",
             isSelected = valuationMethod == CostValuationMethod.WAC,
             onClick = { onValuationMethodChange(CostValuationMethod.WAC) }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Valuation Method 2: FIFO
         ValuationPolicyCard(
             title = "الوارد أولاً يصدر أولاً (FIFO - First In, First Out)",
-            note = "يفترض بيع وتقييم تكلفة البضاعة القديمة أولاً. ممتاز للمنتجات ذات تاريخ الصلاحية للحد من الهدر والتلف.",
+            note = "يفترض بيع وتقييم تكلفة البضاعة القديمة أولاً. ممتاز للمنتجات ذات تاريخ الصلاحية المحدود للحد من الهدر والتلف.",
             isSelected = valuationMethod == CostValuationMethod.FIFO,
             onClick = { onValuationMethodChange(CostValuationMethod.FIFO) }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Valuation Method 3: LIFO
         ValuationPolicyCard(
@@ -953,6 +1483,35 @@ private fun StepCurrencyCapitalValuation(
             isSelected = valuationMethod == CostValuationMethod.LIFO,
             onClick = { onValuationMethodChange(CostValuationMethod.LIFO) }
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Accounting Clarification Note
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "ملاحظة محاسبية: يتم تجميع واحتساب إجمالي رأس المال والأرصدة النقدية تلقائياً بناءً على البيانات التي تُدخل في خطوات النقدية والعقارات والأصول.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    lineHeight = 18.sp
+                )
+            }
+        }
     }
 }
 
@@ -999,6 +1558,7 @@ private fun ValuationPolicyCard(
 }
 
 // --- Step: Property & Rent ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StepPropertyAndRent(
     propertyStatus: PropertyStatus,
@@ -1009,11 +1569,19 @@ private fun StepPropertyAndRent(
     onPrepaidMonthsChange: (String) -> Unit,
     contractStartDate: String,
     onContractStartDateChange: (String) -> Unit,
+    leaseholdAmount: String,
+    onLeaseholdAmountChange: (String) -> Unit,
+    leaseholdYears: String,
+    onLeaseholdYearsChange: (String) -> Unit,
+    leaseholdNotes: String,
+    onLeaseholdNotesChange: (String) -> Unit,
     currencySymbol: String
 ) {
     val mRent = monthlyRent.toDoubleOrNull() ?: 0.0
     val pMonths = prepaidMonths.toIntOrNull() ?: 0
     val prepaidTotal = mRent * pMonths
+
+    var showDatePicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -1022,13 +1590,13 @@ private fun StepPropertyAndRent(
             .padding(vertical = 8.dp)
     ) {
         Text(
-            text = "أصول العقار وإيجار المتجر",
+            text = "أصول العقار والإيجار ونقل قدم (خلو)",
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "تحديد حالة ملكية العقار وتوثيق مصروف الإيجار المدفوع مقدماً:",
+            text = "تحديد حالة ملكية العقار وتوثيق مصروف الإيجار ونقل قدم (خلو) الموقع التجاري:",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1075,37 +1643,96 @@ private fun StepPropertyAndRent(
                 }
             }
         } else {
+            // قيمة الإيجار الشهري (أرقام صحيحة فقط)
             OutlinedTextField(
                 value = monthlyRent,
-                onValueChange = onMonthlyRentChange,
+                onValueChange = { input ->
+                    val cleanInput = input.filter { it.isDigit() }
+                    onMonthlyRentChange(cleanInput)
+                },
                 label = { Text("قيمة الإيجار الشهري") },
+                placeholder = { Text("0") },
                 suffix = { Text(currencySymbol) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp)
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // عدد الأشهر المدفوعة مقدماً (أرقام صحيحة فقط)
             OutlinedTextField(
                 value = prepaidMonths,
-                onValueChange = onPrepaidMonthsChange,
+                onValueChange = { input ->
+                    val cleanInput = input.filter { it.isDigit() }
+                    onPrepaidMonthsChange(cleanInput)
+                },
                 label = { Text("عدد الأشهر المدفوعة مقدماً") },
+                placeholder = { Text("0") },
                 suffix = { Text("شهر") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp)
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // تاريخ بداية العقد بـ DatePicker Dialog
             OutlinedTextField(
                 value = contractStartDate,
-                onValueChange = onContractStartDateChange,
+                onValueChange = {},
+                readOnly = true,
                 label = { Text("تاريخ بداية العقد") },
-                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "اختر تاريخ العقد",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showDatePicker = true },
                 shape = RoundedCornerShape(10.dp)
             )
+
+            if (showDatePicker) {
+                val datePickerState = rememberDatePickerState()
+                DatePickerDialog(
+                    onDismissRequest = { showDatePicker = false },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                val selectedMillis = datePickerState.selectedDateMillis
+                                if (selectedMillis != null) {
+                                    val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+                                        timeInMillis = selectedMillis
+                                    }
+                                    val year = calendar.get(java.util.Calendar.YEAR)
+                                    val month = calendar.get(java.util.Calendar.MONTH) + 1
+                                    val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+                                    val formattedDate = String.format("%04d-%02d-%02d", year, month, day)
+                                    onContractStartDateChange(formattedDate)
+                                }
+                                showDatePicker = false
+                            }
+                        ) {
+                            Text("موافق")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDatePicker = false }) {
+                            Text("إلغاء")
+                        }
+                    }
+                ) {
+                    DatePicker(state = datePickerState)
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1160,6 +1787,121 @@ private fun StepPropertyAndRent(
                 }
             }
         }
+
+        // --- قسم نقل قدم (خلو) [حق الانتفاع / التنازل] ---
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CorporateFare,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = "مبلغ نقل قدم (خلو) - [حق الانتفاع بالموقع]",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "مبلغ التنازل أو نقل قدم (خلو) المسدد للحصول على الموقع التجاري (أصل غير ملموس بالدليل المحاسبي):",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = leaseholdAmount,
+                    onValueChange = { input ->
+                        val cleanInput = input.filter { it.isDigit() }
+                        onLeaseholdAmountChange(cleanInput)
+                    },
+                    label = { Text("مبلغ نقل قدم (خلو)") },
+                    placeholder = { Text("0") },
+                    suffix = { Text(currencySymbol) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                if ((leaseholdAmount.toDoubleOrNull() ?: 0.0) > 0.0) {
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = leaseholdYears,
+                            onValueChange = { input ->
+                                val cleanInput = input.filter { it.isDigit() }
+                                onLeaseholdYearsChange(cleanInput)
+                            },
+                            label = { Text("سنوات عقد نقل قدم (خلو)") },
+                            suffix = { Text("سنوات") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = leaseholdNotes,
+                            onValueChange = onLeaseholdNotesChange,
+                            label = { Text("تفاصيل/اسم المتنازل") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1.5f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalance,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "التوجيه المحاسبي: يُقيد كـ [أصل غير ملموس - 10501] تحت الأصول بالدليل المحاسبي، ويتم إطفاء قيمته سنوياً عبر قائمة الدخل.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1210,6 +1952,12 @@ private fun StepCashDrawerAndBank(
     onMonthlyRentChange: (String) -> Unit,
     prepaidMonths: String,
     onPrepaidMonthsChange: (String) -> Unit,
+    leaseholdAmount: String,
+    onLeaseholdAmountChange: (String) -> Unit,
+    leaseholdYears: String,
+    onLeaseholdYearsChange: (String) -> Unit,
+    leaseholdNotes: String,
+    onLeaseholdNotesChange: (String) -> Unit,
     currencySymbol: String
 ) {
     Column(
@@ -1219,13 +1967,13 @@ private fun StepCashDrawerAndBank(
             .padding(vertical = 8.dp)
     ) {
         Text(
-            text = "نقدية الدرج والبنوك والعقارات القائمة",
+            text = "نقدية الدرج والبنوك والعقارات والخلو القائم",
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "إدخال أرصدة الصندوق النقدي والحسابات البنكية وحالة العقار:",
+            text = "إدخال أرصدة الصندوق النقدي والحسابات البنكية وحالة العقار والخلو:",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1298,6 +2046,69 @@ private fun StepCashDrawerAndBank(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp)
             )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(
+                    text = "مبلغ نقل قدم (خلو) [أصل غير ملموس بالدليل المحاسبي]",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = leaseholdAmount,
+                    onValueChange = { input ->
+                        val cleanInput = input.filter { it.isDigit() }
+                        onLeaseholdAmountChange(cleanInput)
+                    },
+                    label = { Text("مبلغ نقل قدم (خلو) القائمة") },
+                    suffix = { Text(currencySymbol) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                if ((leaseholdAmount.toDoubleOrNull() ?: 0.0) > 0.0) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = leaseholdYears,
+                            onValueChange = { input ->
+                                val cleanInput = input.filter { it.isDigit() }
+                                onLeaseholdYearsChange(cleanInput)
+                            },
+                            label = { Text("سنوات عقد نقل قدم (خلو)") },
+                            suffix = { Text("سنوات") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = leaseholdNotes,
+                            onValueChange = onLeaseholdNotesChange,
+                            label = { Text("تفاصيل المتنازل") },
+                            modifier = Modifier.weight(1.5f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1452,9 +2263,28 @@ private fun StepFlexibleOpeningBalances(
     newSuppBalance: String,
     onSuppBalanceChange: (String) -> Unit,
     onAddSupplier: () -> Unit,
-    onRemoveSupplier: (OpeningBalanceSupplier) -> Unit
+    onRemoveSupplier: (OpeningBalanceSupplier) -> Unit,
+    onSaveUnit: (ProductUnitEntity) -> Unit = {},
+    availableUnitsList: List<String> = emptyList()
 ) {
     var subTab by remember { mutableIntStateOf(0) }
+    var showAddUnitDialog by remember { mutableStateOf(false) }
+
+    if (showAddUnitDialog) {
+        AddEditUnitDialog(
+            productId = 0L,
+            initialUnit = null,
+            onSaveUnit = { unit ->
+                onSaveUnit(unit)
+                onNewProdUnitChange(unit.unitName)
+                if (unit.costPrice > 0.0) onNewProdCostChange(unit.costPrice.toString())
+                if (unit.sellingPrice > 0.0) onNewProdPriceChange(unit.sellingPrice.toString())
+                if (unit.barcode.isNotBlank()) onNewProdBarcodeChange(unit.barcode)
+                showAddUnitDialog = false
+            },
+            onDismiss = { showAddUnitDialog = false }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -1509,56 +2339,186 @@ private fun StepFlexibleOpeningBalances(
         Box(modifier = Modifier.weight(1f)) {
             when (subTab) {
                 0 -> Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
                     ) {
-                        OutlinedTextField(value = newProdName, onValueChange = onNewProdNameChange, label = { Text("اسم الصنف") }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = newProdQty, onValueChange = onNewProdQtyChange, label = { Text("الكمية") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(0.6f))
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "إدخال صنف جديد للجرد الافتتاحي",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            BarcodeTextField(
+                                value = newProdBarcode,
+                                onValueChange = onNewProdBarcodeChange,
+                                label = "رمز الباركود (مسح أو إدخال)",
+                                placeholder = "امسح الباركود بالكاميرا أو اكتبه...",
+                                onBarcodeScanned = { scannedCode -> onNewProdBarcodeChange(scannedCode) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = newProdName,
+                                    onValueChange = onNewProdNameChange,
+                                    label = { Text("اسم الصنف *") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                OutlinedTextField(
+                                    value = newProdQty,
+                                    onValueChange = onNewProdQtyChange,
+                                    label = { Text("الكمية *") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(0.6f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = newProdCost,
+                                    onValueChange = onNewProdCostChange,
+                                    label = { Text("التكلفة") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                OutlinedTextField(
+                                    value = newProdPrice,
+                                    onValueChange = onNewProdPriceChange,
+                                    label = { Text("سعر البيع") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                UnitDropdownSelector(
+                                    selectedUnit = newProdUnit,
+                                    onUnitSelected = onNewProdUnitChange,
+                                    label = "الوحدة *",
+                                    availableUnitsList = availableUnitsList.ifEmpty { listOf("حبة/قطعة", "حبة", "كرتون", "كيلو", "درزن", "صندوق", "سحارة", "ربطة", "عبوة", "باكيت", "طرد", "جرام", "لتر", "متر", "شوال") },
+                                    onAddNewUnitClick = { showAddUnitDialog = true },
+                                    modifier = Modifier.weight(0.8f)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Button(
+                                onClick = onAddItem,
+                                enabled = (newProdName.isNotBlank() || newProdBarcode.isNotBlank()) && (newProdQty.toDoubleOrNull() ?: 0.0) > 0,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("إضافة الصنف للجرد", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(value = newProdCost, onValueChange = onNewProdCostChange, label = { Text("التكلفة") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = newProdPrice, onValueChange = onNewProdPriceChange, label = { Text("سعر البيع") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = onAddItem,
-                        enabled = newProdName.isNotBlank() && (newProdQty.toDoubleOrNull() ?: 0.0) > 0,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Text("إضافة الصنف للجرد")
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    openingItems.forEach { item ->
-                        Card(
+
+                    if (openingItems.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                .padding(vertical = 12.dp)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(12.dp)
-                                    .fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Column {
-                                    Text(item.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                                    Text("كمية: ${item.quantity} - تكلفة: ${item.costPrice} $currencySymbol", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                IconButton(onClick = { onRemoveItem(item) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("لم يتم إضافة أصناف لجرد أول المدة بعد", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "أصناف بضاعة أول المدة المسجلة (${openingItems.size}):",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+
+                        openingItems.forEach { item ->
+                            val itemQtyStr = if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else "%.2f".format(item.quantity)
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(item.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                                            if (item.barcode.isNotBlank()) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                                ) {
+                                                    Text(
+                                                        text = item.barcode,
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            text = "كمية: $itemQtyStr ${item.unitName} | تكلفة: ${item.costPrice} $currencySymbol | إجمالي: ${"%.2f".format(item.quantity * item.costPrice)} $currencySymbol",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    IconButton(onClick = { onRemoveItem(item) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "حذف الصنف", tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                         }
@@ -1761,6 +2721,8 @@ private fun StepCompletionScreen(
     propertyStatus: PropertyStatus,
     monthlyRent: String,
     prepaidMonths: String,
+    leaseholdAmount: String,
+    leaseholdYears: String,
     isSubmitting: Boolean,
     onLaunchSystem: () -> Unit
 ) {
@@ -1768,7 +2730,8 @@ private fun StepCompletionScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 16.dp),
+            .padding(vertical = 16.dp)
+            .navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -1837,6 +2800,13 @@ private fun StepCompletionScreen(
                         label = "حالة العقار والإيجار:",
                         value = if (propertyStatus == PropertyStatus.OWNED) "مملوك للمتجر" else "مستأجر ($prepaidMonths أشهر مدفوعة)"
                     )
+                    if ((leaseholdAmount.toDoubleOrNull() ?: 0.0) > 0.0) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        SummaryRow(
+                            label = "نقل قدم (خلو) / حق الانتفاع:",
+                            value = "$leaseholdAmount $currencySymbol ($leaseholdYears سنوات)"
+                        )
+                    }
                 }
             }
         }

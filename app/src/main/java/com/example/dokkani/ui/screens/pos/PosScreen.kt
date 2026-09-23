@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -37,7 +38,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.example.dokkani.ui.components.BarcodeTextField
+import com.example.dokkani.ui.components.PaymentMethodSelector
 import com.example.dokkani.ui.components.ProductSortSelector
+import com.example.dokkani.ui.components.ShiftStatusBar
+import com.example.dokkani.ui.components.ShiftBottomStatusBar
+import com.example.dokkani.ui.components.CashDrawerBreakdownDialog
+import com.example.dokkani.ui.components.BankWalletsBreakdownDialog
 import com.example.dokkani.ui.models.sortProducts
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.PartyEntity
@@ -54,6 +60,9 @@ fun PosScreen(
     currentUserRole: UserRole = UserRole.ADMIN
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    var showCashBreakdownDialog by remember { mutableStateOf(false) }
+    var showBankBreakdownDialog by remember { mutableStateOf(false) }
 
     var showAddPartyDialog by remember { mutableStateOf(false) }
     var newPartyName by remember { mutableStateOf("") }
@@ -79,12 +88,19 @@ fun PosScreen(
                 }
             }
         ) { paddingValues ->
-            BoxWithConstraints(
+            @OptIn(ExperimentalMaterial3Api::class)
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = { viewModel.refreshData() },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .background(MaterialTheme.colorScheme.background)
             ) {
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
                 val isCompact = maxWidth < 700.dp
 
                 Column(
@@ -193,7 +209,7 @@ fun PosScreen(
                             }
                         }
 
-                        // أزرار وصول سريع ملائمة: مطابقة/إغلاق الشفت والسجلات
+                        // أزرار وصول سريع ملائمة: فاتورة جديدة والسجلات
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -201,7 +217,7 @@ fun PosScreen(
                             // زر فاتورة جديدة السريع
                             Button(
                                 onClick = { viewModel.startNewInvoice() },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 modifier = Modifier.height(34.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
@@ -211,55 +227,16 @@ fun PosScreen(
                                 Text("فاتورة جديدة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
 
-                            // زر ملخص الشفت المدمج
-                            Surface(
+                            // زر ملخص وتقارير الشفت
+                            IconButton(
                                 onClick = { showShiftSummaryModal = true },
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                                modifier = Modifier.size(34.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.AccountBalanceWallet,
-                                        contentDescription = "تفاصيل الشفت",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "الشفت",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Surface(
-                                        color = Color(0xFF1B5E20),
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text(
-                                            text = "%.2f %s".format(uiState.shiftTotalSales, uiState.currencySymbol),
-                                            color = Color.White,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.openShiftCloseDialog() },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(34.dp),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("إغلاق الشفت", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Icon(
+                                    Icons.Default.Analytics,
+                                    contentDescription = "ملخص وتقارير الشفت",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
 
                             IconButton(
@@ -281,7 +258,19 @@ fun PosScreen(
                         )
                     }
 
-                    // 2. جسم الشاشة الرئيسي: يستهلك المساحة المتاحة بالكامل دون قص أو اختفاء
+                    // 2. كرت الشفت مثبت في مكانه الصحيح (بين قسم الفواتير والسندات بالأعلى، وبين قسم الأصناف والسلة بالأسفل)
+                    ShiftStatusBar(
+                        currentShift = uiState.currentShift,
+                        cashInDrawer = uiState.cashInDrawer,
+                        financialAccounts = uiState.financialAccounts,
+                        currencySymbol = uiState.currencySymbol,
+                        onOpenCashBreakdown = { showCashBreakdownDialog = true },
+                        onOpenBankBreakdown = { showBankBreakdownDialog = true },
+                        onOpenShiftCloseDialog = { viewModel.openShiftCloseDialog() },
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+
+                    // 3. جسم الشاشة الرئيسي: يستهلك المساحة المتاحة بالكامل دون قص أو اختفاء
                     if (uiState.activeOperation.isVoucher) {
                         // وضع السندات المالية (قبض / صرف)
                         PosVoucherSection(
@@ -442,7 +431,30 @@ fun PosScreen(
                 }
             )
         }
+
+        // نافذة تفاصيل عهدة الصندوق والدرج الكاش
+        if (showCashBreakdownDialog) {
+            CashDrawerBreakdownDialog(
+                shift = uiState.currentShift,
+                currencySymbol = uiState.currencySymbol,
+                onDismiss = { showCashBreakdownDialog = false },
+                onOpenShiftClose = { viewModel.openShiftCloseDialog() },
+                onRefresh = { viewModel.refreshData() }
+            )
+        }
+
+        // نافذة تفاصيل حركة البنوك والمحافظ والشبكات
+        if (showBankBreakdownDialog) {
+            BankWalletsBreakdownDialog(
+                shift = uiState.currentShift,
+                financialAccounts = uiState.financialAccounts,
+                currencySymbol = uiState.currencySymbol,
+                onDismiss = { showBankBreakdownDialog = false },
+                onRefresh = { viewModel.refreshData() }
+            )
+        }
     }
+}
 }
 
 /**
@@ -1151,32 +1163,17 @@ private fun PosCartPanel(
 
             Divider(modifier = Modifier.padding(vertical = 6.dp))
 
-            // طريقة السداد (نقداً، آجل، شبكة)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("طريقة الدفع:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(
-                        selected = uiState.paymentMethod == PaymentMethod.CASH,
-                        onClick = { viewModel.setPaymentMethod(PaymentMethod.CASH) },
-                        label = { Text("نقداً", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = uiState.paymentMethod == PaymentMethod.CREDIT,
-                        onClick = { viewModel.setPaymentMethod(PaymentMethod.CREDIT) },
-                        label = { Text("آجل (حساب)", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = uiState.paymentMethod == PaymentMethod.MADA,
-                        onClick = { viewModel.setPaymentMethod(PaymentMethod.MADA) },
-                        label = { Text("شبكة", fontSize = 11.sp) }
-                    )
-                }
-            }
+            // طريقة السداد وإدارة الحسابات البنكية والمحافظ
+            PaymentMethodSelector(
+                selectedMethod = uiState.paymentMethod,
+                onMethodSelected = { viewModel.setPaymentMethod(it) },
+                financialAccounts = uiState.financialAccounts,
+                selectedAccountId = uiState.selectedPaymentAccountId,
+                onAccountSelected = { viewModel.setSelectedPaymentAccount(it) },
+                transactionRef = uiState.paymentTransactionRef,
+                onTransactionRefChange = { viewModel.setPaymentTransactionRef(it) },
+                currencySymbol = uiState.currencySymbol
+            )
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -1855,32 +1852,17 @@ private fun PosInvoiceSectionOld(
 
                 Divider(modifier = Modifier.padding(vertical = 6.dp))
 
-                // طريقة السداد (نقداً، آجل، شبكة)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("طريقة الدفع:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(
-                            selected = uiState.paymentMethod == PaymentMethod.CASH,
-                            onClick = { viewModel.setPaymentMethod(PaymentMethod.CASH) },
-                            label = { Text("نقداً", fontSize = 11.sp) }
-                        )
-                        FilterChip(
-                            selected = uiState.paymentMethod == PaymentMethod.CREDIT,
-                            onClick = { viewModel.setPaymentMethod(PaymentMethod.CREDIT) },
-                            label = { Text("آجل (حساب)", fontSize = 11.sp) }
-                        )
-                        FilterChip(
-                            selected = uiState.paymentMethod == PaymentMethod.MADA,
-                            onClick = { viewModel.setPaymentMethod(PaymentMethod.MADA) },
-                            label = { Text("شبكة", fontSize = 11.sp) }
-                        )
-                    }
-                }
+                // طريقة السداد وإدارة الحسابات البنكية والمحافظ
+                PaymentMethodSelector(
+                    selectedMethod = uiState.paymentMethod,
+                    onMethodSelected = { viewModel.setPaymentMethod(it) },
+                    financialAccounts = uiState.financialAccounts,
+                    selectedAccountId = uiState.selectedPaymentAccountId,
+                    onAccountSelected = { viewModel.setSelectedPaymentAccount(it) },
+                    transactionRef = uiState.paymentTransactionRef,
+                    onTransactionRefChange = { viewModel.setPaymentTransactionRef(it) },
+                    currencySymbol = uiState.currencySymbol
+                )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -2212,36 +2194,23 @@ private fun PosVoucherSection(
                 }
 
                 // طريقة السداد والبيان
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("طريقة التحصيل / الدفع:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(
-                                selected = uiState.voucherPaymentMethod == PaymentMethod.CASH,
-                                onClick = { viewModel.updateVoucherPaymentMethod(PaymentMethod.CASH) },
-                                label = { Text("نقداً من الصندوق", fontSize = 11.sp) },
-                                leadingIcon = { Icon(Icons.Default.Money, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            )
-                            FilterChip(
-                                selected = uiState.voucherPaymentMethod == PaymentMethod.MADA,
-                                onClick = { viewModel.updateVoucherPaymentMethod(PaymentMethod.MADA) },
-                                label = { Text("شبكة مدى", fontSize = 11.sp) },
-                                leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            )
-                            FilterChip(
-                                selected = uiState.voucherPaymentMethod == PaymentMethod.BANK_TRANSFER,
-                                onClick = { viewModel.updateVoucherPaymentMethod(PaymentMethod.BANK_TRANSFER) },
-                                label = { Text("تحويل بنكي", fontSize = 11.sp) },
-                                leadingIcon = { Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            )
-                        }
-                    }
+                    PaymentMethodSelector(
+                        selectedMethod = uiState.voucherPaymentMethod,
+                        onMethodSelected = { viewModel.updateVoucherPaymentMethod(it) },
+                        financialAccounts = uiState.financialAccounts,
+                        selectedAccountId = uiState.selectedPaymentAccountId,
+                        onAccountSelected = { viewModel.setSelectedPaymentAccount(it) },
+                        transactionRef = uiState.paymentTransactionRef,
+                        onTransactionRefChange = { viewModel.setPaymentTransactionRef(it) },
+                        allowCredit = false,
+                        currencySymbol = uiState.currencySymbol
+                    )
 
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Text("البيان والملاحظات:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Spacer(modifier = Modifier.height(4.dp))
                         OutlinedTextField(

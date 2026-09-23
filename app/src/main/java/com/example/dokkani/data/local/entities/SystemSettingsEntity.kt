@@ -4,6 +4,22 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
+ * خيارات نوع وطبيعة كلمة المرور والرمز السري
+ */
+enum class PasswordType(val labelArabic: String, val description: String) {
+    NUMERIC_PIN("أرقام فقط (PIN)", "رمز مكون من أرقام فقط (4 أو 6 أرقام) مع إمكانية الدخول التلقائي بدون زر موافقة"),
+    ALPHANUMERIC("أرقام وحروف ورموز (Alphanumeric)", "كلمة مرور مركبة تتكون من أرقام وحروف ورموز مع تحديد الحد الأدنى والقصوى للطول وزر دخول")
+}
+
+/**
+ * خيارات حساب سعر التكلفة/البيع للعملة الأجنبية
+ */
+enum class ForeignCurrencyPricingMode(val labelArabic: String, val description: String) {
+    SALE_DATE("تاريخ البيع (الافتراضي)", "احتساب سعر الصنف بالعملة المحلية وفقاً بسعر الصرف اليومي السائد عند البيع"),
+    PURCHASE_DATE("تاريخ الشراء", "احتساب سعر الصنف بالعملة المحلية وفقاً بسعر الصرف التاريخي المسجل بالفاتورة أثناء الشراء")
+}
+
+/**
  * جدول إعدادات النظام (System_Settings)
  * يخزن إعدادات برنامج "دكاني"، وبشكل أساسي طريقة تقييم التكلفة المحاسبية المعتمدة
  * (المتوسط المرجح WAC / الوارد أولاً صادر أولاً FIFO / آخر سعر شراء Last Purchase Price)
@@ -19,6 +35,15 @@ data class SystemSettingsEntity(
     val showPreviousBalanceOnInvoice: Boolean = true,     // خيار تفعيل/إلغاء إظهار الرصيد السابق في طباعة الفواتير الآجلة
     val costValuationMethod: CostValuationMethod = CostValuationMethod.WAC, // طريقة التقييم المحاسبي المعتمدة
     val defaultCurrencyCode: String = "YER",               // العملة الافتراضية للفواتير
+    val foreignCurrencyPricingMode: ForeignCurrencyPricingMode = ForeignCurrencyPricingMode.SALE_DATE, // خيار حساب سعر الصنف الأجنبي (الافتراضي: تاريخ البيع)
+    val enableDailyExchangeRatePrompt: Boolean = true,     // جعل شاشة/تحديث الصرف اليومي هو الخيار الافتراضي
+    val enableAutoLock: Boolean = true,                    // تفعيل قفل الشاشة التلقائي بعد فترة عدم نشاط
+    val autoLockSeconds: Int = 120,                        // المهلة الزمنية قبل قفل الشاشة التلقائي بالثواني (افتراضي 120 ثانية)
+    val passwordType: PasswordType = PasswordType.NUMERIC_PIN, // نوع كلمة المرور: أرقام فقط (PIN) أو أرقام وحروف ورموز
+    val pinLength: Int = 4,                                // طول الـ PIN عند اختيار أرقام فقط (4 أو 6 أرقام)
+    val enableAutoSubmitPin: Boolean = true,               // الدخول التلقائي فور إدخال الرقم السري بدون الحاجة لضغط زر "دخول"
+    val minPasswordLength: Int = 8,                        // الحد الأدنى لطول كلمة المرور عند اختيار Alphanumeric (8 خانات)
+    val maxPasswordLength: Int = 16,                       // الحد الأقصى لطول كلمة المرور عند اختيار Alphanumeric (16 خانة)
     val initialCapital: Double = 0.0,                      // رأس المال الافتتاحي المعتمد في معالج التهيئة
     val openingCashDrawer: Double = 0.0,                   // نقدية الصندوق والدرج الافتتاحية المعتمدة في معالج التهيئة
     val initialBankBalance: Double = 0.0,                  // الرصيد البنكي الافتتاحي في معالج التهيئة

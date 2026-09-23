@@ -49,6 +49,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+import com.example.dokkani.data.local.dao.EmployeeDao
+import com.example.dokkani.data.local.dao.EmployeeAttendanceDao
+import com.example.dokkani.data.local.dao.EmployeeTransactionDao
+import com.example.dokkani.data.local.dao.PayrollRecordDao
+import com.example.dokkani.data.local.dao.SalaryAdjustmentLogDao
+import com.example.dokkani.data.local.entities.EmployeeEntity
+import com.example.dokkani.data.local.entities.EmployeeAttendanceEntity
+import com.example.dokkani.data.local.entities.EmployeeTransactionEntity
+import com.example.dokkani.data.local.entities.PayrollRecordEntity
+import com.example.dokkani.data.local.entities.SalaryAdjustmentLogEntity
+
+import com.example.dokkani.data.local.dao.AuditLogDao
+import com.example.dokkani.data.local.entities.AuditLogEntity
+
 /**
  * قاعدة البيانات الرئيسية لنظام دكاني (Dokkani Database)
  */
@@ -72,9 +86,15 @@ import kotlinx.coroutines.launch
         FixedAssetEntity::class,
         OwnerTransactionEntity::class,
         LeaseholdRightEntity::class,
-        FinancialAccountEntity::class
+        FinancialAccountEntity::class,
+        EmployeeEntity::class,
+        EmployeeAttendanceEntity::class,
+        EmployeeTransactionEntity::class,
+        PayrollRecordEntity::class,
+        SalaryAdjustmentLogEntity::class,
+        AuditLogEntity::class
     ],
-    version = 9,
+    version = 14,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -96,6 +116,12 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun ownerTransactionDao(): OwnerTransactionDao
     abstract fun leaseholdRightDao(): LeaseholdRightDao
     abstract fun financialAccountDao(): FinancialAccountDao
+    abstract fun employeeDao(): EmployeeDao
+    abstract fun employeeAttendanceDao(): EmployeeAttendanceDao
+    abstract fun employeeTransactionDao(): EmployeeTransactionDao
+    abstract fun payrollRecordDao(): PayrollRecordDao
+    abstract fun salaryAdjustmentLogDao(): SalaryAdjustmentLogDao
+    abstract fun auditLogDao(): AuditLogDao
 
     companion object {
         @Volatile
@@ -263,6 +289,17 @@ abstract class DokkaniDatabase : RoomDatabase() {
                             openingBalance = 0.0,
                             currentBalance = 0.0,
                             notes = "محفظة دفع رقمية"
+                        ),
+                        FinancialAccountEntity(
+                            code = "10501",
+                            name = "أصول غير ملموسة - خلو قدم / نقل موقع متجر",
+                            accountType = FinancialAccountType.CHART_ACCOUNT,
+                            parentAccountCode = "105",
+                            parentAccountName = "105 - الأصول الثابتة غير الملموسة (خلو رجل / نقل قدم)",
+                            accountNumber = "INTANGIBLE-GW01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب الأصول غير الملموسة المعني بتسجيل مبالغ الخلو ونقل القدم وحقوق الانتفاع"
                         )
                     )
                 )

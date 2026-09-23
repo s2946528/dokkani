@@ -15,6 +15,9 @@ interface OwnerTransactionDao {
     @Query("SELECT * FROM owner_transactions ORDER BY date DESC")
     fun getAllTransactions(): Flow<List<OwnerTransactionEntity>>
 
+    @Query("SELECT * FROM owner_transactions ORDER BY date DESC")
+    suspend fun getAllTransactionsSync(): List<OwnerTransactionEntity>
+
     @Query("SELECT * FROM owner_transactions WHERE type = :type ORDER BY date DESC")
     fun getTransactionsByType(type: OwnerTransactionType): Flow<List<OwnerTransactionEntity>>
 

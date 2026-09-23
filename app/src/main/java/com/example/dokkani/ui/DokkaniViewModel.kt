@@ -31,6 +31,18 @@ import com.example.dokkani.data.local.entities.UserEntity
 import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.domain.cash.CashDrawerEngine
 import com.example.dokkani.domain.cash.CashReconciliationResult
+import com.example.dokkani.data.local.entities.AttendanceStatus
+import com.example.dokkani.data.local.entities.EmployeeAttendanceEntity
+import com.example.dokkani.data.local.entities.EmployeeEntity
+import com.example.dokkani.data.local.entities.EmployeeTransactionEntity
+import com.example.dokkani.data.local.entities.EmployeeTransactionType
+import com.example.dokkani.data.local.entities.EmploymentType
+import com.example.dokkani.data.local.entities.PayrollRecordEntity
+import com.example.dokkani.data.local.entities.SalaryAdjustmentLogEntity
+import com.example.dokkani.data.local.entities.PayrollStatus
+import com.example.dokkani.domain.hr.HrPayrollEngine
+import java.util.Calendar
+import com.example.dokkani.domain.cash.ExpenseCategories
 import com.example.dokkani.domain.credit.CreditNotebookEngine
 import com.example.dokkani.domain.credit.CustomerStatementSummary
 import com.example.dokkani.domain.reports.FinancialReportsEngine
@@ -124,6 +136,7 @@ enum class PropertyStatus {
 data class DokkaniUiState(
     val selectedTab: Int = 0,
     val products: List<ProductWithUnits> = emptyList(),
+    val allUnits: List<ProductUnitEntity> = emptyList(),
     val parties: List<PartyEntity> = emptyList(),
     val expenses: List<ExpenseEntity> = emptyList(),
     val cashShifts: List<CashShiftEntity> = emptyList(),
@@ -147,6 +160,11 @@ data class DokkaniUiState(
     val drawerPhysicalCashInput: String = "",
     val drawerShiftNotesInput: String = "",
     val isClosingShift: Boolean = false,
+    val showSettlementDialog: Boolean = false,
+    val selectedShiftForSettlement: CashShiftEntity? = null,
+    val settlementActionType: String = "EXPENSE", // "EXPENSE", "WAIVED", "STAFF_CUSTODY", "EXTRA_INCOME"
+    val settlementNotesInput: String = "",
+    val isSubmittingSettlement: Boolean = false,
 
     // Credit Ledger
     val creditSearchQuery: String = "",
@@ -225,7 +243,45 @@ data class DokkaniUiState(
     val accountDeletionBlockedDialog: AccountUsageCheckResult? = null,
     val accountToDelete: FinancialAccountEntity? = null,
     val accountsSearchQuery: String = "",
-    val accountsFilterType: FinancialAccountType? = null
+    val accountsFilterType: FinancialAccountType? = null,
+
+    // HR & Payroll (إدارة العمال والموظفين والرواتب)
+    val employees: List<EmployeeEntity> = emptyList(),
+    val employeeAttendances: List<EmployeeAttendanceEntity> = emptyList(),
+    val employeeTransactions: List<EmployeeTransactionEntity> = emptyList(),
+    val payrollRecords: List<PayrollRecordEntity> = emptyList(),
+    val salaryAdjustmentLogs: List<SalaryAdjustmentLogEntity> = emptyList(),
+    val hrSubTab: Int = 0,
+    val showAddEmployeeDialog: Boolean = false,
+    val editingEmployee: EmployeeEntity? = null,
+    val empNameInput: String = "",
+    val empPhoneInput: String = "",
+    val empAddressInput: String = "",
+    val empNationalIdInput: String = "",
+    val empJobTitleInput: String = "كاشير",
+    val empEmploymentType: EmploymentType = EmploymentType.MONTHLY_SALARY,
+    val empBasePayRateInput: String = "",
+    val showAttendanceDialog: Boolean = false,
+    val selectedEmployeeForAttendance: EmployeeEntity? = null,
+    val attendanceStatusInput: AttendanceStatus = AttendanceStatus.PRESENT,
+    val attendanceOvertimeInput: String = "0.0",
+    val attendanceNotesInput: String = "",
+    val showHrTransactionDialog: Boolean = false,
+    val selectedEmployeeForTrans: EmployeeEntity? = null,
+    val hrTransTypeInput: EmployeeTransactionType = EmployeeTransactionType.ADVANCE,
+    val hrTransAmountInput: String = "",
+    val hrTransNotesInput: String = "",
+    val hrTransPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val showAdjustSalaryDialog: Boolean = false,
+    val selectedEmployeeForSalaryAdjust: EmployeeEntity? = null,
+    val newBasePayRateInput: String = "",
+    val salaryAdjustReasonInput: String = "",
+    val showEmployeeDocumentDialog: Boolean = false,
+    val selectedEmployeeForDocuments: EmployeeEntity? = null,
+    val isSubmittingHrAction: Boolean = false,
+    val selectedPayrollMonth: Int = Calendar.getInstance().get(Calendar.MONTH) + 1,
+    val selectedPayrollYear: Int = Calendar.getInstance().get(Calendar.YEAR),
+    val hrActionErrorMessage: String? = null
 ) {
     val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.ي"
     val currencyName: String get() = baseCurrency?.name ?: "الريال اليمني"
@@ -260,6 +316,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun observeData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.productDao().getAllUnitsFlow().collectLatest { units ->
+                _uiState.update { it.copy(allUnits = units) }
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             db.productDao().getProductsWithUnits().collectLatest { products ->
                 _uiState.update { it.copy(products = products) }
@@ -302,6 +363,33 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             repository.baseCurrencyFlow.collectLatest { baseCurr ->
                 _uiState.update { it.copy(baseCurrency = baseCurr) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.employeeDao().getAllEmployees().collectLatest { employees ->
+                _uiState.update { it.copy(employees = employees) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val thirtyDaysAgo = now - (30L * 24 * 3600 * 1000)
+            db.employeeAttendanceDao().getAttendanceByDateRange(thirtyDaysAgo, now + (24L * 3600 * 1000)).collectLatest { attendances ->
+                _uiState.update { it.copy(employeeAttendances = attendances) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.employeeTransactionDao().getAllTransactions().collectLatest { trans ->
+                _uiState.update { it.copy(employeeTransactions = trans) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.payrollRecordDao().getAllPayrollRecords().collectLatest { records ->
+                _uiState.update { it.copy(payrollRecords = records) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.salaryAdjustmentLogDao().getAllLogs().collectLatest { logs ->
+                _uiState.update { it.copy(salaryAdjustmentLogs = logs) }
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -483,12 +571,43 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch(Dispatchers.IO) {
             val openShift = getOrCreateOpenShift(db.cashShiftDao())
+            val startTime = openShift.startTime
+            val endTime = System.currentTimeMillis()
+
+            // استعلام دقيق بكافة العمليات النقدية المسجلة خلال فترة الشفت
+            val invoices = db.invoiceDao().getAllInvoicesSync().filter { it.date >= startTime }
+            val vouchers = db.paymentVoucherDao().getAllVouchersSync().filter { it.date >= startTime }
+            val expenses = db.expenseDao().getExpensesByDateRangeSync(startTime, endTime)
+            val ownerTrans = db.ownerTransactionDao().getAllTransactionsSync().filter { it.date >= startTime }
+
+            val cashSales = invoices.filter { it.type == InvoiceType.SALE && it.paymentMethod == PaymentMethod.CASH }.map { it.paidAmount }
+            val cashCollections = vouchers.filter { !it.isPayment && it.paymentMethod == PaymentMethod.CASH }.map { it.amount }
+
+            val operationalExpenses = expenses.filter { 
+                it.paymentMethod == PaymentMethod.CASH && 
+                it.category != ExpenseCategories.OWNER_DRAWINGS && 
+                it.category != ExpenseCategories.STAFF_ADVANCES 
+            }.map { it.amount }
+
+            val supplierPayments = vouchers.filter { it.isPayment && it.paymentMethod == PaymentMethod.CASH }.map { it.amount }
+            val cashPurchases = invoices.filter { it.type == InvoiceType.PURCHASE && it.paymentMethod == PaymentMethod.CASH }.map { it.paidAmount }
+
+            val ownerDrawings = ownerTrans.filter { it.type == OwnerTransactionType.CASH_DRAWING && it.paymentMethod == PaymentMethod.CASH }.map { it.amount } +
+                    expenses.filter { it.paymentMethod == PaymentMethod.CASH && it.category == ExpenseCategories.OWNER_DRAWINGS }.map { it.amount }
+
+            val staffAdvances = expenses.filter { it.paymentMethod == PaymentMethod.CASH && it.category == ExpenseCategories.STAFF_ADVANCES }.map { it.amount }
+
+            val openingCash = state.drawerOpeningCashInput.toDoubleOrNull() ?: openShift.openingCash
 
             val res = CashDrawerEngine.calculateReconciliation(
-                openingCash = openShift.openingCash,
-                cashSales = listOf(openShift.totalCashSales),
-                cashCollections = listOf(openShift.totalCashCollections),
-                cashExpenses = listOf(openShift.totalCashExpenses),
+                openingCash = openingCash,
+                cashSales = if (cashSales.isNotEmpty()) cashSales else listOf(openShift.totalCashSales),
+                cashCollections = if (cashCollections.isNotEmpty()) cashCollections else listOf(openShift.totalCashCollections),
+                cashExpenses = if (operationalExpenses.isNotEmpty()) operationalExpenses else listOf(openShift.totalCashExpenses),
+                supplierPayments = if (supplierPayments.isNotEmpty()) supplierPayments else listOf(openShift.totalSupplierPayments),
+                cashPurchases = if (cashPurchases.isNotEmpty()) cashPurchases else listOf(openShift.totalCashPurchases),
+                ownerDrawings = if (ownerDrawings.isNotEmpty()) ownerDrawings else listOf(openShift.totalOwnerDrawings),
+                staffAdvances = if (staffAdvances.isNotEmpty()) staffAdvances else listOf(openShift.totalStaffAdvances),
                 actualPhysicalCash = physical
             )
             _uiState.update { it.copy(reconciliationResult = res) }
@@ -503,28 +622,141 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isClosingShift = true) }
+            val openShift = getOrCreateOpenShift(db.cashShiftDao())
             val now = System.currentTimeMillis()
-            val shift = CashShiftEntity(
-                shiftNumber = "SHF-${now.toString().takeLast(6)}",
-                cashierName = "كاشير النظام",
-                startTime = now - (8 * 3600000L),
+            val closedShift = openShift.copy(
                 endTime = now,
                 openingCash = opening,
                 totalCashSales = recon.totalCashSales,
                 totalCashCollections = recon.totalCashCollections,
                 totalCashExpenses = recon.totalCashExpenses,
+                totalSupplierPayments = recon.totalSupplierPayments,
+                totalCashPurchases = recon.totalCashPurchases,
+                totalOwnerDrawings = recon.totalOwnerDrawings,
+                totalStaffAdvances = recon.totalStaffAdvances,
                 expectedCashInDrawer = recon.expectedCashInDrawer,
                 actualPhysicalCash = physical,
                 cashDiscrepancy = recon.discrepancy,
                 notes = state.drawerShiftNotesInput,
                 status = "CLOSED"
             )
-            db.cashShiftDao().insertShift(shift)
+            db.cashShiftDao().updateShift(closedShift)
             _uiState.update {
                 it.copy(
                     isClosingShift = false,
                     drawerPhysicalCashInput = "",
                     drawerShiftNotesInput = ""
+                )
+            }
+        }
+    }
+
+    // --- تسوية المدير للفروقات والجرد (Manager Discrepancy Settlement) ---
+    fun openShiftSettlementDialog(shift: CashShiftEntity) {
+        val defaultAction = if (shift.cashDiscrepancy < 0) "EXPENSE" else "EXTRA_INCOME"
+        _uiState.update {
+            it.copy(
+                showSettlementDialog = true,
+                selectedShiftForSettlement = shift,
+                settlementActionType = defaultAction,
+                settlementNotesInput = ""
+            )
+        }
+    }
+
+    fun dismissShiftSettlementDialog() {
+        _uiState.update {
+            it.copy(
+                showSettlementDialog = false,
+                selectedShiftForSettlement = null,
+                settlementNotesInput = ""
+            )
+        }
+    }
+
+    fun updateSettlementInputs(actionType: String, notes: String) {
+        _uiState.update {
+            it.copy(
+                settlementActionType = actionType,
+                settlementNotesInput = notes
+            )
+        }
+    }
+
+    fun submitShiftSettlement() {
+        val state = _uiState.value
+        val shift = state.selectedShiftForSettlement ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingSettlement = true) }
+
+            val action = state.settlementActionType
+            val notes = state.settlementNotesInput.ifBlank { "تمت التسوية بواسطة المدير" }
+            val amount = kotlin.math.abs(shift.cashDiscrepancy)
+
+            when (action) {
+                "EXPENSE" -> {
+                    // تحويل العجز لحساب المصروفات التشغيلية (نثريات وفروقات درج)
+                    if (amount > 0) {
+                        val exp = ExpenseEntity(
+                            expenseNumber = "EXP-SETTLE-${shift.id}",
+                            category = ExpenseCategories.CASH_SHORTAGE,
+                            amount = amount,
+                            paymentMethod = PaymentMethod.CASH,
+                            paidTo = "تسوية عجز درج",
+                            notes = "تسوية عجز شفت ${shift.shiftNumber}: $notes"
+                        )
+                        db.expenseDao().insertExpense(exp)
+                    }
+                    db.cashShiftDao().updateSettlement(
+                        id = shift.id,
+                        status = "SETTLED_EXPENSE",
+                        notes = notes
+                    )
+                }
+                "STAFF_CUSTODY" -> {
+                    // خصم العجز كعهدة/سلفة على الموظف الكاشير
+                    if (amount > 0) {
+                        val exp = ExpenseEntity(
+                            expenseNumber = "ADV-SETTLE-${shift.id}",
+                            category = ExpenseCategories.STAFF_ADVANCES,
+                            amount = amount,
+                            paymentMethod = PaymentMethod.CASH,
+                            paidTo = shift.cashierName,
+                            notes = "خصم عجز شفت ${shift.shiftNumber} على الكاشير: $notes"
+                        )
+                        db.expenseDao().insertExpense(exp)
+                    }
+                    db.cashShiftDao().updateSettlement(
+                        id = shift.id,
+                        status = "SETTLED_STAFF",
+                        notes = notes
+                    )
+                }
+                "WAIVED" -> {
+                    // إلغاء/تسوية الفارق كخطأ قيد أو وجود سند غير مسجل
+                    db.cashShiftDao().updateSettlement(
+                        id = shift.id,
+                        status = "WAIVED",
+                        notes = notes
+                    )
+                }
+                "EXTRA_INCOME" -> {
+                    // تقييد الزيادة كإيراد صندوق متنوع
+                    db.cashShiftDao().updateSettlement(
+                        id = shift.id,
+                        status = "SETTLED_SURPLUS",
+                        notes = notes
+                    )
+                }
+            }
+
+            _uiState.update {
+                it.copy(
+                    isSubmittingSettlement = false,
+                    showSettlementDialog = false,
+                    selectedShiftForSettlement = null,
+                    settlementNotesInput = ""
                 )
             }
         }
@@ -1003,6 +1235,61 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateForeignCurrencyPricingMode(mode: com.example.dokkani.data.local.entities.ForeignCurrencyPricingMode) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                foreignCurrencyPricingMode = mode,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
+    fun updateEnableDailyExchangeRatePrompt(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                enableDailyExchangeRatePrompt = enabled,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
+    fun updateAutoLockSettings(enabled: Boolean, autoLockSeconds: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                enableAutoLock = enabled,
+                autoLockSeconds = autoLockSeconds,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
+    fun updatePasswordPolicySettings(
+        passwordType: com.example.dokkani.data.local.entities.PasswordType,
+        pinLength: Int,
+        enableAutoSubmitPin: Boolean,
+        minPasswordLength: Int,
+        maxPasswordLength: Int
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+            val updated = currentSettings.copy(
+                passwordType = passwordType,
+                pinLength = pinLength,
+                enableAutoSubmitPin = enableAutoSubmitPin,
+                minPasswordLength = minPasswordLength,
+                maxPasswordLength = maxPasswordLength,
+                lastUpdated = System.currentTimeMillis()
+            )
+            db.systemSettingsDao().insertOrUpdateSettings(updated)
+        }
+    }
+
     fun deleteInvoice(invoiceId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {
@@ -1110,6 +1397,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         propertyStatus: PropertyStatus = PropertyStatus.OWNED,
         monthlyRent: Double = 0.0,
         prepaidMonths: Int = 0,
+        leaseholdAmount: Double = 0.0,
+        leaseholdYears: Int = 5,
+        leaseholdNotes: String = "",
         fixedAssets: List<FixedAssetInput> = emptyList(),
         openingItems: List<OpeningBalanceItem> = emptyList(),
         openingCustomers: List<OpeningBalanceCustomer> = emptyList(),
@@ -1232,6 +1522,48 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                             notes = "إيجار شهري قدره $monthlyRent لمدة $prepaidMonths أشهر"
                         )
                     )
+                }
+
+                // 5.b تسجيل خلو القدم / نقل موقع المتجر كأصل غير ملموس بالدليل المحاسبي وتوليد القيد الافتتاحي
+                if (leaseholdAmount > 0.0) {
+                    db.leaseholdRightDao().insertLeaseholdRight(
+                        LeaseholdRightEntity(
+                            code = "GW-INIT-${SimpleDateFormat("yyyyMM", Locale.getDefault()).format(Date(now))}",
+                            name = "خلو رجل / نقل قدم الموقع التجاري",
+                            initialCost = leaseholdAmount,
+                            currentBookValue = leaseholdAmount,
+                            accumulatedAmortization = 0.0,
+                            contractStartDate = now,
+                            contractDurationYears = leaseholdYears.coerceAtLeast(1),
+                            status = "ACTIVE",
+                            notes = leaseholdNotes.ifBlank { "حق انتفاع ونقل قدم مسدد عند تأسيس/تهيئة المتجر" }
+                        )
+                    )
+
+                    // ربط وتحديث حساب الخلو برمز 10501 في الدليل المحاسبي (Chart of Accounts)
+                    val leaseholdAccount = db.financialAccountDao().getAccountByCode("10501")
+                    if (leaseholdAccount == null) {
+                        db.financialAccountDao().insertAccount(
+                            FinancialAccountEntity(
+                                code = "10501",
+                                name = "أصول غير ملموسة - خلو قدم / نقل موقع متجر",
+                                accountType = FinancialAccountType.CHART_ACCOUNT,
+                                parentAccountCode = "105",
+                                parentAccountName = "105 - الأصول الثابتة غير الملموسة (خلو رجل / نقل قدم)",
+                                accountNumber = "INTANGIBLE-GW01",
+                                openingBalance = leaseholdAmount,
+                                currentBalance = leaseholdAmount,
+                                notes = "حساب الأصول غير الملموسة المعني بتسجيل مبالغ الخلو ونقل القدم وحقوق الانتفاع"
+                            )
+                        )
+                    } else {
+                        db.financialAccountDao().updateAccount(
+                            leaseholdAccount.copy(
+                                openingBalance = leaseholdAmount,
+                                currentBalance = leaseholdAmount
+                            )
+                        )
+                    }
                 }
 
                 // 6. في حال البقالة القائمة: إدراج بضاعة أول المدة
@@ -1967,5 +2299,601 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun dismissAccountDeleteDialogs() {
         _uiState.update { it.copy(accountDeletionBlockedDialog = null, accountToDelete = null) }
+    }
+
+    // --- HR & Payroll Handlers ---
+
+    fun selectHrSubTab(tab: Int) {
+        _uiState.update { it.copy(hrSubTab = tab) }
+    }
+
+    fun openAddEmployeeDialog(employee: EmployeeEntity? = null) {
+        if (employee != null) {
+            _uiState.update {
+                it.copy(
+                    showAddEmployeeDialog = true,
+                    editingEmployee = employee,
+                    empNameInput = employee.name,
+                    empPhoneInput = employee.phone,
+                    empAddressInput = employee.address,
+                    empNationalIdInput = employee.nationalId,
+                    empJobTitleInput = employee.jobTitle,
+                    empEmploymentType = employee.employmentType,
+                    empBasePayRateInput = employee.basePayRate.toString()
+                )
+            }
+        } else {
+            _uiState.update {
+                it.copy(
+                    showAddEmployeeDialog = true,
+                    editingEmployee = null,
+                    empNameInput = "",
+                    empPhoneInput = "",
+                    empAddressInput = "",
+                    empNationalIdInput = "",
+                    empJobTitleInput = "كاشير",
+                    empEmploymentType = EmploymentType.MONTHLY_SALARY,
+                    empBasePayRateInput = ""
+                )
+            }
+        }
+    }
+
+    fun dismissAddEmployeeDialog() {
+        _uiState.update { it.copy(showAddEmployeeDialog = false, editingEmployee = null) }
+    }
+
+    fun updateEmployeeInputs(
+        name: String,
+        phone: String,
+        address: String,
+        nationalId: String,
+        jobTitle: String,
+        type: EmploymentType,
+        payRate: String
+    ) {
+        _uiState.update {
+            it.copy(
+                empNameInput = name,
+                empPhoneInput = phone,
+                empAddressInput = address,
+                empNationalIdInput = nationalId,
+                empJobTitleInput = jobTitle,
+                empEmploymentType = type,
+                empBasePayRateInput = payRate
+            )
+        }
+    }
+
+    fun saveEmployee() {
+        val state = _uiState.value
+        val name = state.empNameInput.trim()
+        val payRate = state.empBasePayRateInput.toDoubleOrNull() ?: 0.0
+        if (name.isBlank() || payRate <= 0.0) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingHrAction = true) }
+            val emp = EmployeeEntity(
+                id = state.editingEmployee?.id ?: 0L,
+                name = name,
+                phone = state.empPhoneInput.trim(),
+                address = state.empAddressInput.trim(),
+                nationalId = state.empNationalIdInput.trim(),
+                jobTitle = state.empJobTitleInput.trim().ifBlank { "عامل" },
+                employmentType = state.empEmploymentType,
+                basePayRate = payRate,
+                isActive = state.editingEmployee?.isActive ?: true
+            )
+            if (emp.id == 0L) {
+                db.employeeDao().insertEmployee(emp)
+            } else {
+                db.employeeDao().updateEmployee(emp)
+            }
+            _uiState.update {
+                it.copy(
+                    isSubmittingHrAction = false,
+                    showAddEmployeeDialog = false,
+                    editingEmployee = null
+                )
+            }
+        }
+    }
+
+    fun toggleEmployeeActive(employee: EmployeeEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.employeeDao().updateEmployee(employee.copy(isActive = !employee.isActive))
+        }
+    }
+
+    fun openAttendanceDialog(employee: EmployeeEntity) {
+        _uiState.update {
+            it.copy(
+                showAttendanceDialog = true,
+                selectedEmployeeForAttendance = employee,
+                attendanceStatusInput = AttendanceStatus.PRESENT,
+                attendanceOvertimeInput = "0.0",
+                attendanceNotesInput = ""
+            )
+        }
+    }
+
+    fun dismissAttendanceDialog() {
+        _uiState.update { it.copy(showAttendanceDialog = false, selectedEmployeeForAttendance = null) }
+    }
+
+    fun updateAttendanceInputs(status: AttendanceStatus, overtime: String, notes: String) {
+        _uiState.update {
+            it.copy(
+                attendanceStatusInput = status,
+                attendanceOvertimeInput = overtime,
+                attendanceNotesInput = notes
+            )
+        }
+    }
+
+    fun saveAttendance() {
+        val state = _uiState.value
+        val emp = state.selectedEmployeeForAttendance ?: return
+        val overtime = state.attendanceOvertimeInput.toDoubleOrNull() ?: 0.0
+        val dateToday = System.currentTimeMillis()
+
+        val dailyWage = if (emp.employmentType == EmploymentType.DAILY_WAGE) {
+            HrPayrollEngine.calculateDailyWageAmount(emp.basePayRate, state.attendanceStatusInput, overtime)
+        } else 0.0
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingHrAction = true) }
+            val att = EmployeeAttendanceEntity(
+                employeeId = emp.id,
+                date = dateToday,
+                status = state.attendanceStatusInput,
+                overtimeHours = overtime,
+                dailyWageCalculated = dailyWage,
+                notes = state.attendanceNotesInput
+            )
+            db.employeeAttendanceDao().insertAttendance(att)
+            _uiState.update {
+                it.copy(
+                    isSubmittingHrAction = false,
+                    showAttendanceDialog = false,
+                    selectedEmployeeForAttendance = null
+                )
+            }
+        }
+    }
+
+    fun openHrTransactionDialog(employee: EmployeeEntity? = null, type: EmployeeTransactionType = EmployeeTransactionType.ADVANCE) {
+        val defaultEmp = employee ?: _uiState.value.employees.firstOrNull { it.isActive }
+        _uiState.update {
+            it.copy(
+                showHrTransactionDialog = true,
+                selectedEmployeeForTrans = defaultEmp,
+                hrTransTypeInput = type,
+                hrTransAmountInput = "",
+                hrTransNotesInput = "",
+                hrTransPaymentMethod = PaymentMethod.CASH
+            )
+        }
+    }
+
+    fun dismissHrTransactionDialog() {
+        _uiState.update { it.copy(showHrTransactionDialog = false, selectedEmployeeForTrans = null) }
+    }
+
+    fun updateHrTransactionInputs(
+        type: EmployeeTransactionType,
+        amount: String,
+        notes: String,
+        method: PaymentMethod,
+        employee: EmployeeEntity? = _uiState.value.selectedEmployeeForTrans
+    ) {
+        _uiState.update {
+            it.copy(
+                hrTransTypeInput = type,
+                hrTransAmountInput = amount,
+                hrTransNotesInput = notes,
+                hrTransPaymentMethod = method,
+                selectedEmployeeForTrans = employee
+            )
+        }
+    }
+
+    fun dismissHrErrorMessage() {
+        _uiState.update { it.copy(hrActionErrorMessage = null) }
+    }
+
+    private suspend fun getCurrentCashInDrawer(): Double {
+        val openShift = getOrCreateOpenShift(db.cashShiftDao())
+        val startTime = openShift.startTime
+        val endTime = System.currentTimeMillis()
+
+        val invoices = db.invoiceDao().getAllInvoicesSync().filter { it.date >= startTime }
+        val vouchers = db.paymentVoucherDao().getAllVouchersSync().filter { it.date >= startTime }
+        val expenses = db.expenseDao().getExpensesByDateRangeSync(startTime, endTime)
+        val ownerTrans = db.ownerTransactionDao().getAllTransactionsSync().filter { it.date >= startTime }
+
+        val cashSales = invoices.filter { it.type == InvoiceType.SALE && it.paymentMethod == PaymentMethod.CASH }.map { it.paidAmount }
+        val cashCollections = vouchers.filter { !it.isPayment && it.paymentMethod == PaymentMethod.CASH }.map { it.amount }
+
+        val operationalExpenses = expenses.filter { 
+            it.paymentMethod == PaymentMethod.CASH && 
+            it.category != ExpenseCategories.OWNER_DRAWINGS && 
+            it.category != ExpenseCategories.STAFF_ADVANCES 
+        }.map { it.amount }
+
+        val supplierPayments = vouchers.filter { it.isPayment && it.paymentMethod == PaymentMethod.CASH }.map { it.amount }
+        val cashPurchases = invoices.filter { it.type == InvoiceType.PURCHASE && it.paymentMethod == PaymentMethod.CASH }.map { it.paidAmount }
+
+        val ownerDrawings = ownerTrans.filter { it.type == OwnerTransactionType.CASH_DRAWING && it.paymentMethod == PaymentMethod.CASH }.map { it.amount } +
+                expenses.filter { it.paymentMethod == PaymentMethod.CASH && it.category == ExpenseCategories.OWNER_DRAWINGS }.map { it.amount }
+
+        val staffAdvances = expenses.filter { it.paymentMethod == PaymentMethod.CASH && it.category == ExpenseCategories.STAFF_ADVANCES }.map { it.amount }
+
+        val state = _uiState.value
+        val openingCash = state.drawerOpeningCashInput.toDoubleOrNull() ?: openShift.openingCash
+
+        return CashDrawerEngine.calculateAvailableCash(
+            openingCash = openingCash,
+            cashSales = if (cashSales.isNotEmpty()) cashSales else listOf(openShift.totalCashSales),
+            cashCollections = if (cashCollections.isNotEmpty()) cashCollections else listOf(openShift.totalCashCollections),
+            cashExpenses = if (operationalExpenses.isNotEmpty()) operationalExpenses else listOf(openShift.totalCashExpenses),
+            supplierPayments = if (supplierPayments.isNotEmpty()) supplierPayments else listOf(openShift.totalSupplierPayments),
+            cashPurchases = if (cashPurchases.isNotEmpty()) cashPurchases else listOf(openShift.totalCashPurchases),
+            ownerDrawings = if (ownerDrawings.isNotEmpty()) ownerDrawings else listOf(openShift.totalOwnerDrawings),
+            staffAdvances = if (staffAdvances.isNotEmpty()) staffAdvances else listOf(openShift.totalStaffAdvances)
+        )
+    }
+
+    fun saveHrTransaction() {
+        val state = _uiState.value
+        val emp = state.selectedEmployeeForTrans ?: return
+        val amount = state.hrTransAmountInput.toDoubleOrNull() ?: 0.0
+        if (amount <= 0.0) return
+        val symbol = state.currencySymbol
+
+        val calendar = Calendar.getInstance()
+        val month = calendar.get(Calendar.MONTH) + 1
+        val year = calendar.get(Calendar.YEAR)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingHrAction = true, hrActionErrorMessage = null) }
+
+            // التحقق من السيولة النقدية بالدرج في حال الصرف النقدي لسلفة أو حافز
+            if (state.hrTransPaymentMethod == PaymentMethod.CASH &&
+                (state.hrTransTypeInput == EmployeeTransactionType.ADVANCE || state.hrTransTypeInput == EmployeeTransactionType.BONUS)
+            ) {
+                val availableCash = getCurrentCashInDrawer()
+                if (availableCash < amount) {
+                    _uiState.update {
+                        it.copy(
+                            isSubmittingHrAction = false,
+                            hrActionErrorMessage = "عذراً! الرصيد النقدي المتوفر بالدرج حالياً (%.2f %s) غير كافٍ لصرف المعاملة النقدية (%.2f %s). يرجى تغذية الصندوق أولاً.".format(
+                                availableCash, symbol, amount, symbol
+                            )
+                        )
+                    }
+                    return@launch
+                }
+            }
+
+            val trans = EmployeeTransactionEntity(
+                employeeId = emp.id,
+                type = state.hrTransTypeInput,
+                amount = amount,
+                date = System.currentTimeMillis(),
+                periodMonth = month,
+                periodYear = year,
+                paymentMethod = state.hrTransPaymentMethod,
+                notes = state.hrTransNotesInput.ifBlank { "${state.hrTransTypeInput.labelArabic} للموظف ${emp.name}" }
+            )
+            db.employeeTransactionDao().insertTransaction(trans)
+
+            // الخصم والسيطرة النقدية: تسجيل سلفة الموظف أو صرف الحافز النقدي كمصروف درج يؤثر على تقرير Z
+            if (state.hrTransPaymentMethod == PaymentMethod.CASH &&
+                (state.hrTransTypeInput == EmployeeTransactionType.ADVANCE || state.hrTransTypeInput == EmployeeTransactionType.BONUS)
+            ) {
+                val cat = when (state.hrTransTypeInput) {
+                    EmployeeTransactionType.ADVANCE -> ExpenseCategories.STAFF_ADVANCES
+                    EmployeeTransactionType.BONUS -> ExpenseCategories.SALARIES
+                    else -> ExpenseCategories.STAFF_ADVANCES
+                }
+                val exp = ExpenseEntity(
+                    expenseNumber = "HR-EXP-${System.currentTimeMillis() % 10000}",
+                    category = cat,
+                    amount = amount,
+                    paymentMethod = PaymentMethod.CASH,
+                    paidTo = emp.name,
+                    notes = trans.notes
+                )
+                db.expenseDao().insertExpense(exp)
+            }
+
+            val updatedTrans = db.employeeTransactionDao().getAllTransactionsSync()
+            val updatedExpenses = db.expenseDao().getAllExpensesSync()
+
+            _uiState.update {
+                it.copy(
+                    isSubmittingHrAction = false,
+                    showHrTransactionDialog = false,
+                    selectedEmployeeForTrans = null,
+                    employeeTransactions = updatedTrans,
+                    expenses = updatedExpenses,
+                    hrActionErrorMessage = null
+                )
+            }
+        }
+    }
+
+    fun generateMonthlyPayrollRun(month: Int, year: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingHrAction = true, selectedPayrollMonth = month, selectedPayrollYear = year) }
+            val employeesList = db.employeeDao().getAllEmployeesSync().filter { it.isActive }
+            
+            // نطاق الشهر بالميلي ثانية
+            val cal = Calendar.getInstance()
+            cal.set(year, month - 1, 1, 0, 0, 0)
+            val startDate = cal.timeInMillis
+            cal.set(year, month - 1, cal.getActualMaximum(Calendar.DAY_OF_MONTH), 23, 59, 59)
+            val endDate = cal.timeInMillis
+
+            for (emp in employeesList) {
+                val attendances = db.employeeAttendanceDao().getEmployeeAttendanceForPeriodSync(emp.id, startDate, endDate)
+                val transactions = db.employeeTransactionDao().getTransactionsByPeriodSync(emp.id, month, year)
+                
+                val payrollRecord = HrPayrollEngine.calculateMonthlyPayroll(emp, attendances, transactions, month, year)
+                db.payrollRecordDao().insertPayrollRecord(payrollRecord)
+            }
+
+            _uiState.update { it.copy(isSubmittingHrAction = false) }
+        }
+    }
+
+    fun payoutPayrollRecord(record: PayrollRecordEntity, method: PaymentMethod = PaymentMethod.CASH) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingHrAction = true, hrActionErrorMessage = null) }
+            val amount = record.netPayableSalary
+            val symbol = _uiState.value.currencySymbol
+
+            // 1. التحقق من السيولة النقدية الكافية في الصندوق والدرج عند الصرف النقدي
+            if (method == PaymentMethod.CASH && amount > 0) {
+                val availableCash = getCurrentCashInDrawer()
+                if (availableCash < amount) {
+                    _uiState.update {
+                        it.copy(
+                            isSubmittingHrAction = false,
+                            hrActionErrorMessage = "عذراً! الرصيد النقدي المتوفر بالدرج حالياً (%.2f %s) غير كافٍ لصرف صافي راتب الموظف (%.2f %s). يرجى تغذية الدرج بالسيولة أو اختيار طريقة صرف آجل/بنكي.".format(
+                                availableCash, symbol, amount, symbol
+                            )
+                        )
+                    }
+                    return@launch
+                }
+            }
+
+            // 2. تحديث سجل مسير الرواتب إلى مدفوع
+            val updated = record.copy(
+                paidAmount = amount,
+                status = PayrollStatus.PAID,
+                paymentDate = System.currentTimeMillis(),
+                paymentMethod = method
+            )
+            db.payrollRecordDao().updatePayrollRecord(updated)
+
+            // 3. تسجيل قيد الحركة المالية في سجل الموظف
+            val trans = EmployeeTransactionEntity(
+                employeeId = record.employeeId,
+                type = EmployeeTransactionType.SALARY_PAYMENT,
+                amount = amount,
+                date = System.currentTimeMillis(),
+                periodMonth = record.periodMonth,
+                periodYear = record.periodYear,
+                paymentMethod = method,
+                notes = "صرف صافي راتب شهر ${record.periodMonth}/${record.periodYear} للموظف ${record.employeeName}"
+            )
+            db.employeeTransactionDao().insertTransaction(trans)
+
+            // 4. الخصم اللحظي وإنشاء مصروف نقدي مؤرخ ينعكس مباشرة على تقرير Z وصافي النقدية بالدرج
+            if (method == PaymentMethod.CASH && amount > 0) {
+                val exp = ExpenseEntity(
+                    expenseNumber = "PAYROLL-${record.id}",
+                    category = ExpenseCategories.SALARIES,
+                    amount = amount,
+                    paymentMethod = PaymentMethod.CASH,
+                    paidTo = record.employeeName,
+                    notes = "صرف صافي راتب شهر ${record.periodMonth}/${record.periodYear}"
+                )
+                db.expenseDao().insertExpense(exp)
+            }
+
+            val updatedRecords = db.payrollRecordDao().getPayrollRecordsForPeriodSync(record.periodMonth, record.periodYear)
+            val updatedTrans = db.employeeTransactionDao().getAllTransactionsSync()
+            val updatedExpenses = db.expenseDao().getAllExpensesSync()
+
+            _uiState.update {
+                it.copy(
+                    isSubmittingHrAction = false,
+                    payrollRecords = updatedRecords,
+                    employeeTransactions = updatedTrans,
+                    expenses = updatedExpenses,
+                    hrActionErrorMessage = null
+                )
+            }
+        }
+    }
+
+    fun cancelPayrollPayout(record: PayrollRecordEntity, currentUserRole: UserRole = UserRole.ADMIN) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingHrAction = true, hrActionErrorMessage = null) }
+
+            // 1. تقييد الصلاحية حصرياً لمدير النظام (UserRole.ADMIN)
+            if (currentUserRole != UserRole.ADMIN) {
+                _uiState.update {
+                    it.copy(
+                        isSubmittingHrAction = false,
+                        hrActionErrorMessage = "عذراً! عملية إلغاء أو تعديل حركة صرف الراتب تتطلب صلاحيات مدير النظام (ADMIN) حصرياً."
+                    )
+                }
+                return@launch
+            }
+
+            // 2. إعادة حالة سجل مسير الرواتب إلى "غير مدفوع" (مستحق)
+            val resetRecord = record.copy(
+                paidAmount = 0.0,
+                status = PayrollStatus.UNPAID,
+                paymentDate = null,
+                paymentMethod = PaymentMethod.CASH
+            )
+            db.payrollRecordDao().updatePayrollRecord(resetRecord)
+
+            // 3. المنطق المحاسبي العكسي: حذف حركة المصروف الخاصة بالراتب لإعادة المبلغ النقدي تلقائياً إلى رصيد الدرج وتخفيض المصروفات في Z-Report
+            val relatedExpenses = db.expenseDao().getAllExpensesSync().filter {
+                it.expenseNumber == "PAYROLL-${record.id}" ||
+                (it.category == ExpenseCategories.SALARIES && it.paidTo == record.employeeName && it.amount == record.netPayableSalary)
+            }
+            for (exp in relatedExpenses) {
+                db.expenseDao().deleteExpense(exp)
+            }
+
+            // 4. حذف سجل الحركة المالية من سجلات معاملات الموظف
+            val salaryTransactions = db.employeeTransactionDao()
+                .getTransactionsByPeriodSync(record.employeeId, record.periodMonth, record.periodYear)
+                .filter { it.type == EmployeeTransactionType.SALARY_PAYMENT }
+            for (trans in salaryTransactions) {
+                db.employeeTransactionDao().deleteTransaction(trans)
+            }
+
+            // 5. تحديث الكشوفات والبيانات بالواجهة
+            val updatedRecords = db.payrollRecordDao().getPayrollRecordsForPeriodSync(record.periodMonth, record.periodYear)
+            val updatedTrans = db.employeeTransactionDao().getAllTransactionsSync()
+            val updatedExpenses = db.expenseDao().getAllExpensesSync()
+
+            _uiState.update {
+                it.copy(
+                    isSubmittingHrAction = false,
+                    payrollRecords = updatedRecords,
+                    employeeTransactions = updatedTrans,
+                    expenses = updatedExpenses,
+                    hrActionErrorMessage = null
+                )
+            }
+        }
+    }
+
+    // --- Salary Adjustment Functions (إدارة تعديل الرواتب الأساسية) ---
+    fun openAdjustSalaryDialog(employee: EmployeeEntity) {
+        _uiState.update {
+            it.copy(
+                showAdjustSalaryDialog = true,
+                selectedEmployeeForSalaryAdjust = employee,
+                newBasePayRateInput = employee.basePayRate.toString(),
+                salaryAdjustReasonInput = "",
+                hrActionErrorMessage = null
+            )
+        }
+    }
+
+    fun dismissAdjustSalaryDialog() {
+        _uiState.update {
+            it.copy(
+                showAdjustSalaryDialog = false,
+                selectedEmployeeForSalaryAdjust = null,
+                newBasePayRateInput = "",
+                salaryAdjustReasonInput = "",
+                hrActionErrorMessage = null
+            )
+        }
+    }
+
+    fun updateAdjustSalaryInputs(newRate: String, reason: String) {
+        _uiState.update {
+            it.copy(
+                newBasePayRateInput = newRate,
+                salaryAdjustReasonInput = reason,
+                hrActionErrorMessage = null
+            )
+        }
+    }
+
+    fun saveSalaryAdjustment(adminName: String = "مدير النظام") {
+        val state = _uiState.value
+        val emp = state.selectedEmployeeForSalaryAdjust ?: return
+        val newRate = state.newBasePayRateInput.toDoubleOrNull()
+        val reason = state.salaryAdjustReasonInput.trim()
+
+        if (newRate == null || newRate <= 0) {
+            _uiState.update { it.copy(hrActionErrorMessage = "يرجى إدخال قيمة راتب أساسي جديدة صحيحة وموجبة.") }
+            return
+        }
+
+        if (reason.isBlank()) {
+            _uiState.update { it.copy(hrActionErrorMessage = "سبب التعديل حقل إلزامي (مثال: ترقية، تعديل هيكل أجور، أو تخفيض).") }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSubmittingHrAction = true, hrActionErrorMessage = null) }
+
+            val log = SalaryAdjustmentLogEntity(
+                employeeId = emp.id,
+                employeeName = emp.name,
+                oldBasePayRate = emp.basePayRate,
+                newBasePayRate = newRate,
+                reason = reason,
+                adjustedBy = adminName,
+                adjustedAt = System.currentTimeMillis()
+            )
+            db.salaryAdjustmentLogDao().insertLog(log)
+
+            val updatedEmp = emp.copy(basePayRate = newRate)
+            db.employeeDao().updateEmployee(updatedEmp)
+
+            _uiState.update {
+                it.copy(
+                    isSubmittingHrAction = false,
+                    showAdjustSalaryDialog = false,
+                    selectedEmployeeForSalaryAdjust = null,
+                    newBasePayRateInput = "",
+                    salaryAdjustReasonInput = "",
+                    hrActionErrorMessage = null
+                )
+            }
+        }
+    }
+
+    // --- Employee Documents & Camera Integration Functions (توثيق الصور بالكاميرا) ---
+    fun openEmployeeDocumentDialog(employee: EmployeeEntity) {
+        _uiState.update {
+            it.copy(
+                showEmployeeDocumentDialog = true,
+                selectedEmployeeForDocuments = employee
+            )
+        }
+    }
+
+    fun dismissEmployeeDocumentDialog() {
+        _uiState.update {
+            it.copy(
+                showEmployeeDocumentDialog = false,
+                selectedEmployeeForDocuments = null
+            )
+        }
+    }
+
+    fun updateEmployeePhotoPath(employeeId: Long, profilePhotoUri: String? = null, idCardFrontUri: String? = null, idCardBackUri: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val emp = db.employeeDao().getEmployeeById(employeeId) ?: return@launch
+            val updated = emp.copy(
+                profilePhotoUri = profilePhotoUri ?: emp.profilePhotoUri,
+                idCardFrontUri = idCardFrontUri ?: emp.idCardFrontUri,
+                idCardBackUri = idCardBackUri ?: emp.idCardBackUri
+            )
+            db.employeeDao().updateEmployee(updated)
+
+            _uiState.update { state ->
+                val currentSel = state.selectedEmployeeForDocuments
+                val newSel = if (currentSel?.id == employeeId) updated else currentSel
+                state.copy(selectedEmployeeForDocuments = newSel)
+            }
+        }
     }
 }

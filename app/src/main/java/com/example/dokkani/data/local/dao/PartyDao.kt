@@ -16,6 +16,9 @@ interface PartyDao {
     @Query("SELECT * FROM parties ORDER BY name ASC")
     fun getAllParties(): Flow<List<PartyEntity>>
 
+    @Query("SELECT * FROM parties ORDER BY name ASC")
+    suspend fun getAllPartiesSync(): List<PartyEntity>
+
     @Query("SELECT * FROM parties WHERE type = :type OR type = 'BOTH' ORDER BY name ASC")
     fun getPartiesByType(type: PartyType): Flow<List<PartyEntity>>
 

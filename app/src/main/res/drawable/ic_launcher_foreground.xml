@@ -3,7 +3,7 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/ic_dokkani_icon"
+        android:drawable="@drawable/ic_dokkani_official_logo"
         android:gravity="center" />
 </layer-list>
 

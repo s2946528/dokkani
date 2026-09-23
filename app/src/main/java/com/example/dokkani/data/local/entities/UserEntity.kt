@@ -11,5 +11,6 @@ data class UserEntity(
     val fullName: String,
     val pinCode: String,
     val role: UserRole,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val mustChangePin: Boolean = false
 )

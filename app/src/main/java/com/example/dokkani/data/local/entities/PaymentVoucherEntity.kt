@@ -38,7 +38,9 @@ data class PaymentVoucherEntity(
     val partyId: Long,                          // العميل أو المورد
     val amount: Double,                         // المبلغ المسدد
     val voucherType: VoucherType = VoucherType.RECEIPT, // نوع السند (سند قبض / سند صرف)
-    val paymentMethod: PaymentMethod = PaymentMethod.CASH, // طريقة السداد: نقداً، شبكة، تحويل بنكي
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH, // طريقة السداد: نقداً، شبكة، تحويل بنكي، محفظة
+    val paymentAccountId: Long? = null,         // معرّف الحساب المالي (بنك/محفظة/شبكة)
+    val transactionRef: String = "",             // رقم العملية / المرجع / رقم الحوالة
     val date: Long = System.currentTimeMillis(),// تاريخ ووقت السداد
     val receivedBy: String = "كاشير 1",         // المستلم / الكاشير
     val notes: String = ""                      // ملاحظات وبيان السند

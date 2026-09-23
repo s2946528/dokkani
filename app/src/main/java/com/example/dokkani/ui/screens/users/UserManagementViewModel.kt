@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class UserManagementViewModel(application: Application) : AndroidViewModel(application) {
-    private val userDao = DokkaniDatabase.getDatabase(application, viewModelScope).userDao()
+    private val db = DokkaniDatabase.getDatabase(application, viewModelScope)
+    private val userDao = db.userDao()
+    private val auditLogDao = db.auditLogDao()
 
     val allUsers: StateFlow<List<UserEntity>> = userDao.getAllUsers()
         .stateIn(scope = viewModelScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList<UserEntity>())
@@ -41,6 +43,9 @@ class UserManagementViewModel(application: Application) : AndroidViewModel(appli
     private val _isActive = MutableStateFlow(true)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
+    private val _mustChangePin = MutableStateFlow(false)
+    val mustChangePin: StateFlow<Boolean> = _mustChangePin.asStateFlow()
+
     fun openAddDialog() {
         _editingUser.value = null
         _username.value = ""
@@ -48,6 +53,7 @@ class UserManagementViewModel(application: Application) : AndroidViewModel(appli
         _pinCode.value = ""
         _role.value = UserRole.CASHIER
         _isActive.value = true
+        _mustChangePin.value = true // New users default to force PIN change
         _showAddEditDialog.value = true
     }
 
@@ -58,6 +64,7 @@ class UserManagementViewModel(application: Application) : AndroidViewModel(appli
         _pinCode.value = user.pinCode
         _role.value = user.role
         _isActive.value = user.isActive
+        _mustChangePin.value = user.mustChangePin
         _showAddEditDialog.value = true
     }
 
@@ -67,26 +74,47 @@ class UserManagementViewModel(application: Application) : AndroidViewModel(appli
 
     fun updateUsername(value: String) { _username.value = value }
     fun updateFullName(value: String) { _fullName.value = value }
-    fun updatePinCode(value: String) { _pinCode.value = value }
+    fun updatePinCode(value: String) { _pinCode.value = value.filter { it.isDigit() } }
     fun updateRole(value: UserRole) { _role.value = value }
     fun updateIsActive(value: Boolean) { _isActive.value = value }
+    fun updateMustChangePin(value: Boolean) { _mustChangePin.value = value }
 
     fun saveUser() {
         if (_username.value.isBlank() || _fullName.value.isBlank() || _pinCode.value.length != 4) return
         
         viewModelScope.launch {
+            val isNew = _editingUser.value == null
             val user = UserEntity(
                 id = _editingUser.value?.id ?: 0,
                 username = _username.value,
                 fullName = _fullName.value,
                 pinCode = _pinCode.value,
                 role = _role.value,
-                isActive = _isActive.value
+                isActive = _isActive.value,
+                mustChangePin = _mustChangePin.value
             )
-            if (user.id == 0) {
+            if (isNew) {
                 userDao.insertUser(user)
+                auditLogDao.insertLog(
+                    com.example.dokkani.data.local.entities.AuditLogEntity(
+                        userId = 0,
+                        userName = "مدير النظام",
+                        userRole = "ADMIN",
+                        action = "CREATE_USER",
+                        details = "إضافة مستخدم جديد: ${_fullName.value} (${_role.value.name})"
+                    )
+                )
             } else {
                 userDao.updateUser(user)
+                auditLogDao.insertLog(
+                    com.example.dokkani.data.local.entities.AuditLogEntity(
+                        userId = user.id,
+                        userName = user.fullName,
+                        userRole = user.role.name,
+                        action = "UPDATE_USER",
+                        details = "تعديل بيانات المستخدم: ${user.fullName} (تفعيل: ${user.isActive})"
+                    )
+                )
             }
             closeDialog()
         }
@@ -94,7 +122,17 @@ class UserManagementViewModel(application: Application) : AndroidViewModel(appli
 
     fun toggleUserStatus(user: UserEntity) {
         viewModelScope.launch {
-            userDao.setUserStatus(user.id, !user.isActive)
+            val newStatus = !user.isActive
+            userDao.setUserStatus(user.id, newStatus)
+            auditLogDao.insertLog(
+                com.example.dokkani.data.local.entities.AuditLogEntity(
+                    userId = user.id,
+                    userName = user.fullName,
+                    userRole = user.role.name,
+                    action = if (newStatus) "ACTIVATE_USER" else "DEACTIVATE_USER",
+                    details = "تغيير حالة الحساب إلى ${if (newStatus) "مفعل" else "معطل"}"
+                )
+            )
         }
     }
 }

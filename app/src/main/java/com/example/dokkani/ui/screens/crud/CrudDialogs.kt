@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -78,6 +79,130 @@ fun ConfirmDeleteDialog(
 }
 
 /**
+ * دالة مساعدة لتنقية الإدخال الرقمي واشتراط الأرقام الصحيحة
+ */
+private fun filterIntegerInput(input: String): String {
+    val digits = input.filter { it.isDigit() }
+    if (digits.isEmpty()) return ""
+    val parsed = digits.toLongOrNull() ?: 0L
+    return parsed.toString()
+}
+
+/**
+ * مكون اختيار الوحدة من قائمة منسدلة مع إمكانية إضافة وحدة جديدة
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UnitDropdownSelector(
+    selectedUnit: String,
+    onUnitSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "اختر الوحدة",
+    availableUnitsList: List<String>? = null,
+    onAddNewUnitClick: (() -> Unit)? = null
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var availableUnits by remember {
+        mutableStateOf(
+            availableUnitsList ?: listOf("حبة/قطعة", "حبة", "كرتون", "كيلو", "درزن", "صندوق", "سحارة", "ربطة", "عبوة", "باكيت", "طرد", "جرام", "لتر", "متر", "شوال")
+        )
+    }
+    var showAddCustomUnitDialog by remember { mutableStateOf(false) }
+    var customUnitInput by remember { mutableStateOf("") }
+
+    if (showAddCustomUnitDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCustomUnitDialog = false },
+            title = { Text("إضافة وحدة قياس جديدة", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = customUnitInput,
+                    onValueChange = { customUnitInput = it },
+                    label = { Text("اسم الوحدة (مثال: طقم، بندل، سطل...)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = customUnitInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            if (!availableUnits.contains(trimmed)) {
+                                availableUnits = availableUnits + trimmed
+                            }
+                            onUnitSelected(trimmed)
+                            customUnitInput = ""
+                            showAddCustomUnitDialog = false
+                        }
+                    }
+                ) {
+                    Text("إضافة")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showAddCustomUnitDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selectedUnit,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp)
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            val listToDisplay = availableUnitsList ?: availableUnits
+            listToDisplay.forEach { unit ->
+                DropdownMenuItem(
+                    text = { Text(unit, fontWeight = if (unit == selectedUnit) FontWeight.Bold else FontWeight.Normal) },
+                    onClick = {
+                        onUnitSelected(unit)
+                        expanded = false
+                    }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("+ إضافة وحدة جديدة...", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    if (onAddNewUnitClick != null) {
+                        onAddNewUnitClick()
+                    } else {
+                        showAddCustomUnitDialog = true
+                    }
+                }
+            )
+        }
+    }
+}
+
+/**
  * حوار إضافة / تعديل صنف
  */
 @Composable
@@ -91,12 +216,14 @@ fun AddEditProductDialog(
     var category by remember { mutableStateOf(initialProduct?.category ?: "عام") }
     var englishName by remember { mutableStateOf(initialProduct?.englishName ?: "") }
     var isWeighted by remember { mutableStateOf(initialProduct?.isWeighted ?: false) }
-    var minStockAlert by remember { mutableStateOf(initialProduct?.minStockAlert?.toString() ?: "5.0") }
+    var minStockAlert by remember {
+        mutableStateOf(initialProduct?.minStockAlert?.toLong()?.toString() ?: "5")
+    }
     
     // Base unit initial values if creating new product
     var baseUnitName by remember { mutableStateOf("حبة") }
-    var costPrice by remember { mutableStateOf("0.0") }
-    var sellingPrice by remember { mutableStateOf("0.0") }
+    var costPrice by remember { mutableStateOf("0") }
+    var sellingPrice by remember { mutableStateOf("0") }
     var barcode by remember { mutableStateOf("") }
 
     val scrollState = rememberScrollState()
@@ -163,7 +290,7 @@ fun AddEditProductDialog(
 
                 OutlinedTextField(
                     value = minStockAlert,
-                    onValueChange = { minStockAlert = it },
+                    onValueChange = { minStockAlert = filterIntegerInput(it) },
                     label = { Text("حد إعادة الطلب للتنبيه بالنواقص") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
@@ -179,53 +306,26 @@ fun AddEditProductDialog(
                         color = MaterialTheme.colorScheme.primary
                     )
 
-                    val popularUnits = listOf("حبة", "كرتون", "درزن", "كيلو", "كيس", "صندوق", "شدة", "علبة")
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        popularUnits.take(4).forEach { u ->
-                            FilterChip(
-                                selected = baseUnitName == u,
-                                onClick = { baseUnitName = u },
-                                label = { Text(u, fontSize = 11.sp) }
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        popularUnits.drop(4).forEach { u ->
-                            FilterChip(
-                                selected = baseUnitName == u,
-                                onClick = { baseUnitName = u },
-                                label = { Text(u, fontSize = 11.sp) }
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = baseUnitName,
-                        onValueChange = { baseUnitName = it },
-                        label = { Text("اسم الوحدة الأساسية (حبة، كيلو، كرتون، ...)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                    UnitDropdownSelector(
+                        selectedUnit = baseUnitName,
+                        onUnitSelected = { baseUnitName = it },
+                        label = "اسم الوحدة الأساسية للصنف *",
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = costPrice,
-                            onValueChange = { costPrice = it },
-                            label = { Text("سعر الشراء") },
+                            onValueChange = { costPrice = filterIntegerInput(it) },
+                            label = { Text("سعر الشراء (ر.ي)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp)
                         )
                         OutlinedTextField(
                             value = sellingPrice,
-                            onValueChange = { sellingPrice = it },
-                            label = { Text("سعر البيع") },
+                            onValueChange = { sellingPrice = filterIntegerInput(it) },
+                            label = { Text("سعر البيع (ر.ي)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp)
@@ -298,10 +398,10 @@ fun AddEditUnitDialog(
     onDismiss: () -> Unit
 ) {
     var unitName by remember { mutableStateOf(initialUnit?.unitName ?: "درزن") }
-    var conversionFactor by remember { mutableStateOf(initialUnit?.conversionFactor?.toString() ?: "12.0") }
+    var conversionFactor by remember { mutableStateOf(initialUnit?.conversionFactor?.toLong()?.toString() ?: "12") }
     var barcode by remember { mutableStateOf(initialUnit?.barcode ?: "") }
-    var costPrice by remember { mutableStateOf(initialUnit?.costPrice?.toString() ?: "0.0") }
-    var sellingPrice by remember { mutableStateOf(initialUnit?.sellingPrice?.toString() ?: "0.0") }
+    var costPrice by remember { mutableStateOf(initialUnit?.costPrice?.toLong()?.toString() ?: "0") }
+    var sellingPrice by remember { mutableStateOf(initialUnit?.sellingPrice?.toLong()?.toString() ?: "0") }
     var isBaseUnit by remember { mutableStateOf(initialUnit?.isBaseUnit ?: false) }
 
     val scrollState = rememberScrollState()
@@ -322,43 +422,16 @@ fun AddEditUnitDialog(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                val commonUnitSuggestions = listOf("كرتون", "درزن", "كيلو", "كيس", "صندوق", "شدة", "علبة", "باكيت")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    commonUnitSuggestions.take(4).forEach { u ->
-                        FilterChip(
-                            selected = unitName == u,
-                            onClick = { unitName = u },
-                            label = { Text(u, fontSize = 11.sp) }
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    commonUnitSuggestions.drop(4).forEach { u ->
-                        FilterChip(
-                            selected = unitName == u,
-                            onClick = { unitName = u },
-                            label = { Text(u, fontSize = 11.sp) }
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = unitName,
-                    onValueChange = { unitName = it },
-                    label = { Text("اسم الوحدة (كرتون، درزن، صندوق...) *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                UnitDropdownSelector(
+                    selectedUnit = unitName,
+                    onUnitSelected = { unitName = it },
+                    label = "اسم الوحدة الفرعية (كرتون، درزن، صندوق...) *",
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
                     value = conversionFactor,
-                    onValueChange = { conversionFactor = it },
+                    onValueChange = { conversionFactor = filterIntegerInput(it) },
                     label = { Text("معامل التحويل للوحدة الأساسية (مثال: كرتون = 24)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
@@ -380,16 +453,16 @@ fun AddEditUnitDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = costPrice,
-                        onValueChange = { costPrice = it },
-                        label = { Text("سعر الشراء") },
+                        onValueChange = { costPrice = filterIntegerInput(it) },
+                        label = { Text("سعر الشراء (ر.ي)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     )
                     OutlinedTextField(
                         value = sellingPrice,
-                        onValueChange = { sellingPrice = it },
-                        label = { Text("سعر البيع") },
+                        onValueChange = { sellingPrice = filterIntegerInput(it) },
+                        label = { Text("سعر البيع (ر.ي)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)

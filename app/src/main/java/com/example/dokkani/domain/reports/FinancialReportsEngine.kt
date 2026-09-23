@@ -34,7 +34,7 @@ object FinancialReportsEngine {
         val taxCollected = saleInvoices.sumOf { it.taxAmount }
 
         val totalCashSales = saleInvoices.filter { it.paymentMethod == PaymentMethod.CASH }.sumOf { it.total }
-        val totalMadaSales = saleInvoices.filter { it.paymentMethod == PaymentMethod.MADA }.sumOf { it.total }
+        val totalMadaSales = saleInvoices.filter { it.paymentMethod.isElectronic }.sumOf { it.total }
         val totalCreditSales = saleInvoices.filter { it.paymentMethod == PaymentMethod.CREDIT }.sumOf { it.total }
 
         // حساب تكلفة البضاعة المباعة (COGS)

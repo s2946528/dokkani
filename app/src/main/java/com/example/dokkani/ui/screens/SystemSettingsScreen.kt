@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Settings
@@ -64,6 +65,8 @@ fun SystemSettingsScreen(
     onUpdateStoreProfile: (storeName: String, storeAddress: String, storePhone: String, taxNumber: String, invoiceFooterText: String, showPreviousBalance: Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onUpdateShowPreviousBalance: (Boolean) -> Unit = {},
     onUpdateShowDecimals: (Boolean) -> Unit = {},
+    onUpdateAutoLockSettings: (Boolean, Int) -> Unit = { _, _ -> },
+    onUpdatePasswordPolicySettings: (com.example.dokkani.data.local.entities.PasswordType, Int, Boolean, Int, Int) -> Unit = { _, _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
@@ -691,6 +694,326 @@ fun SystemSettingsScreen(
                                     fontWeight = FontWeight.Medium
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // بطاقة خيارات قفل الشاشة التلقائي والأمان
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth().testTag("auto_lock_settings_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "قفل الشاشة التلقائي وتأمين الجلسة (Auto Lock)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "قفل التطبيق وتعديل حالة الجلسة تلقائياً عند ترك جهاز الكاشير دون استخدام",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            val isAutoLockActive = settings?.enableAutoLock ?: true
+                            val currentTimeout = settings?.autoLockSeconds ?: 120
+
+                            Switch(
+                                checked = isAutoLockActive,
+                                onCheckedChange = { isChecked ->
+                                    if (isAdmin) {
+                                        onUpdateAutoLockSettings(isChecked, currentTimeout)
+                                    }
+                                },
+                                enabled = isAdmin,
+                                modifier = Modifier.testTag("auto_lock_enable_switch")
+                            )
+                        }
+
+                        if (settings?.enableAutoLock ?: true) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "مهلة عدم النشاط قبل القفل التلقائي:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            val options = listOf(
+                                30 to "30 ثانية",
+                                60 to "دقيقة واحدة",
+                                120 to "دقيقتان (الافتراضي)",
+                                300 to "5 دقائق",
+                                600 to "10 دقائق"
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                options.forEach { (sec, label) ->
+                                    val isSel = (settings?.autoLockSeconds ?: 120) == sec
+                                    FilterChip(
+                                        selected = isSel,
+                                        onClick = {
+                                            if (isAdmin) {
+                                                onUpdateAutoLockSettings(true, sec)
+                                            }
+                                        },
+                                        label = { Text(label, fontSize = 11.sp) },
+                                        enabled = isAdmin
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // سياسة نوع وطول كلمات المرور
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "سياسة ونوع كلمات المرور والرمز السري (Password & PIN Policy)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "تحديد أسلوب الدخول وشروط التعقيد للرمز السري والكاشير",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        val currentType = settings?.passwordType ?: com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN
+                        val currentPinLen = settings?.pinLength ?: 4
+                        val autoSubmit = settings?.enableAutoSubmitPin ?: true
+                        val minLen = settings?.minPasswordLength ?: 8
+                        val maxLen = settings?.maxPasswordLength ?: 16
+
+                        Text(
+                            text = "نوع ونمط كلمة المرور المعتمدة بالنظام:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = currentType == com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN,
+                                onClick = {
+                                    if (isAdmin) {
+                                        onUpdatePasswordPolicySettings(
+                                            com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN,
+                                            currentPinLen,
+                                            autoSubmit,
+                                            minLen,
+                                            maxLen
+                                        )
+                                    }
+                                },
+                                label = { Text("أرقام فقط (PIN)", fontSize = 12.sp) },
+                                enabled = isAdmin
+                            )
+
+                            FilterChip(
+                                selected = currentType == com.example.dokkani.data.local.entities.PasswordType.ALPHANUMERIC,
+                                onClick = {
+                                    if (isAdmin) {
+                                        onUpdatePasswordPolicySettings(
+                                            com.example.dokkani.data.local.entities.PasswordType.ALPHANUMERIC,
+                                            currentPinLen,
+                                            false,
+                                            minLen,
+                                            maxLen
+                                        )
+                                    }
+                                },
+                                label = { Text("أرقام وحروف ورموز (Alphanumeric)", fontSize = 12.sp) },
+                                enabled = isAdmin
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (currentType == com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN) {
+                            Text(
+                                text = "طول الـ PIN المطلوب:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = currentPinLen == 4,
+                                    onClick = {
+                                        if (isAdmin) {
+                                            onUpdatePasswordPolicySettings(
+                                                com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN,
+                                                4,
+                                                autoSubmit,
+                                                minLen,
+                                                maxLen
+                                            )
+                                        }
+                                    },
+                                    label = { Text("4 أرقام", fontSize = 12.sp) },
+                                    enabled = isAdmin
+                                )
+
+                                FilterChip(
+                                    selected = currentPinLen == 6,
+                                    onClick = {
+                                        if (isAdmin) {
+                                            onUpdatePasswordPolicySettings(
+                                                com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN,
+                                                6,
+                                                autoSubmit,
+                                                minLen,
+                                                maxLen
+                                            )
+                                        }
+                                    },
+                                    label = { Text("6 أرقام", fontSize = 12.sp) },
+                                    enabled = isAdmin
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "الدخول التلقائي عند اكتمال الـ PIN:",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "تسجيل الدخول فور كتابة الرقم دون الحاجة للضغط على زر موافقة/دخول",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = autoSubmit,
+                                    onCheckedChange = { isChecked ->
+                                        if (isAdmin) {
+                                            onUpdatePasswordPolicySettings(
+                                                com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN,
+                                                currentPinLen,
+                                                isChecked,
+                                                minLen,
+                                                maxLen
+                                            )
+                                        }
+                                    },
+                                    enabled = isAdmin
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "طول كلمة المرور المركبة (الحد الأدنى والأقصى):",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(8, 10, 12).forEach { minVal ->
+                                    FilterChip(
+                                        selected = minLen == minVal,
+                                        onClick = {
+                                            if (isAdmin) {
+                                                onUpdatePasswordPolicySettings(
+                                                    com.example.dokkani.data.local.entities.PasswordType.ALPHANUMERIC,
+                                                    currentPinLen,
+                                                    false,
+                                                    minVal,
+                                                    maxLen
+                                                )
+                                            }
+                                        },
+                                        label = { Text("أدنى: $minVal أحرف", fontSize = 11.sp) },
+                                        enabled = isAdmin
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "تنبيه إرشادي: عند تغير السياسة، يُعرض إشعار تعليمات للمستخدم عند إنشاء أو تغيير الرمز يوضح الشروط وطبيعة الرموز والحد المسموح به.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
                         }
                     }
                 }

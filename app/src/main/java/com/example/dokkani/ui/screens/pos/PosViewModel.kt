@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -66,6 +67,9 @@ data class PosUiState(
     val cartItems: List<PosCartItem> = emptyList(),
     val cartSummary: CartSummary = CartSummary(0, 0.0, 0.0, 0.0, 0.0, 15.0, 0.0, 0.0),
     val paymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val selectedPaymentAccountId: Long? = null,
+    val paymentTransactionRef: String = "",
+    val financialAccounts: List<com.example.dokkani.data.local.entities.FinancialAccountEntity> = emptyList(),
     val discount: Double = 0.0,
     val paidAmountInput: String = "",
     val searchQuery: String = "",
@@ -83,6 +87,7 @@ data class PosUiState(
     val shiftTotalSales: Double = 0.0,
     val cashInDrawer: Double = 0.0,
     val currentShift: CashShiftEntity? = null,
+    val isRefreshing: Boolean = false,
 
     // نموذج السندات المالية (قبض / صرف)
     val voucherParty: PartyEntity? = null,
@@ -202,6 +207,19 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        // 0.1 مراقبة الحسابات المالية (البنوك والمحافظ)
+        viewModelScope.launch(Dispatchers.IO) {
+            db.financialAccountDao().getActiveAccounts().collectLatest { accounts ->
+                _uiState.update { state ->
+                    val defaultAccId = state.selectedPaymentAccountId ?: accounts.firstOrNull { it.isDefault }?.id ?: accounts.firstOrNull()?.id
+                    state.copy(
+                        financialAccounts = accounts,
+                        selectedPaymentAccountId = defaultAccId
+                    )
+                }
+            }
+        }
+
         // 1. مراقبة المنتجات والوحدات واستخراج التصنيفات المحفوظة ديناميكياً
         viewModelScope.launch(Dispatchers.IO) {
             productDao.getProductsWithUnits().collectLatest { products ->
@@ -290,6 +308,68 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         // 5. تحديث سجل المعاملات والكميات المتوفرة بالمخزون
         loadTransactionHistory()
         refreshStockQuantities()
+    }
+
+    fun refreshData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isRefreshing = true) }
+
+            val baseCurrency = currencyDao.getBaseCurrency()
+            if (baseCurrency != null) {
+                _uiState.update {
+                    it.copy(
+                        currencySymbol = baseCurrency.symbol,
+                        currencyName = baseCurrency.name
+                    )
+                }
+            }
+
+            val accounts = db.financialAccountDao().getAllAccountsSync()
+            _uiState.update { state ->
+                val defaultAccId = state.selectedPaymentAccountId ?: accounts.firstOrNull { it.isDefault }?.id ?: accounts.firstOrNull()?.id
+                state.copy(
+                    financialAccounts = accounts,
+                    selectedPaymentAccountId = defaultAccId
+                )
+            }
+
+            val shifts = shiftDao.getAllShiftsSync()
+            val openShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+            val salesTotal = openShift?.totalCashSales ?: 0.0
+            val cashDrawer = if (openShift != null) {
+                openShift.openingCash + openShift.totalCashSales + openShift.totalCashCollections - openShift.totalCashExpenses
+            } else {
+                0.0
+            }
+
+            val parties = partyDao.getAllPartiesSync()
+
+            _uiState.update { state ->
+                val updatedSelectedParty = state.selectedParty?.let { sel ->
+                    parties.find { it.id == sel.id }
+                }
+                state.copy(
+                    currentShift = openShift,
+                    shiftTotalSales = salesTotal,
+                    cashInDrawer = cashDrawer,
+                    parties = parties,
+                    selectedParty = updatedSelectedParty
+                )
+            }
+
+            val products = productDao.getAllProductsSync()
+            val stockMap = mutableMapOf<Long, Double>()
+            products.forEach { p ->
+                stockMap[p.id] = stockMovementDao.getTotalStockQuantity(p.id)
+            }
+            _uiState.update { it.copy(productStockMap = stockMap) }
+
+            loadTransactionHistory()
+
+            delay(600)
+
+            _uiState.update { it.copy(isRefreshing = false) }
+        }
     }
 
     fun refreshStockQuantities() {
@@ -598,6 +678,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(paymentMethod = method) }
     }
 
+    fun setSelectedPaymentAccount(accountId: Long?) {
+        _uiState.update { it.copy(selectedPaymentAccountId = accountId) }
+    }
+
+    fun setPaymentTransactionRef(ref: String) {
+        _uiState.update { it.copy(paymentTransactionRef = ref) }
+    }
+
     fun setSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
     }
@@ -740,6 +828,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             paidAmount = paid,
                             remainingAmount = remaining,
                             paymentMethod = state.paymentMethod,
+                            paymentAccountId = if (state.paymentMethod.isPhysicalCash) null else state.selectedPaymentAccountId,
+                            transactionRef = state.paymentTransactionRef,
+                            paymentProviderName = state.paymentMethod.labelArabic,
                             status = InvoiceStatus.COMPLETED,
                             notes = "عملية نقطة البيع (${state.activeOperation.titleArabic})$returnNotePart"
                         )
@@ -836,28 +927,47 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         partyDao.updateBalance(selPartyId, amountDiff)
                     }
 
-                    // 4. تحديث صندوق الكاشير إذا كانت نقداً
-                    if (state.paymentMethod == PaymentMethod.CASH) {
-                        val openShift = getOrCreateOpenShift(shiftDao)
+                    // 4. تحديث الحسابات المالية والشفت حسب طريقة السداد المختارة
+                    val openShift = getOrCreateOpenShift(shiftDao)
+                    val accountDao = db.financialAccountDao()
+
+                    val accountDelta = when (state.activeOperation) {
+                        PosOperation.SALE, PosOperation.PURCHASE_RETURN -> paid
+                        PosOperation.PURCHASE, PosOperation.SALE_RETURN -> -paid
+                        else -> 0.0
+                    }
+
+                    if (state.paymentMethod.isPhysicalCash) {
+                        // أ) سداد نقدي (كاش في الدرج)
                         when (state.activeOperation) {
-                            PosOperation.SALE -> {
-                                val newSales = openShift.totalCashSales + state.cartSummary.finalTotal
-                                shiftDao.updateSales(openShift.id, newSales)
-                            }
-                            PosOperation.SALE_RETURN -> {
-                                val newSales = (openShift.totalCashSales - state.cartSummary.finalTotal).coerceAtLeast(0.0)
-                                shiftDao.updateSales(openShift.id, newSales)
-                            }
-                            PosOperation.PURCHASE -> {
-                                val newExp = openShift.totalCashExpenses + state.cartSummary.finalTotal
-                                shiftDao.updateExpenses(openShift.id, newExp)
-                            }
-                            PosOperation.PURCHASE_RETURN -> {
-                                val newColl = openShift.totalCashCollections + state.cartSummary.finalTotal
-                                shiftDao.updateCollections(openShift.id, newColl)
-                            }
+                            PosOperation.SALE -> shiftDao.updateSales(openShift.id, openShift.totalCashSales + paid)
+                            PosOperation.SALE_RETURN -> shiftDao.updateSales(openShift.id, (openShift.totalCashSales - paid).coerceAtLeast(0.0))
+                            PosOperation.PURCHASE -> shiftDao.updateExpenses(openShift.id, openShift.totalCashExpenses + paid)
+                            PosOperation.PURCHASE_RETURN -> shiftDao.updateCollections(openShift.id, openShift.totalCashCollections + paid)
                             else -> {}
                         }
+                        // تحديث حساب صندوق النقدية الرئيسي (10101)
+                        val cashAcc = accountDao.getAccountByCode("10101")
+                        if (cashAcc != null && accountDelta != 0.0) {
+                            accountDao.updateBalance(cashAcc.id, accountDelta)
+                        }
+                    } else if (state.paymentMethod.isElectronic) {
+                        // ب) سداد إلكتروني (شبكة / محفظة / تحويل)
+                        when (state.paymentMethod) {
+                            PaymentMethod.POS_CARD, PaymentMethod.MADA -> shiftDao.addMadaSales(openShift.id, paid)
+                            PaymentMethod.E_WALLET -> shiftDao.addWalletSales(openShift.id, paid)
+                            PaymentMethod.BANK_TRANSFER, PaymentMethod.EXCHANGE_NETWORK -> shiftDao.addTransferSales(openShift.id, paid)
+                            else -> {}
+                        }
+                        // ترحيل المبلغ لحساب البنك أو المحفظة المختارة
+                        val targetAccId = state.selectedPaymentAccountId
+                            ?: accountDao.getAllAccountsSync().firstOrNull { it.accountType != com.example.dokkani.data.local.entities.FinancialAccountType.CASH_DRAWER }?.id
+                        if (targetAccId != null && accountDelta != 0.0) {
+                            accountDao.updateBalance(targetAccId, accountDelta)
+                        }
+                    } else if (state.paymentMethod == PaymentMethod.CREDIT) {
+                        // ج) سداد آجل
+                        shiftDao.addCreditSales(openShift.id, state.cartSummary.finalTotal)
                     }
 
                     // 5. بناء نتيجة الدفع وتجهيز الإيصال
@@ -1039,11 +1149,23 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         // تقليل رصيد دين العميل
                         partyDao.updateBalance(party.id, -amount)
 
-                        // تحديث حركة الصندوق الشفت النشط إذا كان نقداً
-                        if (state.voucherPaymentMethod == PaymentMethod.CASH) {
+                        // تحديث حركة الصندوق والحسابات المالية
+                        val accountDao = db.financialAccountDao()
+                        if (state.voucherPaymentMethod.isPhysicalCash) {
                             val openShift = getOrCreateOpenShift(shiftDao)
                             val newCollections = openShift.totalCashCollections + amount
                             shiftDao.updateCollections(openShift.id, newCollections)
+
+                            val cashAcc = accountDao.getAccountByCode("10101")
+                            if (cashAcc != null) {
+                                accountDao.updateBalance(cashAcc.id, amount)
+                            }
+                        } else if (state.voucherPaymentMethod.isElectronic) {
+                            val targetAccId = state.selectedPaymentAccountId
+                                ?: accountDao.getAllAccountsSync().firstOrNull { it.accountType != com.example.dokkani.data.local.entities.FinancialAccountType.CASH_DRAWER }?.id
+                            if (targetAccId != null) {
+                                accountDao.updateBalance(targetAccId, amount)
+                            }
                         }
 
                         _uiState.update {
@@ -1099,11 +1221,28 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         }
 
-                        // إنقاص رصيد النقدية في الدرج الشفت النشط إذا كان نقداً
-                        if (state.voucherPaymentMethod == PaymentMethod.CASH) {
+                        // تحديث حركة الصندوق والحسابات المالية للصرف
+                        val accountDao = db.financialAccountDao()
+                        if (state.voucherPaymentMethod.isPhysicalCash) {
                             val openShift = getOrCreateOpenShift(shiftDao)
-                            val newExpenses = openShift.totalCashExpenses + amount
-                            shiftDao.updateExpenses(openShift.id, newExpenses)
+                            if (supplier != null && supplier.type != PartyType.CUSTOMER) {
+                                val newSupplierPayments = openShift.totalSupplierPayments + amount
+                                shiftDao.updateSupplierPayments(openShift.id, newSupplierPayments)
+                            } else {
+                                val newExpenses = openShift.totalCashExpenses + amount
+                                shiftDao.updateExpenses(openShift.id, newExpenses)
+                            }
+
+                            val cashAcc = accountDao.getAccountByCode("10101")
+                            if (cashAcc != null) {
+                                accountDao.updateBalance(cashAcc.id, -amount)
+                            }
+                        } else if (state.voucherPaymentMethod.isElectronic) {
+                            val targetAccId = state.selectedPaymentAccountId
+                                ?: accountDao.getAllAccountsSync().firstOrNull { it.accountType != com.example.dokkani.data.local.entities.FinancialAccountType.CASH_DRAWER }?.id
+                            if (targetAccId != null) {
+                                accountDao.updateBalance(targetAccId, -amount)
+                            }
                         }
 
                         _uiState.update {
@@ -1716,6 +1855,10 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                 cashSales = listOf(shift?.totalCashSales ?: 0.0),
                 cashCollections = listOf(shift?.totalCashCollections ?: 0.0),
                 cashExpenses = listOf(shift?.totalCashExpenses ?: 0.0),
+                supplierPayments = listOf(shift?.totalSupplierPayments ?: 0.0),
+                cashPurchases = listOf(shift?.totalCashPurchases ?: 0.0),
+                ownerDrawings = listOf(shift?.totalOwnerDrawings ?: 0.0),
+                staffAdvances = listOf(shift?.totalStaffAdvances ?: 0.0),
                 actualPhysicalCash = expected
             )
             _uiState.update {
@@ -1741,6 +1884,10 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             cashSales = listOf(shift?.totalCashSales ?: 0.0),
             cashCollections = listOf(shift?.totalCashCollections ?: 0.0),
             cashExpenses = listOf(shift?.totalCashExpenses ?: 0.0),
+            supplierPayments = listOf(shift?.totalSupplierPayments ?: 0.0),
+            cashPurchases = listOf(shift?.totalCashPurchases ?: 0.0),
+            ownerDrawings = listOf(shift?.totalOwnerDrawings ?: 0.0),
+            staffAdvances = listOf(shift?.totalStaffAdvances ?: 0.0),
             actualPhysicalCash = actual
         )
         _uiState.update {

@@ -1,8 +1,11 @@
 package com.example.dokkani.ui.screens.accounts
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -74,14 +77,15 @@ fun AccountsManagementScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(MaterialTheme.colorScheme.background)
             .padding(14.dp)
             .testTag("accounts_management_screen")
     ) {
         // بطاقة الترويسة الرئيسية مع زر الإضافة
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -96,13 +100,13 @@ fun AccountsManagementScreen(
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFE8F5E9)),
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AccountTree,
                                 contentDescription = null,
-                                tint = Color(0xFF0F5132),
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -112,12 +116,12 @@ fun AccountsManagementScreen(
                                 text = "إدارة الحسابات والدليل المحاسبي",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1E293B)
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "تحكم كامل بالبنوك، المحافظ، والصناديق مع حماية الأمان المحاسبي",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF64748B),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp
                             )
                         }
@@ -125,7 +129,7 @@ fun AccountsManagementScreen(
 
                     Button(
                         onClick = onOpenAddDialog,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("btn_add_new_account")
                     ) {
@@ -175,15 +179,17 @@ fun AccountsManagementScreen(
         // شريط البحث والتصفية
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(10.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchChanged,
                     placeholder = { Text("بحث برمز الحساب، الاسم، رقم الحساب أو الآيبان...", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B)) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingIcon = {
                         if (searchQuery.isNotBlank()) {
                             IconButton(onClick = { onSearchChanged("") }) {
@@ -198,44 +204,50 @@ fun AccountsManagementScreen(
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // رقائق التصفية حسب النوع
+                // رقائق التصفية حسب النوع مع إمكانية التمرير الأفقي لمنع التكدس والتداخل
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChip(
                         selected = filterType == null,
                         onClick = { onFilterTypeChanged(null) },
-                        label = { Text("الكل (${accounts.size})", fontSize = 11.sp) },
+                        label = { Text("الكل (${accounts.size})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         modifier = Modifier.testTag("filter_all_accounts")
                     )
                     FilterChip(
                         selected = filterType == FinancialAccountType.BANK,
                         onClick = { onFilterTypeChanged(FinancialAccountType.BANK) },
-                        label = { Text("البنوك", fontSize = 11.sp) },
+                        label = { Text("البنوك", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = { Icon(Icons.Default.AccountBalance, null, Modifier.size(14.dp)) },
                         modifier = Modifier.testTag("filter_bank_accounts")
                     )
                     FilterChip(
                         selected = filterType == FinancialAccountType.E_WALLET,
                         onClick = { onFilterTypeChanged(FinancialAccountType.E_WALLET) },
-                        label = { Text("المحافظ", fontSize = 11.sp) },
+                        label = { Text("المحافظ", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = { Icon(Icons.Default.Smartphone, null, Modifier.size(14.dp)) },
                         modifier = Modifier.testTag("filter_wallet_accounts")
                     )
                     FilterChip(
                         selected = filterType == FinancialAccountType.CASH_DRAWER,
                         onClick = { onFilterTypeChanged(FinancialAccountType.CASH_DRAWER) },
-                        label = { Text("الصناديق", fontSize = 11.sp) },
+                        label = { Text("الصناديق", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = { Icon(Icons.Default.PointOfSale, null, Modifier.size(14.dp)) }
                     )
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        // مسافة فاصلة عمودية تمنع تداخل الكروت مع أزرار الفلترة
+        Spacer(modifier = Modifier.height(16.dp))
 
         // قائمة كروت الحسابات
         if (filteredAccounts.isEmpty()) {
@@ -267,7 +279,8 @@ fun AccountsManagementScreen(
                     .fillMaxWidth()
                     .weight(1f)
                     .testTag("accounts_list"),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(filteredAccounts, key = { it.id }) { account ->
                     // حساب ما إذا كان الحساب مرتبطاً بحركات مالية للعرض المرئي
@@ -346,7 +359,8 @@ private fun AccountCardItem(
 
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -379,18 +393,18 @@ private fun AccountCardItem(
                                 text = account.name,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = Color(0xFF1E293B)
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFF1F5F9)
+                                color = MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Text(
                                     text = account.code,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF475569),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
@@ -398,7 +412,7 @@ private fun AccountCardItem(
                         Text(
                             text = "الحساب الرئيسي: ${account.parentAccountName}",
                             fontSize = 11.sp,
-                            color = Color(0xFF64748B)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

@@ -24,6 +24,9 @@ interface ProductDao {
     @Query("SELECT * FROM product_units")
     suspend fun getAllUnitsSync(): List<ProductUnitEntity>
 
+    @Query("SELECT * FROM product_units ORDER BY id DESC")
+    fun getAllUnitsFlow(): Flow<List<ProductUnitEntity>>
+
     @Query("SELECT * FROM products WHERE isActive = 1 ORDER BY id DESC")
     suspend fun getProductsSync(): List<ProductEntity>
 

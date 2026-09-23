@@ -26,6 +26,15 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE pinCode = :pinCode AND isActive = 1 LIMIT 1")
     suspend fun getUserByPin(pinCode: String): UserEntity?
 
+    @Query("SELECT * FROM users WHERE id = :userId AND pinCode = :pinCode AND isActive = 1 LIMIT 1")
+    suspend fun getUserByUserIdAndPin(userId: Int, pinCode: String): UserEntity?
+
+    @Query("UPDATE users SET pinCode = :newPin, mustChangePin = 0 WHERE id = :userId")
+    suspend fun updateUserPin(userId: Int, newPin: String)
+
+    @Query("UPDATE users SET mustChangePin = :mustChange WHERE id = :userId")
+    suspend fun setMustChangePin(userId: Int, mustChange: Boolean)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: UserEntity): Long
 

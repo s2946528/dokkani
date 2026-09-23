@@ -17,14 +17,41 @@ interface CashShiftDao {
     @Query("SELECT * FROM cash_shifts ORDER BY startTime DESC")
     suspend fun getAllShiftsSync(): List<CashShiftEntity>
 
-    @Query("UPDATE cash_shifts SET totalCashSales = :newSales, expectedCashInDrawer = openingCash + :newSales + totalCashCollections - totalCashExpenses WHERE id = :id")
+    @Query("UPDATE cash_shifts SET totalCashSales = :newSales, expectedCashInDrawer = openingCash + :newSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
     suspend fun updateSales(id: Long, newSales: Double)
 
-    @Query("UPDATE cash_shifts SET totalCashExpenses = :newExpenses, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - :newExpenses WHERE id = :id")
+    @Query("UPDATE cash_shifts SET totalCashExpenses = :newExpenses, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - :newExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
     suspend fun updateExpenses(id: Long, newExpenses: Double)
 
-    @Query("UPDATE cash_shifts SET totalCashCollections = :newCollections, expectedCashInDrawer = openingCash + totalCashSales + :newCollections - totalCashExpenses WHERE id = :id")
+    @Query("UPDATE cash_shifts SET totalCashCollections = :newCollections, expectedCashInDrawer = openingCash + totalCashSales + :newCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
     suspend fun updateCollections(id: Long, newCollections: Double)
+
+    @Query("UPDATE cash_shifts SET totalSupplierPayments = :newPayments, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - :newPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateSupplierPayments(id: Long, newPayments: Double)
+
+    @Query("UPDATE cash_shifts SET totalCashPurchases = :newPurchases, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - :newPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateCashPurchases(id: Long, newPurchases: Double)
+
+    @Query("UPDATE cash_shifts SET totalOwnerDrawings = :newDrawings, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - :newDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateOwnerDrawings(id: Long, newDrawings: Double)
+
+    @Query("UPDATE cash_shifts SET totalStaffAdvances = :newAdvances, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - :newAdvances WHERE id = :id")
+    suspend fun updateStaffAdvances(id: Long, newAdvances: Double)
+
+    @Query("UPDATE cash_shifts SET totalMadaSales = totalMadaSales + :amount WHERE id = :id")
+    suspend fun addMadaSales(id: Long, amount: Double)
+
+    @Query("UPDATE cash_shifts SET totalWalletSales = totalWalletSales + :amount WHERE id = :id")
+    suspend fun addWalletSales(id: Long, amount: Double)
+
+    @Query("UPDATE cash_shifts SET totalTransferSales = totalTransferSales + :amount WHERE id = :id")
+    suspend fun addTransferSales(id: Long, amount: Double)
+
+    @Query("UPDATE cash_shifts SET totalCreditSales = totalCreditSales + :amount WHERE id = :id")
+    suspend fun addCreditSales(id: Long, amount: Double)
+
+    @Query("UPDATE cash_shifts SET settlementStatus = :status, settlementNotes = :notes, status = 'SETTLED' WHERE id = :id")
+    suspend fun updateSettlement(id: Long, status: String, notes: String)
 
     @Query("SELECT * FROM cash_shifts WHERE status = 'OPEN' ORDER BY startTime DESC LIMIT 1")
     suspend fun getOpenShift(): CashShiftEntity?

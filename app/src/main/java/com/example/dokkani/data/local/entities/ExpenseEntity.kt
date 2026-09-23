@@ -23,7 +23,9 @@ data class ExpenseEntity(
     val expenseNumber: String,                  // رقم السند (مثل: EXP-2026-0001)
     val category: String,                       // تصنيف المصروف: كهرباء ومياه، إيجار، نظافة ومستلزمات، بوفية وضيافة، رواتب، صيانة، نثريات
     val amount: Double,                         // قيمة المصروف
-    val paymentMethod: PaymentMethod = PaymentMethod.CASH, // نقداً من الدرج / شبكة / تحويل بنكي
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH, // نقداً من الدرج / شبكة / تحويل بنكي / محفظة
+    val paymentAccountId: Long? = null,         // معرّف الحساب المالي (بنك/محفظة/شبكة)
+    val transactionRef: String = "",             // رقم العملية / المرجع / رقم الحوالة
     val date: Long = System.currentTimeMillis(),// تاريخ ووقت المصروف
     val paidTo: String = "",                    // المدفوع له (الجهة أو الشخص)
     val notes: String = "",                     // البيان والملاحظات

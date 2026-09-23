@@ -147,7 +147,7 @@ fun AssetsAndEquityScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8FAFC))
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
         // العنوان العلوي
@@ -161,12 +161,12 @@ fun AssetsAndEquityScreen(
                     text = "الأصول وحقوق الملكية ورأس المال",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F172A)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "دليل الأصول الثابتة، الخلو ونقل القدم، الحساب الآلي لرأس المال، ومسحوبات وإيداعات المالك",
                     fontSize = 12.sp,
-                    color = Color(0xFF64748B)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -981,9 +981,9 @@ private fun AddAssetDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = assetCostInput,
-                        onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, assetCategoryInput, it, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
+                        onValueChange = { onInputsChanged(assetCodeInput, assetNameInput, assetCategoryInput, it.filter { c -> c.isDigit() }, assetSupplierInput, assetNotesInput, assetPaymentMethod) },
                         label = { Text("تكلفة الشراء (${currencySymbol})*") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
@@ -1369,7 +1369,7 @@ private fun AddLeaseholdDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { onInputsChanged(code, it, cost, years, notes) },
-                    label = { Text("اسم الموقع / الخلو (مثال: خلو موقع فرع الشارع العام)*") },
+                    label = { Text("اسم الموقع / نقل قدم (خلو) [مثال: نقل قدم فرع الشارع العام]*") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -1377,16 +1377,16 @@ private fun AddLeaseholdDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = cost,
-                        onValueChange = { onInputsChanged(code, name, it, years, notes) },
-                        label = { Text("مبلغ الخلو المدفوع (${currencySymbol})*") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        onValueChange = { onInputsChanged(code, name, it.filter { c -> c.isDigit() }, years, notes) },
+                        label = { Text("مبلغ نقل قدم (خلو) المدفوع (${currencySymbol})*") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
 
                     OutlinedTextField(
                         value = years,
-                        onValueChange = { onInputsChanged(code, name, cost, it, notes) },
+                        onValueChange = { onInputsChanged(code, name, cost, it.filter { c -> c.isDigit() }, notes) },
                         label = { Text("مدة العقد (سنوات)*") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),

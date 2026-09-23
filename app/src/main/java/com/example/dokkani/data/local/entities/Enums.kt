@@ -20,14 +20,24 @@ enum class InvoiceType(val labelArabic: String) {
 }
 
 /**
- * طرق الدفع
+ * طرق الدفع والتحصيل المعتمدة في نظام دكاني
  */
-enum class PaymentMethod(val labelArabic: String) {
-    CASH("نقداً"),
+enum class PaymentMethod(
+    val labelArabic: String,
+    val isPhysicalCash: Boolean = false,
+    val requiresAccount: Boolean = false
+) {
+    CASH("نقداً (كاش)", isPhysicalCash = true),
+    POS_CARD("شبكة / نقاط بيع (POS)", requiresAccount = true),
+    MADA("شبكة مدى / بطاقة", requiresAccount = true),
+    E_WALLET("محفظة إلكترونية", requiresAccount = true),
+    BANK_TRANSFER("تحويل بنكي / شواخص", requiresAccount = true),
+    EXCHANGE_NETWORK("شبكة صرافة / تحويلات", requiresAccount = true),
     CREDIT("آجل (على الحساب)"),
-    MADA("شبكة / بطاقة"),
-    BANK_TRANSFER("حوالة بنكية"),
-    MULTI("متعدد")
+    MULTI("متعدد (كاش + شبكة/محفظة)");
+
+    val isElectronic: Boolean
+        get() = this == POS_CARD || this == MADA || this == E_WALLET || this == BANK_TRANSFER || this == EXCHANGE_NETWORK
 }
 
 /**

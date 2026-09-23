@@ -78,6 +78,26 @@ class Converters {
     }
 
     @TypeConverter
+    fun fromPasswordType(value: com.example.dokkani.data.local.entities.PasswordType): String = value.name
+
+    @TypeConverter
+    fun toPasswordType(value: String): com.example.dokkani.data.local.entities.PasswordType = try {
+        com.example.dokkani.data.local.entities.PasswordType.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.data.local.entities.PasswordType.NUMERIC_PIN
+    }
+
+    @TypeConverter
+    fun fromForeignCurrencyPricingMode(value: com.example.dokkani.data.local.entities.ForeignCurrencyPricingMode): String = value.name
+
+    @TypeConverter
+    fun toForeignCurrencyPricingMode(value: String): com.example.dokkani.data.local.entities.ForeignCurrencyPricingMode = try {
+        com.example.dokkani.data.local.entities.ForeignCurrencyPricingMode.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.data.local.entities.ForeignCurrencyPricingMode.SALE_DATE
+    }
+
+    @TypeConverter
     fun fromMovementType(value: MovementType): String = value.name
 
     @TypeConverter
@@ -115,5 +135,45 @@ class Converters {
         VoucherType.valueOf(value)
     } catch (e: Exception) {
         if (value.startsWith("PAY")) VoucherType.PAYMENT else VoucherType.RECEIPT
+    }
+
+    @TypeConverter
+    fun fromEmploymentType(value: com.example.dokkani.data.local.entities.EmploymentType): String = value.name
+
+    @TypeConverter
+    fun toEmploymentType(value: String): com.example.dokkani.data.local.entities.EmploymentType = try {
+        com.example.dokkani.data.local.entities.EmploymentType.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.data.local.entities.EmploymentType.MONTHLY_SALARY
+    }
+
+    @TypeConverter
+    fun fromAttendanceStatus(value: com.example.dokkani.data.local.entities.AttendanceStatus): String = value.name
+
+    @TypeConverter
+    fun toAttendanceStatus(value: String): com.example.dokkani.data.local.entities.AttendanceStatus = try {
+        com.example.dokkani.data.local.entities.AttendanceStatus.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.data.local.entities.AttendanceStatus.PRESENT
+    }
+
+    @TypeConverter
+    fun fromEmployeeTransactionType(value: com.example.dokkani.data.local.entities.EmployeeTransactionType): String = value.name
+
+    @TypeConverter
+    fun toEmployeeTransactionType(value: String): com.example.dokkani.data.local.entities.EmployeeTransactionType = try {
+        com.example.dokkani.data.local.entities.EmployeeTransactionType.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.data.local.entities.EmployeeTransactionType.ADVANCE
+    }
+
+    @TypeConverter
+    fun fromPayrollStatus(value: com.example.dokkani.data.local.entities.PayrollStatus): String = value.name
+
+    @TypeConverter
+    fun toPayrollStatus(value: String): com.example.dokkani.data.local.entities.PayrollStatus = try {
+        com.example.dokkani.data.local.entities.PayrollStatus.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.data.local.entities.PayrollStatus.UNPAID
     }
 }

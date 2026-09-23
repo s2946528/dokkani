@@ -27,6 +27,7 @@ object ChartOfAccountsDefaults {
         ParentAccount("102", "102 - البنوك والمصارف التجارية", FinancialAccountType.BANK),
         ParentAccount("103", "103 - محافظ الدفع والتحصيل الإلكتروني", FinancialAccountType.E_WALLET),
         ParentAccount("104", "104 - الأصول المتداولة الأخرى", FinancialAccountType.CHART_ACCOUNT),
+        ParentAccount("105", "105 - الأصول الثابتة غير الملموسة (خلو رجل / نقل قدم)", FinancialAccountType.CHART_ACCOUNT),
         ParentAccount("201", "201 - الخصوم المتداولة والدائنون", FinancialAccountType.LIABILITY),
         ParentAccount("501", "501 - المصروفات والنثريات التشغيلية", FinancialAccountType.EXPENSE)
     )

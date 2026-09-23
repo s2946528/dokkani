@@ -49,7 +49,12 @@ data class InvoiceEntity(
     val total: Double,                    // الإجمالي النهائي الصافي للفاتورة
     val paidAmount: Double,               // المبلغ المدفوع
     val remainingAmount: Double = 0.0,    // المبلغ المتبقي (آجل/دين)
-    val paymentMethod: PaymentMethod = PaymentMethod.CASH, // طريقة السداد (نقداً، شبكة، آجل)
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH, // طريقة السداد (نقداً، شبكة، محفظة، آجل)
+    val paymentAccountId: Long? = null,   // معرّف الحساب المالي (بنك/محفظة/شبكة)
+    val transactionRef: String = "",       // رقم مرجع العملية / رقم التفويض / رقم الحوالة
+    val paymentProviderName: String = "", // اسم مزود الخدمة (مثل: مدى، STC Pay، الكرييمي، الراجحي)
+    val secondaryPaidAmount: Double = 0.0, // المبلغ المسدد بالطريقة الثانوية (في حالة MULTI)
+    val secondaryPaymentMethod: PaymentMethod? = null, // طريقة السداد الثانوية
     val status: InvoiceStatus = InvoiceStatus.COMPLETED,   // حالة الفاتورة
     val notes: String = ""                // ملاحظات
 )

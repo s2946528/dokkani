@@ -27,5 +27,6 @@ data class ProductEntity(
     val minStockAlert: Double = 5.0,      // حد إعادة الطلب للتنبيه بنواقص الرفوف
     val expiryDate: Long? = null,         // تاريخ انتهاء الصلاحية
     val isActive: Boolean = true,         // حالة نشاط الصنف
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val imagePath: String? = null         // مسار أو URI صورة المنتج
 )

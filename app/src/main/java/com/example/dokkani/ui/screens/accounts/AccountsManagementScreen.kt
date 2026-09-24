@@ -54,8 +54,11 @@ fun AccountsManagementScreen(
     val filterType = uiState.accountsFilterType
     val currencySymbol = uiState.currencySymbol
 
-    // تصفية الحسابات حسب البحث والنوع
-    val filteredAccounts = remember(accounts, searchQuery, filterType) {
+    // تسيير وإخفاء الحسابات الصفرية وفق القواعد المحاسبية (مخفية افتراضياً حتى حدوث حركة أو رصيد)
+    var showZeroAccounts by remember { mutableStateOf(false) }
+
+    // تصفية الحسابات حسب البحث والنوع وبشكل خاص تسيير وإخفاء الحسابات الصفرية
+    val filteredAccounts = remember(accounts, searchQuery, filterType, showZeroAccounts) {
         accounts.filter { acc ->
             val matchesFilter = filterType == null || acc.accountType == filterType
             val matchesSearch = searchQuery.isBlank() ||
@@ -63,7 +66,11 @@ fun AccountsManagementScreen(
                     acc.code.contains(searchQuery, ignoreCase = true) ||
                     acc.accountNumber.contains(searchQuery, ignoreCase = true) ||
                     acc.parentAccountName.contains(searchQuery, ignoreCase = true)
-            matchesFilter && matchesSearch
+
+            val isNonZero = abs(acc.currentBalance) > 0.001 || abs(acc.openingBalance) > 0.001
+            val satisfiesZeroRule = showZeroAccounts || isNonZero || searchQuery.isNotBlank()
+
+            matchesFilter && matchesSearch && satisfiesZeroRule
         }
     }
 
@@ -239,6 +246,12 @@ fun AccountsManagementScreen(
                         onClick = { onFilterTypeChanged(FinancialAccountType.CASH_DRAWER) },
                         label = { Text("الصناديق", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = { Icon(Icons.Default.PointOfSale, null, Modifier.size(14.dp)) }
+                    )
+                    FilterChip(
+                        selected = showZeroAccounts,
+                        onClick = { showZeroAccounts = !showZeroAccounts },
+                        label = { Text(if (showZeroAccounts) "إخفاء الصفرية" else "إظهار الصفرية", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        leadingIcon = { Icon(if (showZeroAccounts) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, Modifier.size(14.dp)) }
                     )
                 }
 

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.dokkani.ui.components.BarcodeTextField
+import com.example.dokkani.ui.components.ReadOnlyReceiptAttachmentView
 import com.example.dokkani.ui.components.ProductSortSelector
 import com.example.dokkani.ui.models.sortProducts
 import com.example.dokkani.data.local.entities.CurrencyEntity
@@ -1680,6 +1681,12 @@ private fun PurchaseInvoiceDetailsDialog(
                 if (invoice.notes.isNotBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("الملاحظات: ${invoice.notes}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                if (!invoice.receiptImagePath.isNullOrBlank()) {
+                    ReadOnlyReceiptAttachmentView(
+                        receiptImagePath = invoice.receiptImagePath
+                    )
                 }
             }
         },

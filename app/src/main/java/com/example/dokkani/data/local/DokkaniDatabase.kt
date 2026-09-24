@@ -65,6 +65,14 @@ import com.example.dokkani.data.local.entities.AuditLogEntity
 import com.example.dokkani.data.local.dao.CurrencyExchangeHistoryDao
 import com.example.dokkani.data.local.entities.CurrencyExchangeHistoryEntity
 
+import com.example.dokkani.data.local.dao.StockGroupDao
+import com.example.dokkani.data.local.entities.StockGroupEntity
+import com.example.dokkani.data.local.entities.StockGroupItemEntity
+import com.example.dokkani.data.local.entities.StockGroupAuditEntity
+
+import com.example.dokkani.data.local.dao.ProductWastageDao
+import com.example.dokkani.data.local.entities.ProductWastageEntity
+
 /**
  * قاعدة البيانات الرئيسية لنظام دكاني (Dokkani Database)
  */
@@ -95,9 +103,13 @@ import com.example.dokkani.data.local.entities.CurrencyExchangeHistoryEntity
         PayrollRecordEntity::class,
         SalaryAdjustmentLogEntity::class,
         AuditLogEntity::class,
-        CurrencyExchangeHistoryEntity::class
+        CurrencyExchangeHistoryEntity::class,
+        StockGroupEntity::class,
+        StockGroupItemEntity::class,
+        StockGroupAuditEntity::class,
+        ProductWastageEntity::class
     ],
-    version = 15,
+    version = 19,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -126,6 +138,8 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun salaryAdjustmentLogDao(): SalaryAdjustmentLogDao
     abstract fun auditLogDao(): AuditLogDao
     abstract fun currencyExchangeHistoryDao(): CurrencyExchangeHistoryDao
+    abstract fun stockGroupDao(): StockGroupDao
+    abstract fun productWastageDao(): ProductWastageDao
 
     companion object {
         @Volatile

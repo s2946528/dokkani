@@ -41,6 +41,7 @@ data class PaymentVoucherEntity(
     val paymentMethod: PaymentMethod = PaymentMethod.CASH, // طريقة السداد: نقداً، شبكة، تحويل بنكي، محفظة
     val paymentAccountId: Long? = null,         // معرّف الحساب المالي (بنك/محفظة/شبكة)
     val transactionRef: String = "",             // رقم العملية / المرجع / رقم الحوالة
+    val receiptImagePath: String? = null,        // مسار/رابط صورة إشعار السداد أو الحوالة
     val date: Long = System.currentTimeMillis(),// تاريخ ووقت السداد
     val receivedBy: String = "كاشير 1",         // المستلم / الكاشير
     val notes: String = ""                      // ملاحظات وبيان السند

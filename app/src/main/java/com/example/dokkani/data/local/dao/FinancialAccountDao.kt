@@ -17,6 +17,18 @@ interface FinancialAccountDao {
     @Query("SELECT * FROM financial_accounts WHERE isActive = 1 ORDER BY code ASC")
     fun getActiveAccounts(): Flow<List<FinancialAccountEntity>>
 
+    @Query("SELECT * FROM financial_accounts WHERE isActive = 1 AND currentBalance != 0.0 AND accountType IN ('BANK', 'E_WALLET') ORDER BY code ASC")
+    fun getActiveNonZeroBankAndWalletAccounts(): Flow<List<FinancialAccountEntity>>
+
+    @Query("SELECT * FROM financial_accounts WHERE isActive = 1 AND currentBalance != 0.0 AND accountType IN ('BANK', 'E_WALLET') ORDER BY code ASC")
+    suspend fun getActiveNonZeroBankAndWalletAccountsSync(): List<FinancialAccountEntity>
+
+    @Query("SELECT * FROM financial_accounts WHERE isActive = 1 AND currentBalance != 0.0 AND accountType != 'CASH_DRAWER' ORDER BY code ASC")
+    fun getActiveNonZeroAccounts(): Flow<List<FinancialAccountEntity>>
+
+    @Query("SELECT * FROM financial_accounts WHERE isActive = 1 AND currentBalance != 0.0 AND accountType != 'CASH_DRAWER' ORDER BY code ASC")
+    suspend fun getActiveNonZeroAccountsSync(): List<FinancialAccountEntity>
+
     @Query("SELECT * FROM financial_accounts WHERE accountType = :type ORDER BY code ASC")
     fun getAccountsByType(type: FinancialAccountType): Flow<List<FinancialAccountEntity>>
 

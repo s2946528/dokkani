@@ -79,6 +79,12 @@ import androidx.compose.material.icons.filled.Badge
 import com.example.dokkani.ui.screens.hr.HrAndPayrollScreen
 import kotlinx.coroutines.launch
 
+import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.example.dokkani.ui.screens.ValueSellingManagementScreen
+
 data class NavTabItem(
     val title: String,
     val icon: ImageVector,
@@ -96,12 +102,13 @@ fun DokkaniApp(
     val uiState by viewModel.uiState.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var showValueSellingManagementScreen by remember { mutableStateOf(false) }
 
     val allTabs = listOf(
         NavTabItem("الفواتير والسندات", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("فواتير الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("إدارة البيع بالقيمة", Icons.Default.MonetizationOn, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("المنتجات والوحدات", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
-        NavTabItem("التكلفة والخضار", Icons.Default.Calculate, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("إدارة الشفتات والدرج", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("دليل الحسابات والبنوك", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
@@ -299,19 +306,35 @@ fun DokkaniApp(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                if (allowedTabs.isNotEmpty()) {
+                if (showValueSellingManagementScreen) {
+                    ValueSellingManagementScreen(
+                        currentUserRole = currentUserRole,
+                        onNavigateBack = { showValueSellingManagementScreen = false }
+                    )
+                } else if (allowedTabs.isNotEmpty()) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         val activeTabTitle = allowedTabs.getOrNull(currentTabIndex)?.title ?: ""
                         when (activeTabTitle) {
                             "الفواتير والسندات" -> {
-                                PosScreen(currentUserRole = currentUserRole)
+                                PosScreen(
+                                    currentUserRole = currentUserRole,
+                                    onNavigateToValueSellingManagement = { showValueSellingManagementScreen = true }
+                                )
                             }
                             "فواتير الشراء" -> {
                                 PurchaseScreen(currentUserRole = currentUserRole)
                             }
+                            "إدارة البيع بالقيمة" -> {
+                                ValueSellingManagementScreen(
+                                    currentUserRole = currentUserRole,
+                                    onNavigateBack = { viewModel.selectTab(0) }
+                                )
+                            }
                             "المنتجات والوحدات" -> {
                                 ProductsAndUnitsScreen(
                                     productsWithUnits = uiState.products,
+                                    wasteRecords = uiState.wasteRecords,
+                                    currencies = uiState.currencies,
                                     currentUserRole = currentUserRole,
                                     currencySymbol = uiState.currencySymbol,
                                     onSaveProduct = viewModel::saveProduct,
@@ -319,13 +342,9 @@ fun DokkaniApp(
                                     onSaveUnit = viewModel::saveProductUnit,
                                     onDeleteUnit = viewModel::deleteProductUnit,
                                     onRenameCategory = viewModel::renameCategory,
-                                    onDeleteCategory = viewModel::deleteCategory
-                                )
-                            }
-                            "التكلفة والخضار" -> {
-                                CostingEngineScreen(
-                                    productsWithUnits = uiState.products,
-                                    currencySymbol = uiState.currencySymbol
+                                    onDeleteCategory = viewModel::deleteCategory,
+                                    onSaveWasteRecord = viewModel::saveWasteRecord,
+                                    onDeleteWasteRecord = viewModel::deleteWasteRecord
                                 )
                             }
                             "الخزينة والمصروفات" -> {
@@ -421,11 +440,14 @@ fun DokkaniApp(
                                     onOpenPaymentVoucherDialog = viewModel::openPaymentVoucherDialog,
                                     onDismissPaymentVoucherDialog = viewModel::dismissPaymentVoucherDialog,
                                     onVoucherInputsChanged = viewModel::updateVoucherInputs,
+                                    onVoucherReceiptImagePathChanged = viewModel::updateVoucherReceiptImagePath,
                                     onSubmitPaymentVoucher = viewModel::submitPaymentVoucher,
                                     onSaveParty = viewModel::saveParty,
                                     onDeleteParty = viewModel::requestDeletePartyWithProtection,
                                     onDeleteVoucher = viewModel::deletePaymentVoucher,
                                     onDeleteInvoice = viewModel::deleteInvoice,
+                                    onUpdateInvoice = viewModel::updateDirectInvoice,
+                                    onUpdateVoucher = viewModel::updateDirectVoucher,
                                     onSendWhatsAppReminder = { ctx, phone, text ->
                                         try {
                                             val cleanPhone = phone.replace("+", "").replace(" ", "")
@@ -506,6 +528,7 @@ fun DokkaniApp(
                                     uiState = uiState,
                                     onSelectSubTab = viewModel::selectReportSubTab,
                                     onSelectValuationMethod = viewModel::selectValuationMethod,
+                                    onSelectStatementMode = viewModel::selectReportStatementMode,
                                     onRefreshReports = viewModel::refreshReports
                                 )
                             }
@@ -590,6 +613,7 @@ fun DokkaniApp(
                                     onSaveParty = viewModel::saveParty,
                                     onDeleteParty = viewModel::deleteParty,
                                     onDeleteInvoice = viewModel::deleteInvoice,
+                                    onUpdateInvoice = viewModel::updateDirectInvoice,
                                     onUpdateStoreProfile = viewModel::updateStoreProfile,
                                     onUpdateShowPreviousBalance = viewModel::updateShowPreviousBalance,
                                     onUpdateShowDecimals = viewModel::updateShowDecimals,

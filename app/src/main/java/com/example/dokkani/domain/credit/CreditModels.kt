@@ -33,7 +33,8 @@ data class StatementItem(
     val debit: Double,          // مدين (مشتريات بالآجل تزيد الدين على العميل)
     val credit: Double,         // دائن (سداد أو تسوية تقلل الدين)
     val runningBalance: Double,  // الرصيد بعد هذه الحركة
-    val paymentMethodArabic: String
+    val paymentMethodArabic: String,
+    val receiptImagePath: String? = null
 )
 
 /**
@@ -88,7 +89,8 @@ object CreditNotebookEngine {
                                 description = if (inv.notes.isNotBlank()) inv.notes else "مشتريات على الحساب",
                                 debit = effectiveCreditAmount,
                                 credit = 0.0,
-                                paymentMethodArabic = inv.paymentMethod.labelArabic
+                                paymentMethodArabic = inv.paymentMethod.labelArabic,
+                                receiptImagePath = inv.receiptImagePath
                             )
                         )
                     }
@@ -104,7 +106,8 @@ object CreditNotebookEngine {
                             description = if (inv.notes.isNotBlank()) inv.notes else "مرتجع مبيعات",
                             debit = 0.0,
                             credit = returnAmt,
-                            paymentMethodArabic = inv.paymentMethod.labelArabic
+                            paymentMethodArabic = inv.paymentMethod.labelArabic,
+                            receiptImagePath = inv.receiptImagePath
                         )
                     )
                 }
@@ -119,7 +122,8 @@ object CreditNotebookEngine {
                                 description = if (inv.notes.isNotBlank()) inv.notes else "فاتورة توريد مشتريات",
                                 debit = 0.0,
                                 credit = effectiveCreditAmount,
-                                paymentMethodArabic = inv.paymentMethod.labelArabic
+                                paymentMethodArabic = inv.paymentMethod.labelArabic,
+                                receiptImagePath = inv.receiptImagePath
                             )
                         )
                     }
@@ -135,7 +139,8 @@ object CreditNotebookEngine {
                             description = if (inv.notes.isNotBlank()) inv.notes else "مرتجع مشتريات",
                             debit = returnAmt,
                             credit = 0.0,
-                            paymentMethodArabic = inv.paymentMethod.labelArabic
+                            paymentMethodArabic = inv.paymentMethod.labelArabic,
+                            receiptImagePath = inv.receiptImagePath
                         )
                     )
                 }
@@ -153,7 +158,8 @@ object CreditNotebookEngine {
                         description = if (vch.notes.isNotBlank()) vch.notes else "سداد دفعة نقدية - سند قبض",
                         debit = 0.0,
                         credit = vch.amount,
-                        paymentMethodArabic = vch.paymentMethod.labelArabic
+                        paymentMethodArabic = vch.paymentMethod.labelArabic,
+                        receiptImagePath = vch.receiptImagePath
                     )
                 )
             } else {
@@ -166,7 +172,8 @@ object CreditNotebookEngine {
                         description = if (vch.notes.isNotBlank()) vch.notes else "سداد دفعة للمورد - سند صرف",
                         debit = vch.amount,
                         credit = 0.0,
-                        paymentMethodArabic = vch.paymentMethod.labelArabic
+                        paymentMethodArabic = vch.paymentMethod.labelArabic,
+                        receiptImagePath = vch.receiptImagePath
                     )
                 )
             }
@@ -246,7 +253,8 @@ object CreditNotebookEngine {
                     debit = m.debit,
                     credit = m.credit,
                     runningBalance = if (!isSupplier) cumulativeBalance else -cumulativeBalance,
-                    paymentMethodArabic = m.paymentMethodArabic
+                    paymentMethodArabic = m.paymentMethodArabic,
+                    receiptImagePath = m.receiptImagePath
                 )
             )
         }
@@ -343,6 +351,7 @@ object CreditNotebookEngine {
         val description: String,
         val debit: Double,
         val credit: Double,
-        val paymentMethodArabic: String
+        val paymentMethodArabic: String,
+        val receiptImagePath: String? = null
     )
 }

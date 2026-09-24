@@ -28,8 +28,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.ui.components.PaymentMethodSelector
+import com.example.dokkani.data.local.entities.InvoiceEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -122,6 +123,14 @@ fun PurchaseReturnScreen(
                         onSearchChange = { viewModel.setSearchQuery(it) },
                         onSelectInvoice = { invoice -> viewModel.selectInvoiceForReturn(invoice) },
                         onDismiss = { viewModel.dismissSelectInvoiceDialog() }
+                    )
+                }
+
+                // نافذة التحذير عند تجاوز الكمية القابلة للرد أو رصيد المخزن
+                if (uiState.showReturnQuantityWarningDialog) {
+                    com.example.dokkani.ui.screens.pos.ReturnQuantityWarningDialog(
+                        message = uiState.returnQuantityWarningMessage,
+                        onDismiss = { viewModel.dismissReturnQuantityWarningDialog() }
                     )
                 }
 
@@ -307,26 +316,15 @@ private fun ActivePurchaseReturnContent(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("طريقة استرداد القيمة:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = uiState.paymentMethod == PaymentMethod.CREDIT,
-                            onClick = { viewModel.setPaymentMethod(PaymentMethod.CREDIT) },
-                            label = { Text("آجل (تخفيض مديونية المورد)", fontSize = 11.sp) }
-                        )
-                        FilterChip(
-                            selected = uiState.paymentMethod == PaymentMethod.CASH,
-                            onClick = { viewModel.setPaymentMethod(PaymentMethod.CASH) },
-                            label = { Text("نقداً (استرداد للصندوق)", fontSize = 11.sp) }
-                        )
-                    }
-                }
+                PaymentMethodSelector(
+                    selectedMethod = uiState.paymentMethod,
+                    onMethodSelected = { viewModel.setPaymentMethod(it) },
+                    transactionRef = uiState.transactionRef,
+                    onTransactionRefChange = { viewModel.setTransactionRef(it) },
+                    receiptImagePath = uiState.receiptImagePath,
+                    onReceiptImageChange = { viewModel.setReceiptImagePath(it) },
+                    currencySymbol = uiState.currencySymbol
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

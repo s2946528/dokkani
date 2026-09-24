@@ -36,11 +36,14 @@ import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceWithDetails
 import com.example.dokkani.data.local.entities.PartyEntity
+import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.ui.screens.crud.AddEditCurrencyDialog
 import com.example.dokkani.ui.screens.crud.AddEditPartyDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
+import com.example.dokkani.ui.components.DirectEditInvoiceDialog
+import com.example.dokkani.ui.components.ConfirmDeleteTransactionDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,6 +65,7 @@ fun SystemSettingsScreen(
     onSaveParty: (PartyEntity) -> Unit = {},
     onDeleteParty: (PartyEntity) -> Unit = {},
     onDeleteInvoice: (Long) -> Unit = {},
+    onUpdateInvoice: (Long, Double, Double, Double, PaymentMethod, String, String, String?) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onUpdateStoreProfile: (storeName: String, storeAddress: String, storePhone: String, taxNumber: String, invoiceFooterText: String, showPreviousBalance: Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onUpdateShowPreviousBalance: (Boolean) -> Unit = {},
     onUpdateShowDecimals: (Boolean) -> Unit = {},
@@ -93,6 +97,7 @@ fun SystemSettingsScreen(
     var deletingParty by remember { mutableStateOf<PartyEntity?>(null) }
 
     var deletingInvoiceId by remember { mutableStateOf<Long?>(null) }
+    var editingInvoiceId by remember { mutableStateOf<Long?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -1465,16 +1470,29 @@ fun SystemSettingsScreen(
                                         }
 
                                         if (isAdmin) {
-                                            IconButton(
-                                                onClick = { deletingInvoiceId = i.id },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "حذف الفاتورة",
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(
+                                                    onClick = { editingInvoiceId = i.id },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Edit,
+                                                        contentDescription = "تعديل الفاتورة",
+                                                        tint = Color(0xFF1976D2),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { deletingInvoiceId = i.id },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "حذف الفاتورة",
+                                                        tint = MaterialTheme.colorScheme.error,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1586,13 +1604,30 @@ fun SystemSettingsScreen(
     }
 
     if (deletingInvoiceId != null) {
-        ConfirmDeleteDialog(
-            message = "هل أنت ألكيد من حذف الفاتورة رقم #$deletingInvoiceId؟",
+        val inv = invoices.find { it.id == deletingInvoiceId }
+        ConfirmDeleteTransactionDialog(
+            title = "تأكيد حذف الفاتورة",
+            message = "هل أنت متأكد من حذف الفاتورة رقم #${inv?.invoiceNumber ?: deletingInvoiceId} بقيمة ${"%.2f".format(inv?.total ?: 0.0)}؟",
             onConfirm = {
                 onDeleteInvoice(deletingInvoiceId!!)
                 deletingInvoiceId = null
             },
             onDismiss = { deletingInvoiceId = null }
         )
+    }
+
+    if (editingInvoiceId != null) {
+        val inv = invoices.find { it.id == editingInvoiceId }
+        if (inv != null) {
+            DirectEditInvoiceDialog(
+                invoice = inv,
+                isAdmin = currentUserRole == UserRole.ADMIN,
+                onDismiss = { editingInvoiceId = null },
+                onSave = { newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg ->
+                    onUpdateInvoice(inv.id, newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg)
+                    editingInvoiceId = null
+                }
+            )
+        }
     }
 }

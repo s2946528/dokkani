@@ -1,5 +1,9 @@
 package com.example.dokkani.ui.screens.crud
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,8 +28,10 @@ import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.ProductEntity
+import com.example.dokkani.ui.components.ProductImagePickerSection
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.ui.components.BarcodeTextField
+import com.example.dokkani.ui.components.ProductThumbnailImage
 
 /**
  * حوار تأكيد الحذف عام
@@ -342,7 +349,16 @@ fun AddEditProductDialog(
     var minStockAlert by remember {
         mutableStateOf(initialProduct?.minStockAlert?.toLong()?.toString() ?: "5")
     }
-    
+    var imagePath by remember { mutableStateOf(initialProduct?.imagePath ?: "") }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let {
+            imagePath = it.toString()
+        }
+    }
+
     // Base unit initial values if creating new product
     var baseUnitName by remember { mutableStateOf("حبة") }
     var isBaseUnit by remember { mutableStateOf(true) }
@@ -419,6 +435,14 @@ fun AddEditProductDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
+                )
+
+                // قسم صورة المنتج وإدارتها
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                ProductImagePickerSection(
+                    imagePath = imagePath.ifBlank { null },
+                    onImagePathChanged = { imagePath = it ?: "" },
+                    productName = name.ifBlank { "صورة المنتج" }
                 )
 
                 if (initialProduct == null) {
@@ -500,14 +524,16 @@ fun AddEditProductDialog(
                             category = category.ifBlank { "عام" }.trim(),
                             englishName = englishName.trim(),
                             isWeighted = isWeighted,
-                            minStockAlert = minStockAlert.toDoubleOrNull() ?: 5.0
+                            minStockAlert = minStockAlert.toDoubleOrNull() ?: 5.0,
+                            imagePath = imagePath.ifBlank { null }
                         )).copy(
                             name = name.trim(),
                             code = code.trim(),
                             category = category.ifBlank { "عام" }.trim(),
                             englishName = englishName.trim(),
                             isWeighted = isWeighted,
-                            minStockAlert = minStockAlert.toDoubleOrNull() ?: 5.0
+                            minStockAlert = minStockAlert.toDoubleOrNull() ?: 5.0,
+                            imagePath = imagePath.ifBlank { null }
                         )
                         onSaveProduct(
                             prod,

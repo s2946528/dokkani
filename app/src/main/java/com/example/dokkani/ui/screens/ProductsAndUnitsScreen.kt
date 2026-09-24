@@ -38,6 +38,19 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.LaunchedEffect
+import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.ProductWastageEntity
+import com.example.dokkani.data.local.entities.ProductWastageWithProduct
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,6 +63,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -74,6 +88,8 @@ import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.UserRole
 import com.example.dokkani.ui.components.BarcodeTextField
+import com.example.dokkani.ui.components.ProductImageZoomDialog
+import com.example.dokkani.ui.components.ProductThumbnailImage
 import com.example.dokkani.ui.screens.crud.AddEditProductDialog
 import com.example.dokkani.ui.screens.crud.AddEditUnitDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
@@ -86,6 +102,8 @@ data class FlattenedUnitItem(
 @Composable
 fun ProductsAndUnitsScreen(
     productsWithUnits: List<ProductWithUnits>,
+    wasteRecords: List<ProductWastageWithProduct> = emptyList(),
+    currencies: List<CurrencyEntity> = emptyList(),
     currentUserRole: UserRole = UserRole.ADMIN,
     onSaveProduct: (ProductEntity, String, Double, Double, String, Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onDeleteProduct: (Long) -> Unit = {},
@@ -93,6 +111,8 @@ fun ProductsAndUnitsScreen(
     onDeleteUnit: (ProductUnitEntity) -> Unit = {},
     onRenameCategory: (oldName: String, newName: String) -> Unit = { _, _ -> },
     onDeleteCategory: (categoryName: String, reassignTo: String) -> Unit = { _, _ -> },
+    onSaveWasteRecord: (productId: Long, quantity: Double, unit: String, currency: String, reason: String, totalCost: Double, adminUser: String, wasteId: Long, notes: String) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
+    onDeleteWasteRecord: (ProductWastageEntity) -> Unit = {},
     onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null,
     currencySymbol: String = "ر.ي",
     modifier: Modifier = Modifier
@@ -103,6 +123,7 @@ fun ProductsAndUnitsScreen(
     var showAddProductDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var deletingProductId by remember { mutableStateOf<Long?>(null) }
+    var zoomedProductForImage by remember { mutableStateOf<ProductWithUnits?>(null) }
 
     var showSelectProductForNewUnitDialog by remember { mutableStateOf(false) }
     var addingUnitProductId by remember { mutableStateOf<Long?>(null) }
@@ -183,49 +204,73 @@ fun ProductsAndUnitsScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        // شريط التبويبات بالترتيب والأسماء المطلوبة: الأصناف، الوحدات، التصنيفات
-        TabRow(
+        // شريط التبويبات القابل للسحب أفقياً (Scrollable Horizontal Tabs) بالترتيب والأسماء المطلوبة
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary,
+            edgePadding = 12.dp,
+            modifier = Modifier.fillMaxWidth().testTag("products_scrollable_tabs")
         ) {
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
                 text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Icon(Icons.Default.Inventory, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text("الأصناف", fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        BadgeCount(productsWithUnits.size)
+                        BadgeCount(count = productsWithUnits.size, isSelected = selectedTab == 0)
                     }
-                }
+                },
+                modifier = Modifier.testTag("tab_products")
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
                 text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Icon(Icons.Default.Scale, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text("الوحدات", fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        BadgeCount(allFlattenedUnits.size)
+                        BadgeCount(count = allFlattenedUnits.size, isSelected = selectedTab == 1)
                     }
-                }
+                },
+                modifier = Modifier.testTag("tab_units")
             )
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
                 text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text("التصنيفات", fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        BadgeCount(allCategories.size)
+                        BadgeCount(count = allCategories.size, isSelected = selectedTab == 2)
                     }
-                }
+                },
+                modifier = Modifier.testTag("tab_categories")
+            )
+            Tab(
+                selected = selectedTab == 3,
+                onClick = { selectedTab = 3 },
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("التالف والهادر", fontWeight = FontWeight.Bold)
+                        BadgeCount(count = wasteRecords.size, isSelected = selectedTab == 3)
+                    }
+                },
+                modifier = Modifier.testTag("tab_wastage")
             )
         }
 
@@ -311,44 +356,53 @@ fun ProductsAndUnitsScreen(
 
                         items(filteredProducts) { item ->
                             val p = item.product
+                            val baseUnit = item.units.firstOrNull { it.isBaseUnit } ?: item.units.firstOrNull()
+
                             Card(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 modifier = Modifier.fillMaxWidth().testTag("product_card_${p.id}")
                             ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
+                                Column(modifier = Modifier.padding(14.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = if (p.isWeighted) Color(0xFFD1E7DD) else MaterialTheme.colorScheme.primaryContainer,
-                                                modifier = Modifier.size(40.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(
-                                                        imageVector = if (p.isWeighted) Icons.Default.Scale else Icons.Default.Category,
-                                                        contentDescription = null,
-                                                        tint = if (p.isWeighted) Color(0xFF0F5132) else MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                }
-                                            }
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            // صورة المنتج المصغرة (Thumbnail)
+                                            ProductThumbnailImage(
+                                                imagePath = p.imagePath,
+                                                productName = p.name,
+                                                size = 48.dp,
+                                                shape = RoundedCornerShape(8.dp),
+                                                onClick = { zoomedProductForImage = item }
+                                            )
+
                                             Spacer(modifier = Modifier.width(12.dp))
+
+                                            // ترتيب النصوص: اسم الصنف (في الأعلى)، وتحته اسم التصنيف ثم اسم الوحدة
                                             Column {
                                                 Text(
                                                     text = p.name,
                                                     style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
-                                                    text = "${p.code} • ${p.category} • ${if (p.isWeighted) "يباع بالوزن/الميزان" else "بالقطعة/العبوة"}",
+                                                    text = "القسم: ${p.category} (${p.code})",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = "الوحدة: ${baseUnit?.unitName ?: "غير محددة"} ${if (p.isWeighted) "(بالوزن)" else ""}",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.outline
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.SemiBold
                                                 )
                                             }
                                         }
@@ -729,6 +783,21 @@ fun ProductsAndUnitsScreen(
                         }
                     }
                 }
+
+                3 -> {
+                    // ==========================================
+                    // التبويب الرابع: التالف والهادر للأصناف الفردية
+                    // ==========================================
+                    ProductWastageTabContent(
+                        productsWithUnits = productsWithUnits,
+                        wasteRecords = wasteRecords,
+                        currencies = currencies,
+                        currentUserRole = currentUserRole,
+                        currencySymbol = currencySymbol,
+                        onSaveWasteRecord = onSaveWasteRecord,
+                        onDeleteWasteRecord = onDeleteWasteRecord
+                    )
+                }
             }
         }
     }
@@ -736,6 +805,18 @@ fun ProductsAndUnitsScreen(
     // ==========================================
     // الحوارات والنافذة التفاعلية (Dialogs)
     // ==========================================
+
+    // نافذة تكبير وتفاصيل صورة المنتج (Lightbox)
+    zoomedProductForImage?.let { pwu ->
+        val baseUnit = pwu.units.firstOrNull { it.isBaseUnit } ?: pwu.units.firstOrNull()
+        ProductImageZoomDialog(
+            imagePath = pwu.product.imagePath,
+            productName = pwu.product.name,
+            categoryName = pwu.product.category,
+            unitName = baseUnit?.unitName,
+            onDismiss = { zoomedProductForImage = null }
+        )
+    }
 
     // نافذة اختيار الصنف لإضافة وحدة من تبويب الوحدات
     if (showSelectProductForNewUnitDialog) {
@@ -850,18 +931,21 @@ fun ProductsAndUnitsScreen(
 }
 
 @Composable
-private fun BadgeCount(count: Int) {
+private fun BadgeCount(count: Int, isSelected: Boolean = false) {
+    val bgColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier.padding(2.dp)
+        color = bgColor,
+        modifier = Modifier.padding(start = 2.dp)
     ) {
         Text(
             text = "$count",
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
         )
     }
 }
@@ -1187,4 +1271,594 @@ private fun ConfirmDeleteCategoryDialog(
             }
         }
     )
+}
+
+// ==========================================
+// التبويب الرابع: التالف والهادر للأصناف الفردية
+// ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProductWastageTabContent(
+    productsWithUnits: List<ProductWithUnits>,
+    wasteRecords: List<ProductWastageWithProduct>,
+    currencies: List<CurrencyEntity>,
+    currentUserRole: UserRole,
+    currencySymbol: String,
+    onSaveWasteRecord: (productId: Long, quantity: Double, unit: String, currency: String, reason: String, totalCost: Double, adminUser: String, wasteId: Long, notes: String) -> Unit,
+    onDeleteWasteRecord: (ProductWastageEntity) -> Unit
+) {
+    val isAdmin = currentUserRole == UserRole.ADMIN
+    val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+
+    var selectedProductWithUnits by remember { mutableStateOf<ProductWithUnits?>(productsWithUnits.firstOrNull()) }
+    var selectedUnitName by remember { mutableStateOf("") }
+    var quantityInput by remember { mutableStateOf("") }
+    var selectedReason by remember { mutableStateOf("انتهاء صلاحية") }
+    var selectedCurrencyCode by remember { mutableStateOf(currencySymbol) }
+    var manualTotalCostInput by remember { mutableStateOf("") }
+    var adminUserInput by remember { mutableStateOf("مدير النظام (Admin)") }
+    var notesInput by remember { mutableStateOf("") }
+
+    var showProductDropdown by remember { mutableStateOf(false) }
+    var showUnitDropdown by remember { mutableStateOf(false) }
+    var showReasonDropdown by remember { mutableStateOf(false) }
+    var showCurrencyDropdown by remember { mutableStateOf(false) }
+
+    var editingRecord by remember { mutableStateOf<ProductWastageWithProduct?>(null) }
+    var deletingRecord by remember { mutableStateOf<ProductWastageEntity?>(null) }
+
+    val reasonsList = listOf(
+        "انتهاء صلاحية",
+        "تلف أثناء النقل والتحميل",
+        "كسر أو كبس العبوة",
+        "عفن ورطوبة وسوء تخزين",
+        "عينة / تالف للعرض والبيع",
+        "أخرى (توضيح بالملاحظات)"
+    )
+
+    // حساب التكلفة الافتراضية
+    val baseUnit = selectedProductWithUnits?.units?.firstOrNull { it.isBaseUnit } ?: selectedProductWithUnits?.units?.firstOrNull()
+    val baseUnitCost = baseUnit?.costPrice ?: 0.0
+
+    val calculatedCost = remember(selectedProductWithUnits, selectedUnitName, quantityInput) {
+        val qty = quantityInput.toDoubleOrNull() ?: 0.0
+        val matchedUnit = selectedProductWithUnits?.units?.find { it.unitName == selectedUnitName } ?: baseUnit
+        val cost = matchedUnit?.costPrice ?: baseUnitCost
+        qty * cost
+    }
+
+    LaunchedEffect(selectedProductWithUnits) {
+        if (selectedProductWithUnits != null) {
+            val u = selectedProductWithUnits?.units?.firstOrNull { it.isBaseUnit }?.unitName ?: selectedProductWithUnits?.units?.firstOrNull()?.unitName ?: "حبة"
+            selectedUnitName = u
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // كارت التعريف بالتبويب
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "تسجيل وإدارة التالف والهادر للأصناف الفردية",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "خصم مباشر ومحاسبي من المخزون وتوثيق قيم الخسائر لضبط تكلفة البضاعة (COGS)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // تنبيه الصلاحيات (Admin Role Check)
+        if (!isAdmin) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "تنبيه تقييد الصلاحية",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                text = "حصر صلاحية (إضافة، تعديل، أو حذف قيود الإتلاف) في هذا التبويب على حساب مدير النظام فقط (Admin Role).",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // نموذج القيد (Admin Only)
+        if (isAdmin) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("إضافة قيد إتلاف جديد للصنف", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+
+                        HorizontalDivider()
+
+                        // 1. اختيار الصنف الفردي (product_id)
+                        ExposedDropdownMenuBox(
+                            expanded = showProductDropdown,
+                            onExpandedChange = { showProductDropdown = it }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedProductWithUnits?.product?.name ?: "اختر الصنف...",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("الصنف الفردي *") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showProductDropdown) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = showProductDropdown,
+                                onDismissRequest = { showProductDropdown = false }
+                            ) {
+                                productsWithUnits.forEach { pwu ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(pwu.product.name, fontWeight = FontWeight.Bold)
+                                                Text("الكود: ${pwu.product.code} | القسم: ${pwu.product.category}", fontSize = 11.sp, color = Color.Gray)
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedProductWithUnits = pwu
+                                            showProductDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // 2. الكمية والوحدة
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = quantityInput,
+                                onValueChange = { quantityInput = it },
+                                label = { Text("الكمية / الوزن التالف *") },
+                                placeholder = { Text("مثال: 1.5") },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                singleLine = true
+                            )
+
+                            // اختيار وحدة الصنف
+                            val availableUnits = selectedProductWithUnits?.units ?: emptyList()
+                            ExposedDropdownMenuBox(
+                                expanded = showUnitDropdown,
+                                onExpandedChange = { showUnitDropdown = it },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedUnitName.ifEmpty { "اختر الوحدة" },
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("وحدة الصنف *") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showUnitDropdown) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = showUnitDropdown,
+                                    onDismissRequest = { showUnitDropdown = false }
+                                ) {
+                                    availableUnits.forEach { u ->
+                                        DropdownMenuItem(
+                                            text = { Text(u.unitName) },
+                                            onClick = {
+                                                selectedUnitName = u.unitName
+                                                showUnitDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. سبب التلف والعملة
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            ExposedDropdownMenuBox(
+                                expanded = showReasonDropdown,
+                                onExpandedChange = { showReasonDropdown = it },
+                                modifier = Modifier.weight(1.2f)
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedReason,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("سبب التلف *") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showReasonDropdown) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = showReasonDropdown,
+                                    onDismissRequest = { showReasonDropdown = false }
+                                ) {
+                                    reasonsList.forEach { r ->
+                                        DropdownMenuItem(
+                                            text = { Text(r) },
+                                            onClick = {
+                                                selectedReason = r
+                                                showReasonDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            ExposedDropdownMenuBox(
+                                expanded = showCurrencyDropdown,
+                                onExpandedChange = { showCurrencyDropdown = it },
+                                modifier = Modifier.weight(0.8f)
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedCurrencyCode.ifEmpty { currencySymbol },
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("العملة *") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showCurrencyDropdown) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = showCurrencyDropdown,
+                                    onDismissRequest = { showCurrencyDropdown = false }
+                                ) {
+                                    if (currencies.isEmpty()) {
+                                        DropdownMenuItem(text = { Text(currencySymbol) }, onClick = { selectedCurrencyCode = currencySymbol; showCurrencyDropdown = false })
+                                    } else {
+                                        currencies.forEach { c ->
+                                            DropdownMenuItem(
+                                                text = { Text("${c.name} (${c.symbol})") },
+                                                onClick = {
+                                                    selectedCurrencyCode = c.symbol
+                                                    showCurrencyDropdown = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. قيمة التكلفة المحسوبة + اعتماد مدير النظام
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val finalCostText = if (manualTotalCostInput.isNotBlank()) manualTotalCostInput else String.format(Locale.US, "%.2f", calculatedCost)
+                            OutlinedTextField(
+                                value = finalCostText,
+                                onValueChange = { manualTotalCostInput = it },
+                                label = { Text("إجمالي تكلفة الخسارة ($selectedCurrencyCode) *") },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                singleLine = true
+                            )
+
+                            OutlinedTextField(
+                                value = adminUserInput,
+                                onValueChange = { adminUserInput = it },
+                                label = { Text("اعتماد مدير النظام *") },
+                                readOnly = true,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                singleLine = true
+                            )
+                        }
+
+                        // زر الحفظ المباشر
+                        val canSave = selectedProductWithUnits != null && (quantityInput.toDoubleOrNull() ?: 0.0) > 0
+                        Button(
+                            onClick = {
+                                val p = selectedProductWithUnits ?: return@Button
+                                val q = quantityInput.toDoubleOrNull() ?: 0.0
+                                val costVal = manualTotalCostInput.toDoubleOrNull() ?: calculatedCost
+                                onSaveWasteRecord(
+                                    p.product.id,
+                                    q,
+                                    selectedUnitName.ifEmpty { "حبة" },
+                                    selectedCurrencyCode.ifEmpty { currencySymbol },
+                                    selectedReason,
+                                    costVal,
+                                    adminUserInput,
+                                    0L,
+                                    notesInput
+                                )
+                                quantityInput = ""
+                                manualTotalCostInput = ""
+                                notesInput = ""
+                            },
+                            enabled = canSave,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("اعتماد قيد التلف وخصم الكمية من المخزون", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // عرض تفاصيل القيود السابقة في الأسفل مع أيقونات التعديل والحذف
+        // ==========================================
+        item {
+            Text(
+                text = "سجل قيود التالف والهادر المسجلة (${wasteRecords.size}):",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (wasteRecords.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("لا توجد قيود إتلاف مسجلة حتى الآن", color = Color.Gray)
+                }
+            }
+        } else {
+            items(wasteRecords) { item ->
+                val record = item.wasteRecord
+                val p = item.product
+
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth().testTag("waste_record_${record.id}")
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer
+                                    ) {
+                                        Text(
+                                            text = "#WST-${record.id}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = p?.name ?: "صنف غير معروف",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "القسم: ${p?.category ?: "-"} | الكود: ${p?.code ?: "-"}",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray
+                                )
+                            }
+
+                            // أيقونات التحكم (تعديل وحذف لمدير النظام فقط)
+                            if (isAdmin) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { editingRecord = item },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "تعديل قيد التلف",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { deletingRecord = record },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "حذف قيد التلف",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("الكمية التالفة: ${record.quantity} ${record.unit}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                                Text("سبب التلف: ${record.reason}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("تكلفة الخسارة: ${record.totalCost} ${record.currency}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFC62828))
+                                Text("المعتمِد: ${record.adminUser}", fontSize = 11.sp, color = Color.Gray)
+                                Text(dateFormat.format(Date(record.timestamp)), fontSize = 10.sp, color = Color.Gray, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // نافذة تعديل قيد الإتلاف
+    editingRecord?.let { item ->
+        val record = item.wasteRecord
+        var editQty by remember { mutableStateOf(record.quantity.toString()) }
+        var editUnit by remember { mutableStateOf(record.unit) }
+        var editReason by remember { mutableStateOf(record.reason) }
+        var editCurrency by remember { mutableStateOf(record.currency) }
+        var editTotalCost by remember { mutableStateOf(record.totalCost.toString()) }
+
+        AlertDialog(
+            onDismissRequest = { editingRecord = null },
+            title = { Text("تعديل قيد الإتلاف (#WST-${record.id})", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("الصنف: ${item.product?.name ?: ""}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    OutlinedTextField(
+                        value = editQty,
+                        onValueChange = { editQty = it },
+                        label = { Text("الكمية / الوزن") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = editUnit,
+                        onValueChange = { editUnit = it },
+                        label = { Text("الوحدة") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = editReason,
+                        onValueChange = { editReason = it },
+                        label = { Text("سبب التلف") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = editTotalCost,
+                        onValueChange = { editTotalCost = it },
+                        label = { Text("إجمالي تكلفة التلف ($editCurrency)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val q = editQty.toDoubleOrNull() ?: record.quantity
+                        val c = editTotalCost.toDoubleOrNull() ?: record.totalCost
+                        onSaveWasteRecord(
+                            record.productId,
+                            q,
+                            editUnit,
+                            editCurrency,
+                            editReason,
+                            c,
+                            record.adminUser,
+                            record.id,
+                            record.notes
+                        )
+                        editingRecord = null
+                    },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("تحديث القيد والمخزون")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { editingRecord = null }, shape = RoundedCornerShape(8.dp)) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // نافذة تأكيد حذف قيد الإتلاف
+    deletingRecord?.let { record ->
+        AlertDialog(
+            onDismissRequest = { deletingRecord = null },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("حذف قيد الإتلاف (#WST-${record.id})", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
+            text = {
+                Text("هل أنت متأكد من حذف قيد التلف هذا؟ سيقوم النظام فوراً بإعادة وإرجاع الكمية المخصومة (${record.quantity} ${record.unit}) إلى رصيد مخزون الصنف الفعلي.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteWasteRecord(record)
+                        deletingRecord = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("تأكيد الحذف واسترجاع المخزون")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { deletingRecord = null }, shape = RoundedCornerShape(8.dp)) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
 }

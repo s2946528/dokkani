@@ -30,7 +30,8 @@ object AssetsAndEquityEngine {
         fixedAssets: List<FixedAssetEntity>,
         leaseholdRights: List<LeaseholdRightEntity> = emptyList(),
         ownerTransactions: List<OwnerTransactionEntity>,
-        netOperatingProfit: Double = 0.0
+        netOperatingProfit: Double = 0.0,
+        registeredOpeningCapital: Double = 0.0
     ): EquityCalculationResult {
         // 1. حساب تقييم البضاعة والمخزون الحالي بسعر التكلفة
         val stockByProduct = stockMovements.groupBy { it.productId }
@@ -83,7 +84,8 @@ object AssetsAndEquityEngine {
         // 8. صافي حقوق الملكية الإجمالي السليم محاسبياً:
         // صافي حقوق الملكية = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + صافي الأرباح التشغيلية
         // تم تصحيح التضاعف المحاسبي (Double Counting): الأصول الثابتة لا تجمع مرة ثانية لأنها أصل من أصول المنشأة محسوب سلفاً ضمن رأس المال الافتتاحي
-        val netEquity = calculatedCapital + totalDeposits - totalDrawings + netOperatingProfit
+        val baseOpeningCapital = if (registeredOpeningCapital > 0.0) registeredOpeningCapital else calculatedCapital
+        val netEquity = baseOpeningCapital + totalDeposits - totalDrawings + netOperatingProfit
 
         return EquityCalculationResult(
             cashInHandAndDrawer = cashInDrawer,
@@ -97,7 +99,8 @@ object AssetsAndEquityEngine {
             totalOwnerDrawings = totalDrawings,
             totalAdditionalCapitalDeposits = totalDeposits,
             netOperatingProfit = netOperatingProfit,
-            netTotalEquity = netEquity
+            netTotalEquity = netEquity,
+            registeredOpeningCapital = registeredOpeningCapital
         )
     }
 }

@@ -132,6 +132,22 @@ data class PosTransactionRecord(
     val status: String,
     val operation: PosOperation,
     val paymentMethod: PaymentMethod = PaymentMethod.CASH,
-    val notes: String = ""
+    val notes: String = "",
+    val rawTimestamp: Long = 0L,
+    val partyId: Long? = null,
+    val dbId: Long = 0L
+)
+
+/**
+ * تفاصيل بند في شاشة تفاصيل العملية
+ */
+data class TransactionItemDetail(
+    val productName: String,
+    val productCode: String,
+    val unitName: String,
+    val quantity: Double,
+    val unitPrice: Double,
+    val discount: Double,
+    val totalPrice: Double
 )
 

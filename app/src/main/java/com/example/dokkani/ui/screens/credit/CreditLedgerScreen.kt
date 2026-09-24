@@ -49,6 +49,11 @@ import com.example.dokkani.domain.credit.StatementItem
 import com.example.dokkani.ui.DokkaniUiState
 import com.example.dokkani.ui.screens.crud.AddEditPartyDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
+import com.example.dokkani.ui.components.ReceiptAttachmentComponent
+import com.example.dokkani.ui.components.ReadOnlyReceiptAttachmentView
+import com.example.dokkani.ui.components.DirectEditInvoiceDialog
+import com.example.dokkani.ui.components.DirectEditVoucherDialog
+import com.example.dokkani.ui.components.ConfirmDeleteTransactionDialog
 import kotlin.math.abs
 
 /**
@@ -64,11 +69,14 @@ fun CreditLedgerScreen(
     onOpenPaymentVoucherDialog: (Long) -> Unit,
     onDismissPaymentVoucherDialog: () -> Unit,
     onVoucherInputsChanged: (String, String, PaymentMethod) -> Unit,
+    onVoucherReceiptImagePathChanged: (String?) -> Unit = {},
     onSubmitPaymentVoucher: () -> Unit,
     onSaveParty: (PartyEntity) -> Unit = {},
     onDeleteParty: (PartyEntity) -> Unit = {},
     onDeleteVoucher: (Long) -> Unit = {},
     onDeleteInvoice: (Long) -> Unit = {},
+    onUpdateInvoice: (Long, Double, Double, Double, PaymentMethod, String, String, String?) -> Unit = { _, _, _, _, _, _, _, _ -> },
+    onUpdateVoucher: (Long, Double, PaymentMethod, String, String, String?) -> Unit = { _, _, _, _, _, _ -> },
     onSendWhatsAppReminder: (Context, String, String) -> Unit
 ) {
     val context = LocalContext.current
@@ -82,6 +90,8 @@ fun CreditLedgerScreen(
 
     var deletingVoucherId by remember { mutableStateOf<Long?>(null) }
     var deletingInvoiceId by remember { mutableStateOf<Long?>(null) }
+    var editingInvoiceId by remember { mutableStateOf<Long?>(null) }
+    var editingVoucherId by remember { mutableStateOf<Long?>(null) }
 
     // تقسيم الحسابات حسب التبويب المفتوح
     val customers = remember(parties) {
@@ -307,6 +317,8 @@ fun CreditLedgerScreen(
                     isAdmin = isAdmin,
                     onBack = { onSelectParty(null) },
                     onAddPayment = { onOpenPaymentVoucherDialog(it) },
+                    onEditInvoice = { editingInvoiceId = it },
+                    onEditVoucher = { editingVoucherId = it },
                     onDeleteInvoice = { deletingInvoiceId = it },
                     onDeleteVoucher = { deletingVoucherId = it },
                     onSendWhatsApp = { phone, text -> onSendWhatsAppReminder(context, phone, text) },
@@ -402,8 +414,10 @@ fun CreditLedgerScreen(
     }
 
     if (deletingInvoiceId != null) {
-        ConfirmDeleteDialog(
-            message = "هل أنت تأكيد من حذف الفاتورة رقم #$deletingInvoiceId؟",
+        val inv = uiState.invoices.find { it.id == deletingInvoiceId }
+        ConfirmDeleteTransactionDialog(
+            title = "تأكيد حذف الفاتورة",
+            message = "هل أنت متأكد من حذف الفاتورة رقم #${inv?.invoiceNumber ?: deletingInvoiceId} بقيمة ${"%.2f".format(inv?.total ?: 0.0)} ${uiState.currencySymbol}؟",
             onConfirm = {
                 onDeleteInvoice(deletingInvoiceId!!)
                 deletingInvoiceId = null
@@ -413,14 +427,48 @@ fun CreditLedgerScreen(
     }
 
     if (deletingVoucherId != null) {
-        ConfirmDeleteDialog(
-            message = "هل أنت تأكيد من إلغاء وحذف السند رقم #$deletingVoucherId؟",
+        val v = uiState.vouchers.find { it.id == deletingVoucherId }
+        ConfirmDeleteTransactionDialog(
+            title = "تأكيد إلغاء وحذف السند",
+            message = "هل أنت متأكد من إلغاء وحذف السند رقم #${v?.voucherNumber ?: deletingVoucherId} بمبلغ ${"%.2f".format(v?.amount ?: 0.0)} ${uiState.currencySymbol}؟",
             onConfirm = {
                 onDeleteVoucher(deletingVoucherId!!)
                 deletingVoucherId = null
             },
             onDismiss = { deletingVoucherId = null }
         )
+    }
+
+    if (editingInvoiceId != null) {
+        val inv = uiState.invoices.find { it.id == editingInvoiceId }
+        if (inv != null) {
+            DirectEditInvoiceDialog(
+                invoice = inv,
+                currencySymbol = uiState.currencySymbol,
+                isAdmin = isAdmin,
+                onDismiss = { editingInvoiceId = null },
+                onSave = { newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg ->
+                    onUpdateInvoice(inv.id, newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg)
+                    editingInvoiceId = null
+                }
+            )
+        }
+    }
+
+    if (editingVoucherId != null) {
+        val v = uiState.vouchers.find { it.id == editingVoucherId }
+        if (v != null) {
+            DirectEditVoucherDialog(
+                voucher = v,
+                currencySymbol = uiState.currencySymbol,
+                isAdmin = isAdmin,
+                onDismiss = { editingVoucherId = null },
+                onSave = { newAmt, newMethod, newRef, newNotes, newImg ->
+                    onUpdateVoucher(v.id, newAmt, newMethod, newRef, newNotes, newImg)
+                    editingVoucherId = null
+                }
+            )
+        }
     }
 
     // نافذة حوار تسجيل سند القبض / سند الصرف
@@ -431,6 +479,8 @@ fun CreditLedgerScreen(
             amountInput = uiState.voucherAmountInput,
             notesInput = uiState.voucherNotesInput,
             selectedMethod = uiState.voucherPaymentMethod,
+            receiptImagePath = uiState.voucherReceiptImagePath,
+            onReceiptImageChanged = onVoucherReceiptImagePathChanged,
             isSubmitting = uiState.isSubmittingVoucher,
             onInputsChanged = onVoucherInputsChanged,
             onDismiss = onDismissPaymentVoucherDialog,
@@ -751,6 +801,8 @@ private fun PartyStatementView(
     isAdmin: Boolean,
     onBack: () -> Unit,
     onAddPayment: (Long) -> Unit,
+    onEditInvoice: (Long) -> Unit = {},
+    onEditVoucher: (Long) -> Unit = {},
     onDeleteInvoice: (Long) -> Unit,
     onDeleteVoucher: (Long) -> Unit,
     onSendWhatsApp: (String, String) -> Unit,
@@ -894,6 +946,8 @@ private fun PartyStatementView(
                 StatementRowCard(
                     item = item,
                     isAdmin = isAdmin,
+                    onEditInvoice = onEditInvoice,
+                    onEditVoucher = onEditVoucher,
                     onDeleteInvoice = onDeleteInvoice,
                     onDeleteVoucher = onDeleteVoucher,
                     currencySymbol = currencySymbol
@@ -923,6 +977,8 @@ private fun PartyStatementView(
 private fun StatementRowCard(
     item: StatementItem,
     isAdmin: Boolean,
+    onEditInvoice: (Long) -> Unit = {},
+    onEditVoucher: (Long) -> Unit = {},
     onDeleteInvoice: (Long) -> Unit,
     onDeleteVoucher: (Long) -> Unit,
     currencySymbol: String = "ر.ي"
@@ -936,117 +992,143 @@ private fun StatementRowCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = when (item.type) {
-                        StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFFEF2F2)
-                        StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFFEFF6FF)
-                        StatementEntryType.OPENING_BALANCE -> Color(0xFFF1F5F9)
-                        else -> Color(0xFFF0FDF4)
-                    },
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = when (item.type) {
+                            StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFFEF2F2)
+                            StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFFEFF6FF)
+                            StatementEntryType.OPENING_BALANCE -> Color(0xFFF1F5F9)
+                            else -> Color(0xFFF0FDF4)
+                        },
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = when (item.type) {
+                                    StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> "فاتورة"
+                                    StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> "مرتجع"
+                                    StatementEntryType.OPENING_BALANCE -> "رصيد"
+                                    else -> "سند"
+                                },
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (item.type) {
+                                    StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFDC2626)
+                                    StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFF2563EB)
+                                    StatementEntryType.OPENING_BALANCE -> Color(0xFF475569)
+                                    else -> Color(0xFF16A34A)
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val refText = if (item.type == StatementEntryType.OPENING_BALANCE) "" else " #${item.refNumber}"
+                            Text(
+                                text = "${item.type.labelArabic}$refText",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF0F172A)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "(${item.paymentMethodArabic})",
+                                fontSize = 11.sp,
+                                color = Color(0xFF64748B)
+                            )
+                        }
                         Text(
-                            text = when (item.type) {
-                                StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> "فاتورة"
-                                StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> "مرتجع"
-                                StatementEntryType.OPENING_BALANCE -> "رصيد"
-                                else -> "سند"
-                            },
+                            text = item.description,
+                            fontSize = 11.sp,
+                            color = Color(0xFF475569)
+                        )
+                        Text(
+                            text = item.dateFormatted,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = when (item.type) {
-                                StatementEntryType.SALE_INVOICE, StatementEntryType.PURCHASE_INVOICE -> Color(0xFFDC2626)
-                                StatementEntryType.SALE_RETURN, StatementEntryType.PURCHASE_RETURN -> Color(0xFF2563EB)
-                                StatementEntryType.OPENING_BALANCE -> Color(0xFF475569)
-                                else -> Color(0xFF16A34A)
-                            }
+                            color = Color(0xFF94A3B8)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val refText = if (item.type == StatementEntryType.OPENING_BALANCE) "" else " #${item.refNumber}"
+                // المبالغ (مدين / دائن والرصيد التراكمي)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (item.debit > 0) {
+                            Text(
+                                text = "+${"%.2f".format(item.debit)} $currencySymbol",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFFDC2626)
+                            )
+                        } else {
+                            Text(
+                                text = "-${"%.2f".format(item.credit)} $currencySymbol",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF16A34A)
+                            )
+                        }
                         Text(
-                            text = "${item.type.labelArabic}$refText",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Color(0xFF0F172A)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "(${item.paymentMethodArabic})",
+                            text = "الرصيد: ${"%.2f".format(abs(item.runningBalance))} $currencySymbol",
                             fontSize = 11.sp,
                             color = Color(0xFF64748B)
                         )
                     }
-                    Text(
-                        text = item.description,
-                        fontSize = 11.sp,
-                        color = Color(0xFF475569)
-                    )
-                    Text(
-                        text = item.dateFormatted,
-                        fontSize = 10.sp,
-                        color = Color(0xFF94A3B8)
-                    )
+
+                    if (isAdmin && item.type != StatementEntryType.OPENING_BALANCE && item.rawId > 0) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    if (isInvoice || isReturn) onEditInvoice(item.rawId)
+                                    else onEditVoucher(item.rawId)
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "تعديل الحركة",
+                                    tint = Color(0xFF1976D2),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (isInvoice || isReturn) onDeleteInvoice(item.rawId)
+                                    else onDeleteVoucher(item.rawId)
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "حذف الحركة",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            // المبالغ (مدين / دائن والرصيد التراكمي)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(horizontalAlignment = Alignment.End) {
-                    if (item.debit > 0) {
-                        Text(
-                            text = "+${"%.2f".format(item.debit)} $currencySymbol",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFFDC2626)
-                        )
-                    } else {
-                        Text(
-                            text = "-${"%.2f".format(item.credit)} $currencySymbol",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF16A34A)
-                        )
-                    }
-                    Text(
-                        text = "الرصيد: ${"%.2f".format(abs(item.runningBalance))} $currencySymbol",
-                        fontSize = 11.sp,
-                        color = Color(0xFF64748B)
-                    )
-                }
-
-                if (isAdmin && item.type != StatementEntryType.OPENING_BALANCE && item.rawId > 0) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(
-                        onClick = {
-                            if (isInvoice) onDeleteInvoice(item.rawId)
-                            else onDeleteVoucher(item.rawId)
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "حذف الحركة",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
+            // عرض صورة الإشعار المرفقة بالمعاملة الحالية فقط (إن وجدت)
+            if (!item.receiptImagePath.isNullOrBlank()) {
+                ReadOnlyReceiptAttachmentView(
+                    receiptImagePath = item.receiptImagePath,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+                )
             }
         }
     }
@@ -1061,6 +1143,8 @@ private fun PaymentVoucherDialog(
     amountInput: String,
     notesInput: String,
     selectedMethod: PaymentMethod,
+    receiptImagePath: String?,
+    onReceiptImageChanged: (String?) -> Unit,
     isSubmitting: Boolean,
     onInputsChanged: (String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
@@ -1072,7 +1156,10 @@ private fun PaymentVoucherDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Surface(
                     shape = CircleShape,
                     color = if (isSupplier) Color(0xFFE0F2FE) else Color(0xFFDCFCE7),
@@ -1091,7 +1178,8 @@ private fun PaymentVoucherDialog(
                 Text(
                     text = if (isSupplier) "تسجيل سند صرف وتسديد للمورد: ${party?.name ?: ""}" else "تسجيل سند قبض لحساب العميل: ${party?.name ?: ""}",
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
                 )
             }
         },
@@ -1158,9 +1246,15 @@ private fun PaymentVoucherDialog(
                 OutlinedTextField(
                     value = notesInput,
                     onValueChange = { onInputsChanged(amountInput, it, selectedMethod) },
-                    label = { Text("ملاحظات إضافية / رقم السند") },
+                    label = { Text("رقم العملية / المرجع / رقم الحوالة / ملاحظات") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
+                )
+
+                // إرفاق صورة إشعار السداد مباشرةً أسفل حقل رقم العملية/المرجع
+                ReceiptAttachmentComponent(
+                    receiptImagePath = receiptImagePath,
+                    onReceiptImageChanged = onReceiptImageChanged
                 )
             }
         },

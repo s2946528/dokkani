@@ -94,3 +94,54 @@ data class InventoryHealthReport(
     val totalLowStockCount: Int,
     val totalExpiredOrNearExpiryCount: Int
 )
+
+/**
+ * تقرير الميزانية العمومية الختامي (Balance Sheet Report)
+ */
+data class BalanceSheetReport(
+    val currentAssetsCashInDrawer: Double,      // النقدية بالصناديق والدرج
+    val currentAssetsBankBalances: Double,      // أرصدة البنوك ومقبوضات شبكة مدى
+    val currentAssetsInventoryValuation: Double,// تقييم بضاعة آخر المدة بالسعر بالتكلفة
+    val currentAssetsReceivables: Double,       // ديون العملاء (الأرصدة المدينة)
+    val totalCurrentAssets: Double,             // إجمالي الأصول المتداولة
+
+    val fixedAssetsTotal: Double,               // الأصول الثابتة (ثلاجات، أرفف، موازين)
+    val leaseholdGoodwillTotal: Double,         // الأصول غير الملموسة (نقل القدم / الخلو)
+    val totalNonCurrentAssets: Double,          // إجمالي الأصول غير المتداولة
+
+    val totalAssets: Double,                    // إجمالي الأصول = المتداولة + غير المتداولة
+
+    val supplierPayables: Double,               // ديون الموردين والالتزامات (الأرصدة الدائنة)
+    val totalLiabilities: Double,               // إجمالي الخصوم والالتزامات
+
+    val fixedOpeningCapital: Double,            // رأس المال الافتتاحي الثابت
+    val additionalCapitalDeposits: Double,      // إيداعات رأس المال الإضافية
+    val ownerDrawings: Double,                  // مسحوبات المالك الشخصية
+    val netRetainedOperatingProfit: Double,     // الأرباح/الخسائر المبقاة
+    val currentAffectedCapital: Double,         // رأس المال الجاري المتأثر بالعمليات
+    val totalEquity: Double,                    // إجمالي حقوق الملكية
+
+    val totalLiabilitiesAndEquity: Double       // إجمالي الخصوم وحقوق الملكية
+)
+
+/**
+ * بند ميزان المراجعة المحاسبي (Trial Balance Item)
+ */
+data class TrialBalanceItem(
+    val accountCode: String,
+    val accountName: String,
+    val categoryLabel: String,
+    val debit: Double,  // مدين
+    val credit: Double  // دائن
+)
+
+/**
+ * تقرير ميزان المراجعة المحاسبي الشامل (Trial Balance Report)
+ */
+data class TrialBalanceReport(
+    val items: List<TrialBalanceItem>,
+    val totalDebit: Double,
+    val totalCredit: Double,
+    val isBalanced: Boolean
+)
+

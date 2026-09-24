@@ -53,6 +53,7 @@ data class InvoiceEntity(
     val paymentAccountId: Long? = null,   // معرّف الحساب المالي (بنك/محفظة/شبكة)
     val transactionRef: String = "",       // رقم مرجع العملية / رقم التفويض / رقم الحوالة
     val paymentProviderName: String = "", // اسم مزود الخدمة (مثل: مدى، STC Pay، الكرييمي، الراجحي)
+    val receiptImagePath: String? = null, // مسار/رابط صورة إشعار السداد أو الحوالة
     val secondaryPaidAmount: Double = 0.0, // المبلغ المسدد بالطريقة الثانوية (في حالة MULTI)
     val secondaryPaymentMethod: PaymentMethod? = null, // طريقة السداد الثانوية
     val status: InvoiceStatus = InvoiceStatus.COMPLETED,   // حالة الفاتورة

@@ -26,6 +26,8 @@ import com.example.dokkani.data.local.entities.VoucherType
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
+import com.example.dokkani.data.local.entities.ProductWastageEntity
+import com.example.dokkani.data.local.entities.ProductWastageWithProduct
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.local.entities.UserEntity
@@ -48,8 +50,10 @@ import com.example.dokkani.domain.credit.CreditNotebookEngine
 import com.example.dokkani.domain.credit.CustomerStatementSummary
 import com.example.dokkani.domain.reports.FinancialReportsEngine
 import com.example.dokkani.domain.reports.InventoryHealthReport
+import com.example.dokkani.domain.reports.BalanceSheetReport
 import com.example.dokkani.domain.reports.ProfitAndLossReport
 import com.example.dokkani.domain.reports.TopProductsReport
+import com.example.dokkani.domain.reports.TrialBalanceReport
 import com.example.dokkani.domain.security.ActivationPlan
 import com.example.dokkani.domain.security.DeviceFingerprintManager
 import com.example.dokkani.domain.security.DokkaniKeyGenerator
@@ -138,6 +142,7 @@ enum class PropertyStatus {
 data class DokkaniUiState(
     val selectedTab: Int = 0,
     val products: List<ProductWithUnits> = emptyList(),
+    val wasteRecords: List<ProductWastageWithProduct> = emptyList(),
     val allUnits: List<ProductUnitEntity> = emptyList(),
     val parties: List<PartyEntity> = emptyList(),
     val expenses: List<ExpenseEntity> = emptyList(),
@@ -179,12 +184,16 @@ data class DokkaniUiState(
     val voucherAmountInput: String = "",
     val voucherNotesInput: String = "",
     val voucherPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val voucherReceiptImagePath: String? = null,
     val isSubmittingVoucher: Boolean = false,
 
     // Reports
     val isLoadingReports: Boolean = false,
     val reportSubTab: Int = 0,
+    val reportStatementMode: Int = 0, // 0 = Detailed Statement, 1 = Summary Statement
     val pnlReport: ProfitAndLossReport? = null,
+    val balanceSheetReport: BalanceSheetReport? = null,
+    val trialBalanceReport: TrialBalanceReport? = null,
     val selectedReportValuationMethod: CostValuationMethod = CostValuationMethod.WAC,
     val topProductsReport: TopProductsReport? = null,
     val inventoryHealthReport: InventoryHealthReport? = null,
@@ -328,6 +337,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             db.productDao().getProductsWithUnits().collectLatest { products ->
                 _uiState.update { it.copy(products = products) }
                 recalculateEquity()
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.productWastageDao().getWasteRecordsWithProduct().collectLatest { wastes ->
+                _uiState.update { it.copy(wasteRecords = wastes) }
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -806,7 +820,15 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openPaymentVoucherDialog(partyId: Long) {
-        _uiState.update { it.copy(showPaymentVoucherDialog = true, voucherPartyId = partyId) }
+        _uiState.update {
+            it.copy(
+                showPaymentVoucherDialog = true,
+                voucherPartyId = partyId,
+                voucherAmountInput = "",
+                voucherNotesInput = "",
+                voucherReceiptImagePath = null
+            )
+        }
     }
 
     fun dismissPaymentVoucherDialog() {
@@ -815,7 +837,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 showPaymentVoucherDialog = false,
                 voucherPartyId = null,
                 voucherAmountInput = "",
-                voucherNotesInput = ""
+                voucherNotesInput = "",
+                voucherReceiptImagePath = null
             )
         }
     }
@@ -828,6 +851,10 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 voucherPaymentMethod = method
             )
         }
+    }
+
+    fun updateVoucherReceiptImagePath(path: String?) {
+        _uiState.update { it.copy(voucherReceiptImagePath = path) }
     }
 
     fun submitPaymentVoucher() {
@@ -850,6 +877,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 amount = amount,
                 voucherType = vType,
                 paymentMethod = state.voucherPaymentMethod,
+                transactionRef = state.voucherNotesInput,
+                receiptImagePath = state.voucherReceiptImagePath,
                 notes = state.voucherNotesInput,
                 receivedBy = "كاشير النظام"
             )
@@ -890,7 +919,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     showPaymentVoucherDialog = false,
                     voucherPartyId = null,
                     voucherAmountInput = "",
-                    voucherNotesInput = ""
+                    voucherNotesInput = "",
+                    voucherReceiptImagePath = null
                 )
             }
             loadCustomerStatement(partyId)
@@ -900,6 +930,10 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     // --- Reports Actions ---
     fun selectReportSubTab(index: Int) {
         _uiState.update { it.copy(reportSubTab = index) }
+    }
+
+    fun selectReportStatementMode(mode: Int) {
+        _uiState.update { it.copy(reportStatementMode = mode) }
     }
 
     fun selectValuationMethod(method: CostValuationMethod) {
@@ -937,9 +971,19 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 stockMovements = movements
             )
 
+            recalculateEquity()
+            val equityRes = _uiState.value.equityResult
+            val accounts = _uiState.value.financialAccounts
+            val parties = _uiState.value.parties
+
+            val balanceSheet = FinancialReportsEngine.generateBalanceSheetReport(equityRes)
+            val trialBalance = FinancialReportsEngine.generateTrialBalanceReport(accounts, parties, pnl, equityRes)
+
             _uiState.update {
                 it.copy(
                     pnlReport = pnl,
+                    balanceSheetReport = balanceSheet,
+                    trialBalanceReport = trialBalance,
                     topProductsReport = topProds,
                     inventoryHealthReport = inventoryHealth,
                     isLoadingReports = false
@@ -1099,6 +1143,79 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             val productsToUpdate = db.productDao().getAllProductsSync().filter { it.category.trim() == categoryName.trim() }
             productsToUpdate.forEach { prod ->
                 db.productDao().updateProduct(prod.copy(category = targetCategory))
+            }
+        }
+    }
+
+    // --- إدارة التالف والهادر للأصناف الفردية (Wastage & Loss Management) ---
+    fun saveWasteRecord(
+        productId: Long,
+        quantity: Double,
+        unit: String,
+        currency: String = "YER",
+        reason: String,
+        totalCost: Double,
+        adminUser: String,
+        wasteId: Long = 0L,
+        notes: String = ""
+    ) {
+        if (productId <= 0 || quantity <= 0 || totalCost <= 0) return
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                val now = System.currentTimeMillis()
+                val record = ProductWastageEntity(
+                    id = wasteId,
+                    productId = productId,
+                    quantity = quantity,
+                    unit = unit,
+                    currency = currency,
+                    reason = reason,
+                    totalCost = totalCost,
+                    adminUser = adminUser.ifBlank { "مدير النظام" },
+                    timestamp = now,
+                    notes = notes
+                )
+
+                val insertedId = if (wasteId > 0) {
+                    db.productWastageDao().updateWasteRecord(record)
+                    db.stockMovementDao().deleteMovementsByReferenceNumber("WASTE-$wasteId")
+                    wasteId
+                } else {
+                    db.productWastageDao().insertWasteRecord(record)
+                }
+
+                // حساب معامل تحويل الوحدة لحساب الكمية بالوحدة الأساسية
+                val units = db.productDao().getUnitsForProductSync(productId)
+                val matchedUnit = units.find { it.unitName.trim().equals(unit.trim(), ignoreCase = true) }
+                val conversionFactor = matchedUnit?.conversionFactor ?: 1.0
+                val qtyInBaseUnit = quantity * conversionFactor
+                val baseUnitCost = if (qtyInBaseUnit > 0) totalCost / qtyInBaseUnit else 0.0
+
+                // الربط المباشر بالمخزن: إنشاء حركة مخزون صادر للتالف والهادر (WASTAGE_OUT)
+                db.stockMovementDao().insertMovement(
+                    StockMovementEntity(
+                        productId = productId,
+                        productUnitId = matchedUnit?.id,
+                        movementType = MovementType.WASTAGE_OUT,
+                        quantityBaseUnit = -qtyInBaseUnit,
+                        remainingQuantityForFifo = 0.0,
+                        unitCostPriceBase = baseUnitCost,
+                        timestamp = now,
+                        referenceNumber = "WASTE-$insertedId",
+                        notes = "إتلاف وهادر: $reason (اعتماد: $adminUser)"
+                    )
+                )
+            }
+        }
+    }
+
+    fun deleteWasteRecord(record: ProductWastageEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                // 1. حذف قيد التلف
+                db.productWastageDao().deleteWasteRecord(record)
+                // 2. التراجع العكسي عن خصم المخزون بحذف حركة المخزون المربوطة
+                db.stockMovementDao().deleteMovementsByReferenceNumber("WASTE-${record.id}")
             }
         }
     }
@@ -1422,6 +1539,163 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateDirectInvoice(
+        invoiceId: Long,
+        newTotal: Double,
+        newPaidAmount: Double,
+        newDiscount: Double,
+        newPaymentMethod: PaymentMethod,
+        newTransactionRef: String,
+        newNotes: String,
+        newReceiptImagePath: String?
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                val oldInv = db.invoiceDao().getInvoiceById(invoiceId) ?: return@withTransaction
+                val oldTotal = oldInv.total
+                val oldPaid = oldInv.paidAmount
+                val oldMethod = oldInv.paymentMethod
+
+                val updatedInv = oldInv.copy(
+                    total = newTotal,
+                    paidAmount = newPaidAmount,
+                    discount = newDiscount,
+                    paymentMethod = newPaymentMethod,
+                    transactionRef = newTransactionRef,
+                    notes = newNotes,
+                    receiptImagePath = newReceiptImagePath
+                )
+                db.invoiceDao().updateInvoice(updatedInv)
+
+                // 1. تعديل أثر رصيد العميل/المورد إذا كان آجل
+                if (oldInv.partyId != null) {
+                    val party = db.partyDao().getPartyById(oldInv.partyId)
+                    if (party != null) {
+                        var newBalance = party.currentBalance
+                        if (oldMethod == PaymentMethod.CREDIT) {
+                            newBalance = when (oldInv.type) {
+                                InvoiceType.SALE -> newBalance - oldTotal
+                                InvoiceType.PURCHASE -> newBalance + oldTotal
+                                InvoiceType.SALE_RETURN -> newBalance + oldTotal
+                                InvoiceType.PURCHASE_RETURN -> newBalance - oldTotal
+                            }
+                        }
+                        if (newPaymentMethod == PaymentMethod.CREDIT) {
+                            newBalance = when (oldInv.type) {
+                                InvoiceType.SALE -> newBalance + newTotal
+                                InvoiceType.PURCHASE -> newBalance - newTotal
+                                InvoiceType.SALE_RETURN -> newBalance - newTotal
+                                InvoiceType.PURCHASE_RETURN -> newBalance + newTotal
+                            }
+                        }
+                        if (newBalance != party.currentBalance) {
+                            db.partyDao().updateParty(party.copy(currentBalance = newBalance))
+                        }
+                    }
+                }
+
+                // 2. تعديل نقدية الشفت المفتوح
+                if (oldMethod == PaymentMethod.CASH || newPaymentMethod == PaymentMethod.CASH) {
+                    val shifts = db.cashShiftDao().getAllShiftsSync()
+                    val currentShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
+                    if (currentShift != null) {
+                        if (oldMethod == PaymentMethod.CASH && newPaymentMethod != PaymentMethod.CASH) {
+                            when (oldInv.type) {
+                                InvoiceType.SALE -> db.cashShiftDao().updateSales(currentShift.id, (currentShift.totalCashSales - oldPaid).coerceAtLeast(0.0))
+                                InvoiceType.PURCHASE -> db.cashShiftDao().updateExpenses(currentShift.id, (currentShift.totalCashExpenses - oldPaid).coerceAtLeast(0.0))
+                                InvoiceType.SALE_RETURN -> db.cashShiftDao().updateSales(currentShift.id, currentShift.totalCashSales + oldPaid)
+                                InvoiceType.PURCHASE_RETURN -> db.cashShiftDao().updateCollections(currentShift.id, (currentShift.totalCashCollections - oldPaid).coerceAtLeast(0.0))
+                            }
+                        } else if (oldMethod != PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
+                            when (oldInv.type) {
+                                InvoiceType.SALE -> db.cashShiftDao().updateSales(currentShift.id, currentShift.totalCashSales + newPaidAmount)
+                                InvoiceType.PURCHASE -> db.cashShiftDao().updateExpenses(currentShift.id, currentShift.totalCashExpenses + newPaidAmount)
+                                InvoiceType.SALE_RETURN -> db.cashShiftDao().updateSales(currentShift.id, (currentShift.totalCashSales - newPaidAmount))
+                                InvoiceType.PURCHASE_RETURN -> db.cashShiftDao().updateCollections(currentShift.id, currentShift.totalCashCollections + newPaidAmount)
+                            }
+                        } else if (oldMethod == PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH && oldPaid != newPaidAmount) {
+                            val diff = newPaidAmount - oldPaid
+                            when (oldInv.type) {
+                                InvoiceType.SALE -> db.cashShiftDao().updateSales(currentShift.id, (currentShift.totalCashSales + diff).coerceAtLeast(0.0))
+                                InvoiceType.PURCHASE -> db.cashShiftDao().updateExpenses(currentShift.id, (currentShift.totalCashExpenses + diff).coerceAtLeast(0.0))
+                                InvoiceType.SALE_RETURN -> db.cashShiftDao().updateSales(currentShift.id, currentShift.totalCashSales - diff)
+                                InvoiceType.PURCHASE_RETURN -> db.cashShiftDao().updateCollections(currentShift.id, (currentShift.totalCashCollections + diff).coerceAtLeast(0.0))
+                            }
+                        }
+                    }
+                }
+            }
+            val selectedPartyId = _uiState.value.selectedPartyForStatement
+            if (selectedPartyId != null) {
+                selectPartyForStatement(selectedPartyId)
+            }
+        }
+    }
+
+    fun updateDirectVoucher(
+        voucherId: Long,
+        newAmount: Double,
+        newPaymentMethod: PaymentMethod,
+        newTransactionRef: String,
+        newNotes: String,
+        newReceiptImagePath: String?
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                val oldV = db.paymentVoucherDao().getVoucherById(voucherId) ?: return@withTransaction
+                val oldAmount = oldV.amount
+                val oldMethod = oldV.paymentMethod
+                val isPay = oldV.isPayment
+
+                val updatedV = oldV.copy(
+                    amount = newAmount,
+                    paymentMethod = newPaymentMethod,
+                    transactionRef = newTransactionRef,
+                    notes = newNotes,
+                    receiptImagePath = newReceiptImagePath
+                )
+                db.paymentVoucherDao().updateVoucher(updatedV)
+
+                val party = db.partyDao().getPartyById(oldV.partyId)
+                if (party != null) {
+                    val isSupplier = party.type == PartyType.SUPPLIER
+                    val oldBalChange = if (isSupplier || isPay) -oldAmount else +oldAmount
+                    val newBalChange = if (isSupplier || isPay) +newAmount else -newAmount
+                    val finalBal = party.currentBalance + oldBalChange + newBalChange
+                    db.partyDao().updateParty(party.copy(currentBalance = finalBal))
+                }
+
+                if (oldMethod == PaymentMethod.CASH || newPaymentMethod == PaymentMethod.CASH) {
+                    val openShift = getOrCreateOpenShift(db.cashShiftDao())
+                    val diff = newAmount - oldAmount
+                    if (isPay) {
+                        val exp = if (oldMethod == PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
+                            (openShift.totalCashExpenses + diff).coerceAtLeast(0.0)
+                        } else if (newPaymentMethod == PaymentMethod.CASH) {
+                            openShift.totalCashExpenses + newAmount
+                        } else {
+                            (openShift.totalCashExpenses - oldAmount).coerceAtLeast(0.0)
+                        }
+                        db.cashShiftDao().updateExpenses(openShift.id, exp)
+                    } else {
+                        val coll = if (oldMethod == PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
+                            (openShift.totalCashCollections + diff).coerceAtLeast(0.0)
+                        } else if (newPaymentMethod == PaymentMethod.CASH) {
+                            openShift.totalCashCollections + newAmount
+                        } else {
+                            (openShift.totalCashCollections - oldAmount).coerceAtLeast(0.0)
+                        }
+                        db.cashShiftDao().updateCollections(openShift.id, coll)
+                    }
+                }
+            }
+            val selectedPartyId = _uiState.value.selectedPartyForStatement
+            if (selectedPartyId != null) {
+                selectPartyForStatement(selectedPartyId)
+            }
+        }
+    }
+
     // --- معالج التهيئة الأولى والرقابة المحاسبية (Onboarding Wizard) ---
     fun completeOnboarding(
         selectedBaseCurrency: CurrencyEntity? = null,
@@ -1735,6 +2009,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
         val pnl = state.pnlReport
         val netOperatingProfit = pnl?.netOperatingProfit ?: 0.0
+        val registeredCapital = state.settings?.initialCapital ?: 0.0
 
         val result = AssetsAndEquityEngine.calculateInitialCapitalAndEquity(
             cashInDrawer = dynamicCashInDrawer,
@@ -1745,7 +2020,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             fixedAssets = state.fixedAssets,
             leaseholdRights = state.leaseholdRights,
             ownerTransactions = state.ownerTransactions,
-            netOperatingProfit = netOperatingProfit
+            netOperatingProfit = netOperatingProfit,
+            registeredOpeningCapital = registeredCapital
         )
 
         _uiState.update { it.copy(equityResult = result) }

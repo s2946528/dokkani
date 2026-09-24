@@ -68,7 +68,8 @@ enum class MovementType(val labelArabic: String) {
     RETURN_IN("مرتجع مبيعات وارد (+)"),
     RETURN_OUT("مرتجع مشتريات صادر (-)"),
     INVENTORY_ADJUSTMENT("تسوية جردية"),
-    PRODUCE_SORTING("فرز خضار مشكل وارد (+)")
+    PRODUCE_SORTING("فرز خضار مشكل وارد (+)"),
+    WASTAGE_OUT("تلف وإهلاك صادر (-)")
 }
 
 /**

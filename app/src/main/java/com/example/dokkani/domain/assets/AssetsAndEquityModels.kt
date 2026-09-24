@@ -18,8 +18,21 @@ data class EquityCalculationResult(
     val totalOwnerDrawings: Double,              // إجمالي مسحوبات المالك الشخصية (نقدية + بضاعة بالتكلفة)
     val totalAdditionalCapitalDeposits: Double,  // إجمالي الإيداعات الإضافية لرأس المال
     val netOperatingProfit: Double,              // صافي الأرباح التشغيلية المبقاة
-    val netTotalEquity: Double                   // صافي حقوق الملكية الإجمالي = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + الأرباح المبقاة (دون تضاعف الأصول)
-)
+    val netTotalEquity: Double,                  // صافي حقوق الملكية الإجمالي = رأس المال الافتتاحي + إيداعات إضافية - مسحوبات المالك + الأرباح المبقاة (دون تضاعف الأصول)
+    val registeredOpeningCapital: Double = 0.0   // رأس المال الافتتاحي المسجل في إعدادات التهيئة
+) {
+    /**
+     * رأس المال الافتتاحي الثابت: يقتصر تماماً على الأرصدة الافتتاحية والأصلية ويبقى ثابتاً دون أن يتأثر بالعمليات الجارية
+     */
+    val fixedOpeningCapital: Double
+        get() = if (registeredOpeningCapital > 0.0) registeredOpeningCapital else calculatedInitialCapital
+
+    /**
+     * رأس المال الجاري / المتأثر: يتأثر بالعمليات المستجدة (الإيداعات الإضافية، المسحوبات الشخصية، وصافي الأرباح/الخسائر)
+     */
+    val currentAffectedCapital: Double
+        get() = fixedOpeningCapital + totalAdditionalCapitalDeposits - totalOwnerDrawings + netOperatingProfit
+}
 
 /**
  * تصنيف الأصول الثابتة للبقالة

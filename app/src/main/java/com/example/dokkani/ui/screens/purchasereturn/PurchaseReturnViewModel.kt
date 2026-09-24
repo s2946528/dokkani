@@ -62,6 +62,8 @@ data class PurchaseReturnUiState(
     val supplier: PartyEntity? = null,
     val returnItems: List<PurchaseReturnItem> = emptyList(),
     val paymentMethod: PaymentMethod = PaymentMethod.CREDIT,
+    val transactionRef: String = "",
+    val receiptImagePath: String? = null,
     val returnNotes: String = "",
     val isProcessing: Boolean = false,
     val userFeedbackMessage: String? = null,
@@ -69,7 +71,9 @@ data class PurchaseReturnUiState(
     val currencySymbol: String = "ر.ي",
     val showSelectInvoiceDialog: Boolean = false,
     val showSuccessDialog: Boolean = false,
-    val generatedReturnInvoiceNumber: String? = null
+    val generatedReturnInvoiceNumber: String? = null,
+    val showReturnQuantityWarningDialog: Boolean = false,
+    val returnQuantityWarningMessage: String = ""
 ) {
     val totalReturnAmount: Double
         get() = returnItems.filter { it.isSelectedForReturn }.sumOf { it.totalReturnCost }
@@ -141,8 +145,45 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
     fun loadPurchaseInvoices() {
         viewModelScope.launch(Dispatchers.IO) {
             invoiceDao.getInvoicesByType(InvoiceType.PURCHASE).collect { list ->
-                _uiState.update { it.copy(purchaseInvoices = list) }
+                val allReturnInvoices = invoiceDao.getAllInvoicesSync().filter { it.type == InvoiceType.PURCHASE_RETURN }
+                val allReturnItems = invoiceDao.getAllInvoiceItemsSync()
+                val returnItemsByInvoiceId = allReturnItems.groupBy { it.invoiceId }
+
+                // القاعدة 1: إخفاء تماماً أي فاتورة تم رد كافة بنودها وكمياتها بنسبة 100%
+                val filteredList = list.filter { candidate ->
+                    val originalItems = invoiceDao.getInvoiceItems(candidate.id)
+                    if (originalItems.isEmpty()) return@filter false
+
+                    val linkedReturns = allReturnInvoices.filter { ret ->
+                        ret.transactionRef == candidate.invoiceNumber || ret.notes.contains(candidate.invoiceNumber)
+                    }
+
+                    val returnedQtyMap = mutableMapOf<Pair<Long, Long>, Double>()
+                    for (retInv in linkedReturns) {
+                        val retItems = returnItemsByInvoiceId[retInv.id] ?: emptyList()
+                        for (retItem in retItems) {
+                            val key = Pair(retItem.productId, retItem.productUnitId)
+                            returnedQtyMap[key] = (returnedQtyMap[key] ?: 0.0) + retItem.quantity
+                        }
+                    }
+
+                    originalItems.any { origItem ->
+                        val alreadyReturned = returnedQtyMap[Pair(origItem.productId, origItem.productUnitId)] ?: 0.0
+                        (origItem.quantity - alreadyReturned) > 0.0001
+                    }
+                }
+
+                _uiState.update { it.copy(purchaseInvoices = filteredList) }
             }
+        }
+    }
+
+    fun dismissReturnQuantityWarningDialog() {
+        _uiState.update {
+            it.copy(
+                showReturnQuantityWarningDialog = false,
+                returnQuantityWarningMessage = ""
+            )
         }
     }
 
@@ -176,9 +217,10 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
     }
 
     /**
-     * اختيار فاتورة الشراء لغرض الإرجاع وتطبيق القاعدة المحاسبية الدقيقة:
-     * استرجاع وتعبئة بنود الأصناف مع سعر التكلفة الفعلي المسجل داخل تلك الفاتورة بالتحديد (invoice_items.unit_cost_price)
-     * والامتناع عن استخدام سعر التكلفة الحالي في جدول الأصناف العامة (products_units.cost_price).
+     * اختيار فاتورة الشراء لغرض الإرجاع وتطبيق القواعد المحاسبية الصارمة:
+     * - استبعاد أي صنف تم رده بنسبة 100%
+     * - عرض الكمية المتبقية الفعلية فقط المتاحة للرد
+     * - الاعتماد الحصري على التكلفة التاريخية من الفاتورة الأصلية
      */
     fun selectInvoiceForReturn(invoice: InvoiceEntity) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -189,29 +231,50 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                 val products = productDao.getAllProductsSync()
                 val units = productDao.getAllUnitsSync()
 
+                val allReturnInvoices = invoiceDao.getAllInvoicesSync().filter { it.type == InvoiceType.PURCHASE_RETURN }
+                val allReturnItems = invoiceDao.getAllInvoiceItemsSync()
+                val returnItemsByInvoiceId = allReturnItems.groupBy { it.invoiceId }
+
+                val linkedReturns = allReturnInvoices.filter { ret ->
+                    ret.transactionRef == invoice.invoiceNumber || ret.notes.contains(invoice.invoiceNumber)
+                }
+
+                val returnedQtyMap = mutableMapOf<Pair<Long, Long>, Double>()
+                for (retInv in linkedReturns) {
+                    val retItems = returnItemsByInvoiceId[retInv.id] ?: emptyList()
+                    for (retItem in retItems) {
+                        val key = Pair(retItem.productId, retItem.productUnitId)
+                        returnedQtyMap[key] = (returnedQtyMap[key] ?: 0.0) + retItem.quantity
+                    }
+                }
+
                 val returnList = mutableListOf<PurchaseReturnItem>()
                 for (invItem in items) {
                     val prod = products.find { it.id == invItem.productId }
                     val unit = units.find { it.id == invItem.productUnitId }
                     if (prod != null && unit != null) {
-                        // الاعتماد الحصري على التكلفة التاريخية من الفاتورة
-                        val historicalCost = invItem.unitCostPrice
+                        val alreadyReturned = returnedQtyMap[Pair(invItem.productId, invItem.productUnitId)] ?: 0.0
+                        val remainingReturnableQty = (invItem.quantity - alreadyReturned).coerceAtLeast(0.0)
 
-                        returnList.add(
-                            PurchaseReturnItem(
-                                productId = prod.id,
-                                productName = prod.name,
-                                productCode = prod.code,
-                                unitId = unit.id,
-                                unitName = unit.unitName,
-                                conversionFactor = invItem.unitConversionFactor,
-                                originalUnitCostPrice = historicalCost,
-                                originalPurchasedQuantity = invItem.quantity,
-                                returnQuantity = invItem.quantity, // افتراضياً كامل الكمية المشتراة
-                                returnCostPrice = historicalCost,
-                                isSelectedForReturn = true
+                        if (remainingReturnableQty > 0.0001) {
+                            val historicalCost = invItem.unitCostPrice
+
+                            returnList.add(
+                                PurchaseReturnItem(
+                                    productId = prod.id,
+                                    productName = prod.name,
+                                    productCode = prod.code,
+                                    unitId = unit.id,
+                                    unitName = unit.unitName,
+                                    conversionFactor = invItem.unitConversionFactor,
+                                    originalUnitCostPrice = historicalCost,
+                                    originalPurchasedQuantity = remainingReturnableQty, // الكمية المتبقية الفعلية القابلة للرد
+                                    returnQuantity = remainingReturnableQty,
+                                    returnCostPrice = historicalCost,
+                                    isSelectedForReturn = true
+                                )
                             )
-                        )
+                        }
                     }
                 }
 
@@ -224,7 +287,7 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                         paymentMethod = invoice.paymentMethod,
                         returnNotes = "مردود عن فاتورة شراء رقم: ${invoice.invoiceNumber}",
                         showSelectInvoiceDialog = false,
-                        userFeedbackMessage = "تم تحميل فاتورة الشراء (${invoice.invoiceNumber}) مع أسعار التكلفة التاريخية (${returnList.size} صنف).",
+                        userFeedbackMessage = "تم تحميل الكميات المتبقية القابلة للرد من الفاتورة (${invoice.invoiceNumber}) مع أسعار التكلفة التاريخية.",
                         isError = false
                     )
                 }
@@ -242,33 +305,50 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
 
     /**
      * تعديل كمية المردود مع التحقق الصارم:
-     * لا يمكن للمستخدم إرجاع كمية تتجاوز الكمية المشتراة المسجلة بالفاتورة الأصلية.
+     * - يمنع التجاوز عن الكمية المتبقية القابلة للرد بالفاتورة
+     * - يمنع التجاوز عن رصيد المخزن الفعلي المتاح
      */
     fun updateReturnQuantity(productId: Long, unitId: Long, newQty: Double) {
-        _uiState.update { state ->
-            var warningMessage: String? = null
-            var isErr = false
+        viewModelScope.launch(Dispatchers.IO) {
+            val state = _uiState.value
+            val targetItem = state.returnItems.find { it.productId == productId && it.unitId == unitId } ?: return@launch
+
+            // 1. التحقق الصارم من سقف الفاتورة الأصلي المتبقي
+            if (newQty > targetItem.originalPurchasedQuantity + 0.0001) {
+                val warningMsg = "الكمية المحددة للرد (${"%.2f".format(newQty)} ${targetItem.unitName}) تتجاوز الكمية المتبقية القابلة للرد في الفاتورة الأصلية (${"%.2f".format(targetItem.originalPurchasedQuantity)} ${targetItem.unitName})."
+                _uiState.update {
+                    it.copy(
+                        showReturnQuantityWarningDialog = true,
+                        returnQuantityWarningMessage = warningMsg
+                    )
+                }
+                return@launch
+            }
+
+            // 2. التحقق الصارم من رصيد المخزن الفعلي المتاح
+            val currentStockBase = stockMovementDao.getTotalStockQuantity(productId)
+            val requestedStockBase = newQty * targetItem.conversionFactor
+            if (requestedStockBase > currentStockBase + 0.0001) {
+                val maxAllowedUnit = (currentStockBase / targetItem.conversionFactor).coerceAtLeast(0.0)
+                val warningMsg = "الكمية المحددة لمردود المشتريات (${"%.2f".format(newQty)} ${targetItem.unitName}) تتجاوز رصيد المخزن الفعلي المتاح حالياً (${"%.2f".format(maxAllowedUnit)} ${targetItem.unitName})."
+                _uiState.update {
+                    it.copy(
+                        showReturnQuantityWarningDialog = true,
+                        returnQuantityWarningMessage = warningMsg
+                    )
+                }
+                return@launch
+            }
 
             val updatedItems = state.returnItems.map { item ->
                 if (item.productId == productId && item.unitId == unitId) {
-                    val clampedQty = when {
-                        newQty > item.originalPurchasedQuantity -> {
-                            warningMessage = "لا يمكن إرجاع كمية (${"%.2f".format(newQty)}) أكبر من الكمية المشتراة في الفاتورة الأصلية (${"%.2f".format(item.originalPurchasedQuantity)} ${item.unitName})"
-                            isErr = true
-                            item.originalPurchasedQuantity
-                        }
-                        newQty < 0.0 -> 0.0
-                        else -> newQty
-                    }
-                    item.copy(returnQuantity = clampedQty)
+                    item.copy(returnQuantity = newQty.coerceAtLeast(0.0))
                 } else item
             }
 
-            state.copy(
-                returnItems = updatedItems,
-                userFeedbackMessage = warningMessage ?: state.userFeedbackMessage,
-                isError = if (warningMessage != null) isErr else state.isError
-            )
+            _uiState.update {
+                it.copy(returnItems = updatedItems)
+            }
         }
     }
 
@@ -314,6 +394,14 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
         _uiState.update { it.copy(paymentMethod = method) }
     }
 
+    fun setTransactionRef(ref: String) {
+        _uiState.update { it.copy(transactionRef = ref) }
+    }
+
+    fun setReceiptImagePath(path: String?) {
+        _uiState.update { it.copy(receiptImagePath = path) }
+    }
+
     fun setReturnNotes(notes: String) {
         _uiState.update { it.copy(returnNotes = notes) }
     }
@@ -344,10 +432,38 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
         val returnInvoiceNumber = "PRTN-$dateFormatted"
 
         viewModelScope.launch(Dispatchers.IO) {
+            // التحقق الرقابي من الكميات وتوفر المخزون قبل التأكيد
+            for (item in selectedItems) {
+                if (item.returnQuantity > item.originalPurchasedQuantity + 0.0001) {
+                    val warningMsg = "الكمية المحددة للرد من الصنف (${item.productName}) تبلغ (${"%.2f".format(item.returnQuantity)} ${item.unitName}) وهي تتجاوز الكمية المتبقية القابلة للرد في الفاتورة الأصلية (${"%.2f".format(item.originalPurchasedQuantity)} ${item.unitName})."
+                    _uiState.update {
+                        it.copy(
+                            showReturnQuantityWarningDialog = true,
+                            returnQuantityWarningMessage = warningMsg
+                        )
+                    }
+                    return@launch
+                }
+
+                val currentStockBase = stockMovementDao.getTotalStockQuantity(item.productId)
+                val requestedStockBase = item.returnQuantity * item.conversionFactor
+                if (requestedStockBase > currentStockBase + 0.0001) {
+                    val maxAllowedUnit = (currentStockBase / item.conversionFactor).coerceAtLeast(0.0)
+                    val warningMsg = "الكمية المحددة لمردود المشتريات من الصنف (${item.productName}) تبلغ (${"%.2f".format(item.returnQuantity)} ${item.unitName}) وهي تتجاوز رصيد المخزن الفعلي المتاح حالياً (${"%.2f".format(maxAllowedUnit)} ${item.unitName})."
+                    _uiState.update {
+                        it.copy(
+                            showReturnQuantityWarningDialog = true,
+                            returnQuantityWarningMessage = warningMsg
+                        )
+                    }
+                    return@launch
+                }
+            }
+
             _uiState.update { it.copy(isProcessing = true) }
             try {
                 db.withTransaction {
-                    // 1. إدراج فاتورة مردود المشتريات
+                    // 1. إدراج فاتورة مردود المشتريات مع ربط مرجع الفاتورة الأصلية
                     val returnInvoice = InvoiceEntity(
                         invoiceNumber = returnInvoiceNumber,
                         type = InvoiceType.PURCHASE_RETURN,
@@ -363,6 +479,8 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                         paymentMethod = state.paymentMethod,
                         paidAmount = if (state.paymentMethod == PaymentMethod.CASH) totalReturnAmount else 0.0,
                         remainingAmount = if (state.paymentMethod == PaymentMethod.CREDIT) totalReturnAmount else 0.0,
+                        transactionRef = state.transactionRef.ifBlank { originalInvoice.invoiceNumber },
+                        receiptImagePath = state.receiptImagePath,
                         notes = state.returnNotes.ifBlank { "مردود مشتريات عن الفاتورة الأصلية: ${originalInvoice.invoiceNumber}" },
                         date = timeNow
                     )
@@ -424,6 +542,9 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                     it.copy(
                         isProcessing = false,
                         showSuccessDialog = true,
+                        transactionRef = "",
+                        receiptImagePath = null,
+                        returnNotes = "",
                         generatedReturnInvoiceNumber = returnInvoiceNumber,
                         userFeedbackMessage = "تم اعتماد مردود المشتريات وتوليد القيود المحاسبية والمخزنية بنجاح برقم: $returnInvoiceNumber",
                         isError = false

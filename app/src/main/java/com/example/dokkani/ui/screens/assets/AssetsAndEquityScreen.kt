@@ -312,231 +312,321 @@ private fun CapitalAndEquityTabContent(
     onOpenOwnerTransDialog: (OwnerTransactionType) -> Unit,
     currencySymbol: String = "ر.ي"
 ) {
-    val eq = equityResult ?: EquityCalculationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    val eq = equityResult ?: EquityCalculationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+    val showFixedCapital = kotlin.math.abs(eq.fixedOpeningCapital) > 0.001
+    val showCurrentCapital = kotlin.math.abs(eq.currentAffectedCapital) > 0.001
+    val showFixedAssets = kotlin.math.abs(eq.totalFixedAssetsValue) > 0.001
+    val showLeasehold = kotlin.math.abs(eq.totalLeaseholdGoodwillValue) > 0.001
+    val showOwnerDrawings = kotlin.math.abs(eq.totalOwnerDrawings) > 0.001
+    val showAdditionalDeposits = kotlin.math.abs(eq.totalAdditionalCapitalDeposits) > 0.001
+    val showNetProfit = kotlin.math.abs(eq.netOperatingProfit) > 0.001
+
+    val hasAnyActiveCard = showFixedCapital || showCurrentCapital || showFixedAssets || showLeasehold || showOwnerDrawings || showAdditionalDeposits || showNetProfit
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // بطاقات KPI رئيسية
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    title = "رأس المال الافتتاحي الآلي",
-                    value = "${"%.2f".format(eq.calculatedInitialCapital)} $currencySymbol",
-                    subtitle = "(نقدية + بضاعة + أصول + ديون) - التزامات",
-                    color = Color(0xFF1E3A8A),
-                    icon = Icons.Default.Calculate
-                )
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    title = "صافي حقوق الملكية الإجمالي",
-                    value = "${"%.2f".format(eq.netTotalEquity)} $currencySymbol",
-                    subtitle = "رأس المال + إيداعات + أرباح - مسحوبات",
-                    color = Color(0xFF15803D),
-                    icon = Icons.Default.AccountBalance
-                )
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    title = "إجمالي الأصول الثابتة",
-                    value = "${"%.2f".format(eq.totalFixedAssetsValue)} $currencySymbol",
-                    subtitle = "ثلاجات، أرفف، وموازين",
-                    color = Color(0xFF0369A1),
-                    icon = Icons.Default.Store
-                )
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    title = "نقل القدم / خلو المحل",
-                    value = "${"%.2f".format(eq.totalLeaseholdGoodwillValue)} $currencySymbol",
-                    subtitle = "أصل غير ملموس تأسيسي",
-                    color = Color(0xFF7C3AED),
-                    icon = Icons.Default.CorporateFare
-                )
-                KpiCard(
-                    modifier = Modifier.weight(1f),
-                    title = "مسحوبات المالك الشخصية",
-                    value = "${"%.2f".format(eq.totalOwnerDrawings)} $currencySymbol",
-                    subtitle = "نقدية وبضاعة بسعر التكلفة",
-                    color = Color(0xFFB91C1C),
-                    icon = Icons.Default.MoneyOff
-                )
-            }
-        }
-
-        // بطاقة المعالجة الآلية لرأس المال الافتتاحي
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Calculate, contentDescription = null, tint = Color(0xFF1E3A8A))
-                        Spacer(modifier = Modifier.width(8.dp))
+        // تنبيه وإرشادات عند اختفاء كافة الكروت الصفرية
+        if (!hasAnyActiveCard) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF)),
+                    border = BorderStroke(1.dp, Color(0xFFBAE6FD))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF0284C7),
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "تفصيل المعالجة الآلية لرأس المال الافتتاحي للبقالة",
+                            text = "جميع الحسابات والكروت الصفرية مخفية حالياً",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = Color(0xFF0F172A)
+                            color = Color(0xFF0369A1)
                         )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    EquationRow(
-                        label = "(+) نقدية الصندوق والدرج في البداية",
-                        amount = eq.cashInHandAndDrawer,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(+) أرصدة البنوك ومقبوضات شبكة مدى",
-                        amount = eq.bankAndMadaBalances,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(+) تقييم بضاعة أول المدة بسعر التكلفة",
-                        amount = eq.inventoryValuationAtCost,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(+) إجمالي الأصول الثابتة (ثلاجات، أرفف، موازين)",
-                        amount = eq.totalFixedAssetsValue,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(+) نقل القدم / خلو المحل (أصل تأسيسي غير ملموس)",
-                        amount = eq.totalLeaseholdGoodwillValue,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(+) ديون العملاء والمستحقات (الأرصدة المدينة)",
-                        amount = eq.customerReceivables,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(-) ديون الموردين والالتزامات (الأرصدة الدائنة)",
-                        amount = eq.supplierPayables,
-                        isPositive = false,
-                        currencySymbol = currencySymbol
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0xFFCBD5E1))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "(=) رأس المال الافتتاحي الآلي المحسوب:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF1E3A8A)
-                        )
-                        Text(
-                            text = "${"%.2f".format(eq.calculatedInitialCapital)} $currencySymbol",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF1E3A8A)
+                            text = "لتجنب التشتت المحاسبي، لا تظهر الكروت والحسابات الصفرية إلا عند وجود أرصدة حقيقية أو إجراء عمليات مالية مستجدة تؤثر عليها.",
+                            fontSize = 12.sp,
+                            color = Color(0xFF0C4A6E),
+                            lineHeight = 18.sp
                         )
                     }
                 }
             }
         }
 
-        // بطاقة تفصيل صافي حقوق الملكية الإجمالي (بدون تضاعف الأصول)
+        // بطاقات KPI الرئيسية - تظهر فقط للكروت غير الصفرية (القاعدة المحاسبية للظهور)
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color(0xFF15803D))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "تفصيل احتساب صافي حقوق الملكية الإجمالي",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = Color(0xFF0F172A)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    EquationRow(
-                        label = "(+) رأس المال الافتتاحي (شاملاً الأصول التأسيسية)",
-                        amount = eq.calculatedInitialCapital,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(+) إيداعات رأس المال الإضافية",
-                        amount = eq.totalAdditionalCapitalDeposits,
-                        isPositive = true,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(+) صافي الأرباح التشغيلية المبقاة",
-                        amount = eq.netOperatingProfit,
-                        isPositive = eq.netOperatingProfit >= 0,
-                        currencySymbol = currencySymbol
-                    )
-                    EquationRow(
-                        label = "(-) مسحوبات المالك الشخصية (نقدية وبضاعة)",
-                        amount = eq.totalOwnerDrawings,
-                        isPositive = false,
-                        currencySymbol = currencySymbol
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0xFFCBD5E1))
-
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // الصف الأول: رأس المال الافتتاحي (الثابت) vs رأس المال الجاري / المتأثر
+                if (showFixedCapital || showCurrentCapital) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        if (showFixedCapital) {
+                            KpiCard(
+                                modifier = Modifier.weight(1f),
+                                title = "رأس المال الافتتاحي (الثابت)",
+                                value = "${"%.2f".format(eq.fixedOpeningCapital)} $currencySymbol",
+                                subtitle = "مقتصر على الأرصدة الافتتاحية والأصلية دون تغيير",
+                                color = Color(0xFF1E3A8A),
+                                icon = Icons.Default.Calculate
+                            )
+                        }
+                        if (showCurrentCapital) {
+                            KpiCard(
+                                modifier = Modifier.weight(1f),
+                                title = "رأس المال الجاري / المتأثر",
+                                value = "${"%.2f".format(eq.currentAffectedCapital)} $currencySymbol",
+                                subtitle = "يتأثر بالأرباح والمسحوبات والإيداعات الجارية",
+                                color = Color(0xFF15803D),
+                                icon = Icons.Default.AccountBalance
+                            )
+                        }
+                    }
+                }
+
+                // الصف الثاني: الأصول والمسحوبات غير الصفرية
+                if (showFixedAssets || showLeasehold || showOwnerDrawings || showAdditionalDeposits) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (showFixedAssets) {
+                            KpiCard(
+                                modifier = Modifier.weight(1f),
+                                title = "إجمالي الأصول الثابتة",
+                                value = "${"%.2f".format(eq.totalFixedAssetsValue)} $currencySymbol",
+                                subtitle = "ثلاجات، أرفف، وموازين",
+                                color = Color(0xFF0369A1),
+                                icon = Icons.Default.Store
+                            )
+                        }
+                        if (showLeasehold) {
+                            KpiCard(
+                                modifier = Modifier.weight(1f),
+                                title = "نقل القدم / خلو المحل",
+                                value = "${"%.2f".format(eq.totalLeaseholdGoodwillValue)} $currencySymbol",
+                                subtitle = "أصل غير ملموس تأسيسي",
+                                color = Color(0xFF7C3AED),
+                                icon = Icons.Default.CorporateFare
+                            )
+                        }
+                        if (showOwnerDrawings) {
+                            KpiCard(
+                                modifier = Modifier.weight(1f),
+                                title = "مسحوبات المالك الشخصية",
+                                value = "${"%.2f".format(eq.totalOwnerDrawings)} $currencySymbol",
+                                subtitle = "نقدية وبضاعة بالتكلفة",
+                                color = Color(0xFFB91C1C),
+                                icon = Icons.Default.MoneyOff
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // بطاقة تفصيل المعالجة الآلية لرأس المال الافتتاحي (تخفي السطور الصفرية)
+        if (showFixedCapital) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Calculate, contentDescription = null, tint = Color(0xFF1E3A8A))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "تفصيل مكونات رأس المال الافتتاحي الثابت",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = Color(0xFF0F172A)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (kotlin.math.abs(eq.cashInHandAndDrawer) > 0.001) {
+                            EquationRow(
+                                label = "(+) نقدية الصندوق والدرج في البداية",
+                                amount = eq.cashInHandAndDrawer,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.bankAndMadaBalances) > 0.001) {
+                            EquationRow(
+                                label = "(+) أرصدة البنوك ومقبوضات شبكة مدى",
+                                amount = eq.bankAndMadaBalances,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.inventoryValuationAtCost) > 0.001) {
+                            EquationRow(
+                                label = "(+) تقييم بضاعة أول المدة بسعر التكلفة",
+                                amount = eq.inventoryValuationAtCost,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.totalFixedAssetsValue) > 0.001) {
+                            EquationRow(
+                                label = "(+) إجمالي الأصول الثابتة (ثلاجات، أرفف، موازين)",
+                                amount = eq.totalFixedAssetsValue,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.totalLeaseholdGoodwillValue) > 0.001) {
+                            EquationRow(
+                                label = "(+) نقل القدم / خلو المحل (أصل تأسيسي)",
+                                amount = eq.totalLeaseholdGoodwillValue,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.customerReceivables) > 0.001) {
+                            EquationRow(
+                                label = "(+) ديون العملاء والمستحقات (الأرصدة المدينة)",
+                                amount = eq.customerReceivables,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.supplierPayables) > 0.001) {
+                            EquationRow(
+                                label = "(-) ديون الموردين والالتزامات (الأرصدة الدائنة)",
+                                amount = eq.supplierPayables,
+                                isPositive = false,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0xFFCBD5E1))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "(=) رأس المال الافتتاحي الثابت:",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF1E3A8A)
+                            )
+                            Text(
+                                text = "${"%.2f".format(eq.fixedOpeningCapital)} $currencySymbol",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color(0xFF1E3A8A)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // بطاقة تفصيل احتساب رأس المال الجاري / المتأثر
+        if (showCurrentCapital) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color(0xFF15803D))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "تفصيل احتساب كارت رأس المال الجاري / المتأثر",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = Color(0xFF0F172A)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (kotlin.math.abs(eq.fixedOpeningCapital) > 0.001) {
+                            EquationRow(
+                                label = "(+) رأس المال الافتتاحي الثابت",
+                                amount = eq.fixedOpeningCapital,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.totalAdditionalCapitalDeposits) > 0.001) {
+                            EquationRow(
+                                label = "(+) إيداعات رأس المال الإضافية",
+                                amount = eq.totalAdditionalCapitalDeposits,
+                                isPositive = true,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.netOperatingProfit) > 0.001) {
+                            EquationRow(
+                                label = if (eq.netOperatingProfit >= 0) "(+) صافي الأرباح التشغيلية المبقاة" else "(-) صافي الخسائر التشغيلية",
+                                amount = kotlin.math.abs(eq.netOperatingProfit),
+                                isPositive = eq.netOperatingProfit >= 0,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+                        if (kotlin.math.abs(eq.totalOwnerDrawings) > 0.001) {
+                            EquationRow(
+                                label = "(-) مسحوبات المالك الشخصية (نقدية وبضاعة)",
+                                amount = eq.totalOwnerDrawings,
+                                isPositive = false,
+                                currencySymbol = currencySymbol
+                            )
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0xFFCBD5E1))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "(=) إجمالي رأس المال الجاري / المتأثر:",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF15803D)
+                            )
+                            Text(
+                                text = "${"%.2f".format(eq.currentAffectedCapital)} $currencySymbol",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "(=) صافي حقوق الملكية الإجمالي:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF15803D)
-                        )
-                        Text(
-                            text = "${"%.2f".format(eq.netTotalEquity)} $currencySymbol",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF15803D)
+                            text = "ملاحظة محاسبية: رأس المال الافتتاحي ثابت ولا يتأثر بالنشاط، بينما كارت رأس المال الجاري يتأثر آلياً بجميع الأرباح والمسحوبات والإيداعات المستجدة.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF64748B),
+                            lineHeight = 16.sp
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "ملاحظة محاسبية: الأصول الثابتة ونقل القدم مدمجة أصلاً ضمن رأس المال الافتتاحي كأصول تأسيسية، ولا تُجمع ثانية منعاً للتضاعف المحاسبي.",
-                        fontSize = 11.sp,
-                        color = Color(0xFF64748B),
-                        lineHeight = 16.sp
-                    )
                 }
             }
         }

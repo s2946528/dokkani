@@ -20,6 +20,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -105,6 +110,7 @@ fun PosCartComponent(
             modifier = Modifier
                 .padding(12.dp)
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
         ) {
             // ترويسة السلة
             Row(
@@ -193,7 +199,7 @@ fun PosCartComponent(
 
             Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
-            // قائمة بنود السلة
+            // قائمة بنود السلة المزوّدة بسحب وتمرير عمودي مستقل
             if (cartItems.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -223,22 +229,29 @@ fun PosCartComponent(
                     }
                 }
             } else {
-                LazyColumn(
+                Box(
                     modifier = Modifier
-                        .weight(1f, fill = false)
-                        .animateContentSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp, max = 450.dp)
                 ) {
-                    items(cartItems, key = { it.cartItemId }) { item ->
-                        PosCartItemRow(
-                            item = item,
-                            currencySymbol = currencySymbol,
-                            onQuantityChange = { newQty -> onQuantityChange(item.cartItemId, newQty) },
-                            onUnitPriceChange = { newPrice -> onUnitPriceChange(item.cartItemId, newPrice) },
-                            onUnitChange = { newUnit -> onUnitChange(item.cartItemId, newUnit) },
-                            onNoteChange = { note -> onNoteChange(item.cartItemId, note) },
-                            onRemove = { onRemoveItem(item.cartItemId) }
-                        )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(cartItems, key = { it.cartItemId }) { item ->
+                            PosCartItemRow(
+                                item = item,
+                                currencySymbol = currencySymbol,
+                                showDecimals = showDecimals,
+                                onQuantityChange = { newQty -> onQuantityChange(item.cartItemId, newQty) },
+                                onUnitPriceChange = { newPrice -> onUnitPriceChange(item.cartItemId, newPrice) },
+                                onUnitChange = { newUnit -> onUnitChange(item.cartItemId, newUnit) },
+                                onNoteChange = { note -> onNoteChange(item.cartItemId, note) },
+                                onRemove = { onRemoveItem(item.cartItemId) }
+                            )
+                        }
                     }
                 }
             }
@@ -365,7 +378,7 @@ fun PosCartComponent(
 }
 
 /**
- * صف بند السلة المطور مع تفاصيل الصنف، قائمة تغيير الوحدات، إدخال الكمية المباشر، وتأكيد الحذف
+ * صف بند السلة المطور والموسع لإظهار كافة التفاصيل بوضوح دون تداخل
  */
 @Composable
 fun PosCartItemRow(
@@ -389,57 +402,74 @@ fun PosCartItemRow(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-        modifier = modifier.fillMaxWidth().animateContentSize()
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp)
+                .padding(12.dp)
         ) {
-            // الصف الأول: الاسم، الباركود/الكود، الأزرار والتأكيد
+            // 1. ترويسة البطاقة: اسم الصنف الموسّع والوسوم المرفقة وأزرار الإجراءات
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = item.productName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (item.isWeighted) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Default.Scale,
-                                contentDescription = "وزن",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = item.productName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
 
-                    // تفاصيل كود الباركود والوسوم
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 2.dp)
+                        modifier = Modifier.padding(top = 4.dp)
                     ) {
                         if (item.productCode.isNotBlank()) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
                             ) {
                                 Text(
-                                    text = item.productCode,
+                                    text = "الكود: ${item.productCode}",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
+                            }
+                        }
+
+                        if (item.isWeighted) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Scale,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "وزني",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                             }
                         }
 
@@ -449,41 +479,44 @@ fun PosCartItemRow(
                                 color = MaterialTheme.colorScheme.tertiaryContainer
                             ) {
                                 Text(
-                                    text = "ميزان 21",
+                                    text = "ميزان باركود",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                 )
                             }
                         }
                     }
                 }
 
-                // أزرار الملاحظات والحذف
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // أزرار الإجراءات: الملاحظات والحذف
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     IconButton(
                         onClick = { showNoteDialog = true },
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             imageVector = if (item.notes.isBlank()) Icons.Default.EditNote else Icons.Default.Notes,
                             contentDescription = "ملاحظات الصنف",
                             tint = if (item.notes.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
                     if (!showDeleteConfirm) {
                         IconButton(
                             onClick = { showDeleteConfirm = true },
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "حذف البند",
-                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                modifier = Modifier.size(18.dp)
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -492,32 +525,30 @@ fun PosCartItemRow(
 
             // الملاحظات إن وجدت
             if (item.notes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Surface(
                     shape = RoundedCornerShape(6.dp),
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = "ملاحظة: ${item.notes}",
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
 
-            // عرض سعر الشراء الأصلي والكمية المشتراة كمرجع في المردودات
+            // مرجع الفاتورة الأصلية للمردودات
             if (item.originalInvoiceQuantity != null && item.originalInvoiceCostPrice != null) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Surface(
                     shape = RoundedCornerShape(6.dp),
                     color = Color(0xFFE8F5E9),
                     border = BorderStroke(1.dp, Color(0xFF81C784)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -539,14 +570,13 @@ fun PosCartItemRow(
                 }
             }
 
-            // شريط تأكيد الحذف بدلاً من الحذف الفوري المباشر
+            // تأكيد الحذف
             if (showDeleteConfirm) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.errorContainer,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
@@ -582,176 +612,226 @@ fun PosCartItemRow(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // الصف الثاني: منتقي الوحدات + السعر + أزرار الكمية السريعة + إجمالي السطر
+            // 2. القسم الأوسط: اختيار الوحدة المعروضة وسعر الوحدة المباشر
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // منتقي الوحدات المتعددة والسعر الفردي
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Box {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                            modifier = Modifier.clickable {
-                                if (item.availableUnits.size > 1) {
-                                    unitMenuExpanded = true
-                                } else {
-                                    showPriceDialog = true
-                                }
-                            }
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = "${item.unitPrice.formatCurrency(showDecimals, currencySymbol)} / ${item.unitName}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (item.availableUnits.size > 1) {
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = "اختيار وحدة أخرى",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // القائمة المنسدلة للوحدات المتعددة
-                        DropdownMenu(
-                            expanded = unitMenuExpanded,
-                            onDismissRequest = { unitMenuExpanded = false }
-                        ) {
-                            item.availableUnits.forEach { unit ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = unit.unitName,
-                                                fontWeight = if (unit.id == item.unitId) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Text(
-                                                text = "%.2f %s".format(unit.sellingPrice, currencySymbol),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        unitMenuExpanded = false
-                                        onUnitChange(unit)
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    // زر تعديل السعر المباشر
-                    IconButton(
-                        onClick = { showPriceDialog = true },
-                        modifier = Modifier.size(26.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.EditNote,
-                            contentDescription = "تعديل سعر الشراء",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                // أدوات التحكم بالكمية الإضافية / المباشرة
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // زر إنقاص الكمية (-)
-                    FilledTonalButton(
-                        onClick = {
-                            val step = if (item.isWeighted) 0.250 else 1.0
-                            val newQty = (item.quantity - step).coerceAtLeast(0.0)
-                            if (newQty <= 0.001) {
-                                showDeleteConfirm = true
-                            } else {
-                                onQuantityChange(newQty)
-                            }
-                        },
-                        modifier = Modifier.size(32.dp),
-                        contentPadding = PaddingValues(0.dp),
-                        shape = CircleShape
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Remove,
-                            contentDescription = "إنقاص",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    // مربع عرض الكمية وإمكانية النقر للإدخال المباشر
+                Box {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.clickable { showQtyDialog = true }
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                        modifier = Modifier.clickable {
+                            if (item.availableUnits.size > 1) {
+                                unitMenuExpanded = true
+                            } else {
+                                showPriceDialog = true
+                            }
+                        }
                     ) {
-                        Text(
-                            text = item.quantityFormatted,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Sell,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "الوحدة: ${item.unitName} (${item.unitPrice.formatCurrency(showDecimals, currencySymbol)})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (item.availableUnits.size > 1) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "اختيار وحدة أخرى",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     }
 
-                    // زر زيادة الكمية (+)
-                    FilledTonalButton(
-                        onClick = {
-                            val step = if (item.isWeighted) 0.250 else 1.0
-                            onQuantityChange(item.quantity + step)
-                        },
-                        modifier = Modifier.size(32.dp),
-                        contentPadding = PaddingValues(0.dp),
-                        shape = CircleShape
+                    // قائمة منسدلة للوحدات المتعددة
+                    DropdownMenu(
+                        expanded = unitMenuExpanded,
+                        onDismissRequest = { unitMenuExpanded = false }
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "زيادة",
-                            modifier = Modifier.size(16.dp)
-                        )
+                        item.availableUnits.forEach { unit ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = unit.unitName,
+                                            fontWeight = if (unit.id == item.unitId) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Text(
+                                            text = "%.2f %s".format(unit.sellingPrice, currencySymbol),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    unitMenuExpanded = false
+                                    onUnitChange(unit)
+                                }
+                            )
+                        }
                     }
                 }
 
-                // إجمالي البند الخطي (Total)
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "الإجمالي",
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    Text(
-                        text = item.totalPrice.formatCurrency(showDecimals, currencySymbol),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                // زر تعديل سعر الوحدة
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.clickable { showPriceDialog = true }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "تعديل السعر",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "تعديل السعر",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 3. القسم السفلي: أزرار التحكم بالكمية + إجمالي البند الموضعي تحت الكمية لمنع التكدس والتداخل البصري
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.background,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // حقل وعناصر التحكم بالكمية
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "الكمية:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            FilledTonalButton(
+                                onClick = {
+                                    val step = if (item.isWeighted) 0.250 else 1.0
+                                    val newQty = (item.quantity - step).coerceAtLeast(0.0)
+                                    if (newQty <= 0.001) {
+                                        showDeleteConfirm = true
+                                    } else {
+                                        onQuantityChange(newQty)
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp),
+                                contentPadding = PaddingValues(0.dp),
+                                shape = CircleShape
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Remove,
+                                    contentDescription = "إنقاص الكمية",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.clickable { showQtyDialog = true }
+                            ) {
+                                Text(
+                                    text = "${item.quantityFormatted} ${item.unitName}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            FilledTonalButton(
+                                onClick = {
+                                    val step = if (item.isWeighted) 0.250 else 1.0
+                                    onQuantityChange(item.quantity + step)
+                                },
+                                modifier = Modifier.size(32.dp),
+                                contentPadding = PaddingValues(0.dp),
+                                shape = CircleShape
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "زيادة الكمية",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    // حقل ونص الإجمالي مباشرة تحت حقل الكمية لمنع التداخل البصري والتكدس
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "إجمالي البند:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = item.totalPrice.formatCurrency(showDecimals, currencySymbol),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }

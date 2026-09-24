@@ -520,7 +520,7 @@ fun BankWalletsBreakdownDialog(
                         }
                     }
 
-                    // 1. توزيع حركات الشفت الإلكترونية حسب القناة
+                    // 1. توزيع حركات الشفت الإلكترونية النشطة حسب القناة (تصفية وإخفاء البنود الصفرية)
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
                         border = BorderStroke(1.dp, Color(0xFF90CAF9)),
@@ -531,21 +531,37 @@ fun BankWalletsBreakdownDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                "📊 المبيعات الإلكترونية بالشفت الحالي",
+                                "📊 المبيعات الإلكترونية بالشفت الحالي (البنود النشطة)",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = Color(0xFF0D47A1)
                             )
                             HorizontalDivider(color = Color(0xFFBBDEFB))
 
-                            BreakdownRow("💳 شبكة نقاط بيع ومدى (POS):", currentShift.totalMadaSales, currencySymbol, isPositive = true, labelColor = Color(0xFF0D47A1))
-                            BreakdownRow("📱 المحافظ الإلكترونية (E-Wallets):", currentShift.totalWalletSales, currencySymbol, isPositive = true, labelColor = Color(0xFF0D47A1))
-                            BreakdownRow("🏦 التحويلات المصرفية (Bank Transfers):", currentShift.totalTransferSales, currencySymbol, isPositive = true, labelColor = Color(0xFF0D47A1))
-                            BreakdownRow("📝 المبيعات الآجلة (على الحساب):", currentShift.totalCreditSales, currencySymbol, isPositive = false, labelColor = Color(0xFF0D47A1))
+                            val digitalRows = remember(currentShift) {
+                                listOf(
+                                    Triple("💳 شبكة نقاط بيع ومدى (POS):", currentShift.totalMadaSales, true),
+                                    Triple("📱 المحافظ الإلكترونية (E-Wallets):", currentShift.totalWalletSales, true),
+                                    Triple("🏦 التحويلات المصرفية (Bank Transfers):", currentShift.totalTransferSales, true)
+                                ).filter { kotlin.math.abs(it.second) > 0.0 }
+                            }
+
+                            if (digitalRows.isNotEmpty()) {
+                                digitalRows.forEach { row ->
+                                    BreakdownRow(row.first, row.second, currencySymbol, isPositive = row.third, labelColor = Color(0xFF0D47A1))
+                                }
+                            } else {
+                                Text(
+                                    text = "لا توجد حركات مبيعات إلكترونية أو شبكة خلال الشفت الحالي (0.00 $currencySymbol).",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF1565C0),
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
 
                             HorizontalDivider(color = Color(0xFFBBDEFB))
                             BreakdownRow(
-                                "مجموع السداد الإلكتروني:",
+                                "مجموع السداد الإلكتروني الوارد:",
                                 totalDigitalInShift,
                                 currencySymbol,
                                 isPositive = true,
@@ -555,27 +571,31 @@ fun BankWalletsBreakdownDialog(
                         }
                     }
 
-                    // 2. أرصدة الحسابات المالية والبنوك المربوطة بالمتجر
+                    // 2. أرصدة الحسابات المالية والبنوك النشطة (تصفية وإخفاء الحسابات الصفرية والبنود الدخيلة)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "🏦 أرصدة الحسابات البنكية والمحافظ الحالية:",
+                            text = "🏦 أرصدة الحسابات البنكية والمحافظ النشطة:",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        val nonCashAccounts = remember(financialAccounts) {
-                            financialAccounts.filter { it.accountType != FinancialAccountType.CASH_DRAWER }
+                        val activeNonZeroAccounts = remember(financialAccounts) {
+                            financialAccounts.filter { acc ->
+                                (acc.accountType == FinancialAccountType.BANK || acc.accountType == FinancialAccountType.E_WALLET) &&
+                                acc.isActive &&
+                                kotlin.math.abs(acc.currentBalance) > 0.0
+                            }
                         }
 
-                        if (nonCashAccounts.isEmpty()) {
+                        if (activeNonZeroAccounts.isEmpty()) {
                             Surface(
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = "لم يتم ربط حسابات بنكية أو محافظ بعد، يمكنك إضافتها من شاشة الحسابات والمالية.",
+                                    text = "لا توجد حسابات بنكية أو محافظ نشطة برصيد أو حركة خلال الشفت الحالي (تم إخفاء الحسابات الصفرية لتنظيف الواجهة).",
                                     fontSize = 11.sp,
                                     color = Color.Gray,
                                     modifier = Modifier.padding(10.dp),
@@ -583,7 +603,7 @@ fun BankWalletsBreakdownDialog(
                                 )
                             }
                         } else {
-                            nonCashAccounts.forEach { acc ->
+                            activeNonZeroAccounts.forEach { acc ->
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
                                     color = MaterialTheme.colorScheme.surface,

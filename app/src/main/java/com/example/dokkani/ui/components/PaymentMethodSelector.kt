@@ -31,6 +31,8 @@ fun PaymentMethodSelector(
     onAccountSelected: (Long?) -> Unit = {},
     transactionRef: String = "",
     onTransactionRefChange: (String) -> Unit = {},
+    receiptImagePath: String? = null,
+    onReceiptImageChange: (String?) -> Unit = {},
     allowCredit: Boolean = true,
     allowMulti: Boolean = true,
     currencySymbol: String = "ر.س",
@@ -325,6 +327,12 @@ fun PaymentMethodSelector(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                // إرفاق صورة إشعار السداد / الحوالة مباشرةً أسفل حقل رقم العملية / المرجع
+                ReceiptAttachmentComponent(
+                    receiptImagePath = receiptImagePath,
+                    onReceiptImageChanged = onReceiptImageChange
                 )
             }
         }

@@ -37,7 +37,6 @@ data class GroupItemAuditDetail(
     val unitName: String = "كجم",
     val currencySymbol: String = "ر.ي",
     val currentStockQty: Double = 0.0,
-    val autoWasteQty: Double = 0.0,
     val endingActualQtyInput: String = "0.0"
 )
 
@@ -247,12 +246,10 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
 
             val itemDetails = details.items.map { item ->
                 var stockQty = 0.0
-                var wasteQty = 0.0
                 var unitName = "كجم"
 
                 if (item.productId != null && item.productId > 0) {
                     stockQty = db.stockMovementDao().getTotalStockQuantity(item.productId)
-                    wasteQty = db.productWastageDao().getTotalWasteQuantityForProduct(item.productId) ?: 0.0
                     val baseUnit = db.productDao().getUnitsForProductSync(item.productId).firstOrNull { it.isBaseUnit }
                     if (baseUnit != null) {
                         unitName = baseUnit.unitName
@@ -266,19 +263,26 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
                     unitName = unitName,
                     currencySymbol = symbol,
                     currentStockQty = if (stockQty > 0) stockQty else 10.0,
-                    autoWasteQty = wasteQty,
                     endingActualQtyInput = "0.0"
                 )
             }
 
             val totalStock = itemDetails.sumOf { it.currentStockQty }
-            val totalWaste = itemDetails.sumOf { it.autoWasteQty }
+
+            // جلب إجمالي المبيعات بالقيمة آلياً (Read-Only) للأصناف التابعة للمجموعة
+            val groupProductIds = details.items.mapNotNull { it.productId }.toSet()
+            val saleInvoices = db.invoiceDao().getAllInvoicesSync().filter { it.type == InvoiceType.SALE }
+            val saleInvoiceIds = saleInvoices.map { it.id }.toSet()
+            val allInvoiceItems = db.invoiceDao().getAllInvoiceItemsSync()
+            val autoFetchedSalesRevenue = allInvoiceItems
+                .filter { it.invoiceId in saleInvoiceIds && it.productId in groupProductIds }
+                .sumOf { it.totalPrice }
 
             _uiState.update { state ->
                 state.copy(
                     groupItemsAuditDetails = itemDetails,
                     auditBeginningQtyInput = String.format(java.util.Locale.US, "%.1f", totalStock),
-                    auditWasteQtyInput = String.format(java.util.Locale.US, "%.1f", totalWaste)
+                    auditRecordedSalesRevenueInput = String.format(java.util.Locale.US, "%.1f", autoFetchedSalesRevenue)
                 )
             }
             recalculateCogsEngine()

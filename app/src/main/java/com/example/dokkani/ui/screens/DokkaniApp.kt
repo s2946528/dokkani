@@ -60,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -131,154 +132,94 @@ fun DokkaniApp(
 
     val allowedTabs = allTabs.filter { currentUserRole in it.requiredRoles }
     val currentTabIndex = uiState.selectedTab.coerceIn(0, (allowedTabs.size - 1).coerceAtLeast(0))
+    val activeTabTitle = allowedTabs.getOrNull(currentTabIndex)?.title ?: ""
+
+    // بناء قائمة الإدارات والأقسام للـ Collapsible Navigation Drawer
+    val allDepartments = remember {
+        listOf(
+            com.example.dokkani.ui.components.NavDepartmentGroup(
+                id = "general_ledger",
+                titleArabic = "الأستاذ العام والحسابات العامة",
+                titleEnglish = "General Ledger & Accounts",
+                icon = Icons.Default.AccountBalance,
+                headerColor = Color(0xFF1B5E20),
+                items = listOf(
+                    com.example.dokkani.ui.components.NavTabItem("دليل الحسابات والبنوك", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+                    com.example.dokkani.ui.components.NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+                    com.example.dokkani.ui.components.NavTabItem("إدارة الشفتات والدرج", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+                    com.example.dokkani.ui.components.NavTabItem("إدارة مراكز التكلفة", Icons.Default.Business, setOf(UserRole.ADMIN)),
+                    com.example.dokkani.ui.components.NavTabItem("إدارة العملات", Icons.Default.MonetizationOn, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("الأصول والملكية", Icons.Default.AccountBalance, setOf(UserRole.ADMIN)),
+                    com.example.dokkani.ui.components.NavTabItem("التقارير", Icons.Default.Analytics, setOf(UserRole.ADMIN))
+                )
+            ),
+            com.example.dokkani.ui.components.NavDepartmentGroup(
+                id = "sales",
+                titleArabic = "إدارة المبيعات والعملاء",
+                titleEnglish = "Sales & Customer Management",
+                icon = Icons.Default.PointOfSale,
+                headerColor = Color(0xFF0D47A1),
+                items = listOf(
+                    com.example.dokkani.ui.components.NavTabItem("الفواتير والسندات", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("إدارة البيع بالقيمة", Icons.Default.MonetizationOn, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("العملاء والموردين", Icons.Default.People, setOf(UserRole.ADMIN, UserRole.CASHIER))
+                )
+            ),
+            com.example.dokkani.ui.components.NavDepartmentGroup(
+                id = "inventory_procurement",
+                titleArabic = "إدارة المخازن والمشتريات",
+                titleEnglish = "Inventory & Procurement",
+                icon = Icons.Default.Storefront,
+                headerColor = Color(0xFFE65100),
+                items = listOf(
+                    com.example.dokkani.ui.components.NavTabItem("المنتجات والأصناف", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("فواتير الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("شاشة الجرد وقائمة الجرد", Icons.Default.FactCheck, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY))
+                )
+            ),
+            com.example.dokkani.ui.components.NavDepartmentGroup(
+                id = "system_settings",
+                titleArabic = "إدارة النظام والإعدادات",
+                titleEnglish = "System Administration & Settings",
+                icon = Icons.Default.Settings,
+                headerColor = Color(0xFF37474F),
+                items = listOf(
+                    com.example.dokkani.ui.components.NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
+                    com.example.dokkani.ui.components.NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN)),
+                    com.example.dokkani.ui.components.NavTabItem("شؤون العمال والرواتب", Icons.Default.Badge, setOf(UserRole.ADMIN)),
+                    com.example.dokkani.ui.components.NavTabItem("الترخيص والحماية", Icons.Default.Security, setOf(UserRole.ADMIN))
+                )
+            )
+        )
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
-                    // ترويسة القائمة الجانبية الشاملة
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_dokkani_unified_logo),
-                                contentDescription = "شعار دكاني الموحد",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                "نظام دكاني - Dokkani",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                "الدور: ${currentUserRole.labelArabic}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+            com.example.dokkani.ui.components.CollapsibleNavDrawerSheet(
+                currentUserRole = currentUserRole,
+                activeTabTitle = activeTabTitle,
+                allDepartments = allDepartments,
+                onSelectTabByTitle = { selectedTitle ->
+                    val index = allowedTabs.indexOfFirst {
+                        it.title == selectedTitle || (selectedTitle == "المنتجات والأصناف" && it.title == "المنتجات والوحدات")
+                    }
+                    if (index >= 0) {
+                        viewModel.selectTab(index)
+                        if (selectedTitle == "إدارة الشفتات والدرج") {
+                            viewModel.selectCashSubTab(1)
+                        } else if (selectedTitle == "الخزينة والمصروفات") {
+                            viewModel.selectCashSubTab(0)
                         }
                     }
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    // القائمة الجانبية المحدثة لجميع شاشات وأقسام النظام دون فواتير الشراء
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        allowedTabs.filter { it.title != "فواتير الشراء" }.forEach { tab ->
-                            val originalIndex = allowedTabs.indexOf(tab)
-                            val isSelected = currentTabIndex == originalIndex
-
-                            // ترويسة قسم "إدارة المخازن" عند الوصول لتبويبات المخزون
-                            if (tab.title == "المنتجات والأصناف" || tab.title == "المنتجات والوحدات") {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 8.dp, bottom = 4.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Storefront,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            "إدارة المخازن (Inventory Management)",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            }
-
-                            NavigationDrawerItem(
-                                label = {
-                                    Text(
-                                        tab.title,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                },
-                                icon = {
-                                    Icon(
-                                        tab.icon,
-                                        contentDescription = tab.title,
-                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                selected = isSelected,
-                                onClick = {
-                                    viewModel.selectTab(originalIndex)
-                                    if (tab.title == "إدارة الشفتات والدرج") {
-                                        viewModel.selectCashSubTab(1)
-                                    } else if (tab.title == "الخزينة والمصروفات") {
-                                        viewModel.selectCashSubTab(0)
-                                    }
-                                    scope.launch { drawerState.close() }
-                                },
-                                colors = NavigationDrawerItemDefaults.colors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                    selectedTextColor = MaterialTheme.colorScheme.primary
-                                ),
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    // خيارات وإجراءات النظام أسفل القائمة
-                    if (currentUserRole == UserRole.ADMIN) {
-                        NavigationDrawerItem(
-                            label = { Text("معالج التهيئة الأولى والرقابة", fontSize = 13.sp) },
-                            icon = { Icon(Icons.Default.AutoFixHigh, contentDescription = null) },
-                            selected = false,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                onOpenOnboardingWizard()
-                            }
-                        )
-                    }
-
-                    NavigationDrawerItem(
-                        label = { Text("تسجيل الخروج", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) },
-                        icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                        selected = false,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            onLogout()
-                        }
-                    )
+                },
+                onOpenOnboardingWizard = onOpenOnboardingWizard,
+                onLogout = onLogout,
+                onCloseDrawer = {
+                    scope.launch { drawerState.close() }
                 }
-            }
+            )
         }
     ) {
         Scaffold(

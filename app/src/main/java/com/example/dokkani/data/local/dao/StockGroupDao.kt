@@ -84,4 +84,7 @@ interface StockGroupDao {
     // فحص التحقق من المبيعات لضمان الحذف الآمن والسلامة المحاسبية
     @Query("SELECT COUNT(*) FROM invoice_items WHERE productId IN (SELECT productId FROM stock_group_items WHERE groupId = :groupId AND productId IS NOT NULL)")
     suspend fun getLinkedSalesCountForGroup(groupId: Long): Int
+
+    @Query("SELECT productId FROM stock_group_items WHERE productId IS NOT NULL")
+    suspend fun getAllSubItemProductIdsSync(): List<Long>
 }

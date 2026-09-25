@@ -682,21 +682,6 @@ private fun GroupAuditCogsView(
                                             singleLine = true
                                         )
 
-                                        // التالف المسجل تلقائياً من تبويب التالف
-                                        OutlinedTextField(
-                                            value = String.format(Locale.US, "%.1f", itemDetail.autoWasteQty),
-                                            onValueChange = {},
-                                            readOnly = true,
-                                            label = { Text("التالف (تلقائي)") },
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedTextColor = MaterialTheme.colorScheme.error,
-                                                unfocusedTextColor = MaterialTheme.colorScheme.error
-                                            ),
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp),
-                                            singleLine = true
-                                        )
-
                                         // إدخال آخر المدة الفعلي للصنف
                                         OutlinedTextField(
                                             value = itemDetail.endingActualQtyInput,

@@ -1270,6 +1270,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
                     val fallbackProduct = productDao.getAllProductsSync().firstOrNull()
                     val fallbackProductUnits = if (fallbackProduct != null) productDao.getUnitsForProductSync(fallbackProduct.id) else emptyList()
+                    val subItemProductIds = stockGroupDao.getAllSubItemProductIdsSync().toSet()
 
                     state.cartItems.forEach { item ->
                         var validProdId = item.productId
@@ -1298,32 +1299,38 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         )
 
                         // حركة المخزون المحاسبية
-                        val movementType = when (state.activeOperation) {
-                            PosOperation.SALE -> MovementType.SALE_OUT
-                            PosOperation.PURCHASE -> MovementType.PURCHASE_IN
-                            PosOperation.SALE_RETURN -> MovementType.RETURN_IN
-                            PosOperation.PURCHASE_RETURN -> MovementType.RETURN_OUT
-                            else -> MovementType.SALE_OUT
-                        }
+                        // سياسة حركة المخزون: الأصناف الفرعية المكونة للمجموعات لا تُخصم لحظياً أثناء البيع اليومي ويبقى رصيدها ثابتاً لحين الجرد الدوري
+                        val isSubItemInGroup = validProdId in subItemProductIds
+                        val isDailySale = state.activeOperation == PosOperation.SALE
 
-                        val qtyBase = when (state.activeOperation) {
-                            PosOperation.SALE, PosOperation.PURCHASE_RETURN -> -(item.quantity * item.conversionFactor)
-                            PosOperation.PURCHASE, PosOperation.SALE_RETURN -> (item.quantity * item.conversionFactor)
-                            else -> 0.0
-                        }
+                        if (!isDailySale || !isSubItemInGroup) {
+                            val movementType = when (state.activeOperation) {
+                                PosOperation.SALE -> MovementType.SALE_OUT
+                                PosOperation.PURCHASE -> MovementType.PURCHASE_IN
+                                PosOperation.SALE_RETURN -> MovementType.RETURN_IN
+                                PosOperation.PURCHASE_RETURN -> MovementType.RETURN_OUT
+                                else -> MovementType.SALE_OUT
+                            }
 
-                        movementsToInsert.add(
-                            StockMovementEntity(
-                                productId = validProdId,
-                                productUnitId = validUnitId,
-                                movementType = movementType,
-                                quantityBaseUnit = qtyBase,
-                                remainingQuantityForFifo = if (movementType == MovementType.PURCHASE_IN) item.quantity * item.conversionFactor else 0.0,
-                                unitCostPriceBase = item.costPrice / item.conversionFactor,
-                                timestamp = timestamp,
-                                referenceNumber = invoiceNumber
+                            val qtyBase = when (state.activeOperation) {
+                                PosOperation.SALE, PosOperation.PURCHASE_RETURN -> -(item.quantity * item.conversionFactor)
+                                PosOperation.PURCHASE, PosOperation.SALE_RETURN -> (item.quantity * item.conversionFactor)
+                                else -> 0.0
+                            }
+
+                            movementsToInsert.add(
+                                StockMovementEntity(
+                                    productId = validProdId,
+                                    productUnitId = validUnitId,
+                                    movementType = movementType,
+                                    quantityBaseUnit = qtyBase,
+                                    remainingQuantityForFifo = if (movementType == MovementType.PURCHASE_IN) item.quantity * item.conversionFactor else 0.0,
+                                    unitCostPriceBase = item.costPrice / item.conversionFactor,
+                                    timestamp = timestamp,
+                                    referenceNumber = invoiceNumber
+                                )
                             )
-                        )
+                        }
 
                         // تحديث المتوسط المرجح للتكلفة (WAC) في حالة الشراء
                         if (state.activeOperation == PosOperation.PURCHASE && item.productId > 0) {

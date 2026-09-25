@@ -72,6 +72,10 @@ import com.example.dokkani.data.local.entities.StockGroupAuditEntity
 
 import com.example.dokkani.data.local.dao.ProductWastageDao
 import com.example.dokkani.data.local.entities.ProductWastageEntity
+import com.example.dokkani.data.local.dao.CostCenterDao
+import com.example.dokkani.data.local.entities.CostCenterEntity
+import com.example.dokkani.data.local.dao.ShortageSettlementDao
+import com.example.dokkani.data.local.entities.ShortageSettlementEntity
 
 /**
  * قاعدة البيانات الرئيسية لنظام دكاني (Dokkani Database)
@@ -107,9 +111,11 @@ import com.example.dokkani.data.local.entities.ProductWastageEntity
         StockGroupEntity::class,
         StockGroupItemEntity::class,
         StockGroupAuditEntity::class,
-        ProductWastageEntity::class
+        ProductWastageEntity::class,
+        CostCenterEntity::class,
+        ShortageSettlementEntity::class
     ],
-    version = 19,
+    version = 21,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -140,6 +146,8 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun currencyExchangeHistoryDao(): CurrencyExchangeHistoryDao
     abstract fun stockGroupDao(): StockGroupDao
     abstract fun productWastageDao(): ProductWastageDao
+    abstract fun costCenterDao(): CostCenterDao
+    abstract fun shortageSettlementDao(): ShortageSettlementDao
 
     companion object {
         @Volatile
@@ -319,6 +327,21 @@ abstract class DokkaniDatabase : RoomDatabase() {
                             currentBalance = 0.0,
                             notes = "حساب الأصول غير الملموسة المعني بتسجيل مبالغ الخلو ونقل القدم وحقوق الانتفاع"
                         )
+                    )
+                )
+            }
+
+            // 5. إنشاء "مركز التكلفة العام" الافتراضي (General Cost Center)
+            val costCenterDao = db.costCenterDao()
+            if (costCenterDao.getCostCenterCount() == 0) {
+                costCenterDao.insertCostCenter(
+                    CostCenterEntity(
+                        centerId = 1,
+                        code = "CC-GEN",
+                        centerName = "مركز التكلفة العام",
+                        isGeneral = true,
+                        isActive = true,
+                        description = "مركز التكلفة العام الافتراضي المعتمد لجميع الأنشطة والأصناف والمصاريف"
                     )
                 )
             }

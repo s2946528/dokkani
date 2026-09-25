@@ -1,5 +1,6 @@
 package com.example.dokkani.data.local.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -13,7 +14,8 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["code"], unique = true),
         Index(value = ["category"]),
-        Index(value = ["expiryDate"])
+        Index(value = ["expiryDate"]),
+        Index(value = ["cost_center_id"])
     ]
 )
 data class ProductEntity(
@@ -28,5 +30,7 @@ data class ProductEntity(
     val expiryDate: Long? = null,         // تاريخ انتهاء الصلاحية
     val isActive: Boolean = true,         // حالة نشاط الصنف
     val createdAt: Long = System.currentTimeMillis(),
-    val imagePath: String? = null         // مسار أو URI صورة المنتج
+    val imagePath: String? = null,        // مسار أو URI صورة المنتج
+    @ColumnInfo(name = "cost_center_id")
+    val costCenterId: Long = 1            // معرف مركز التكلفة (1: مركز التكلفة العام افتراضياً)
 )

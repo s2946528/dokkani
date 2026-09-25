@@ -1,5 +1,6 @@
 package com.example.dokkani.data.local.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -14,7 +15,8 @@ import androidx.room.PrimaryKey
         Index(value = ["expenseNumber"], unique = true),
         Index(value = ["category"]),
         Index(value = ["date"]),
-        Index(value = ["paymentMethod"])
+        Index(value = ["paymentMethod"]),
+        Index(value = ["cost_center_id"])
     ]
 )
 data class ExpenseEntity(
@@ -29,5 +31,7 @@ data class ExpenseEntity(
     val date: Long = System.currentTimeMillis(),// تاريخ ووقت المصروف
     val paidTo: String = "",                    // المدفوع له (الجهة أو الشخص)
     val notes: String = "",                     // البيان والملاحظات
-    val recordedBy: String = "كاشير 1"          // المستخدم / الكاشير
+    val recordedBy: String = "كاشير 1",         // المستخدم / الكاشير
+    @ColumnInfo(name = "cost_center_id")
+    val costCenterId: Long = 1                  // معرف مركز التكلفة (1: مركز التكلفة العام افتراضياً)
 )

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
@@ -83,6 +85,8 @@ import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Business
+import com.example.dokkani.ui.screens.costcenters.CostCentersManagementScreen
 import com.example.dokkani.ui.screens.ValueSellingManagementScreen
 
 data class NavTabItem(
@@ -108,7 +112,8 @@ fun DokkaniApp(
         NavTabItem("الفواتير والسندات", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("فواتير الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("إدارة البيع بالقيمة", Icons.Default.MonetizationOn, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
-        NavTabItem("المنتجات والوحدات", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("المنتجات والأصناف", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("شاشة الجرد وقائمة الجرد", Icons.Default.FactCheck, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("إدارة الشفتات والدرج", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("دليل الحسابات والبنوك", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
@@ -119,6 +124,7 @@ fun DokkaniApp(
         NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الترخيص والحماية", Icons.Default.Security, setOf(UserRole.ADMIN)),
         NavTabItem("إدارة العملات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+        NavTabItem("إدارة مراكز التكلفة", Icons.Default.Business, setOf(UserRole.ADMIN)),
         NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
         NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN))
     )
@@ -183,6 +189,36 @@ fun DokkaniApp(
                         allowedTabs.filter { it.title != "فواتير الشراء" }.forEach { tab ->
                             val originalIndex = allowedTabs.indexOf(tab)
                             val isSelected = currentTabIndex == originalIndex
+
+                            // ترويسة قسم "إدارة المخازن" عند الوصول لتبويبات المخزون
+                            if (tab.title == "المنتجات والأصناف" || tab.title == "المنتجات والوحدات") {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp, bottom = 4.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Storefront,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            "إدارة المخازن (Inventory Management)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
 
                             NavigationDrawerItem(
                                 label = {
@@ -330,7 +366,7 @@ fun DokkaniApp(
                                     onNavigateBack = { viewModel.selectTab(0) }
                                 )
                             }
-                            "المنتجات والوحدات" -> {
+                            "المنتجات والوحدات", "المنتجات والأصناف" -> {
                                 ProductsAndUnitsScreen(
                                     productsWithUnits = uiState.products,
                                     wasteRecords = uiState.wasteRecords,
@@ -345,6 +381,17 @@ fun DokkaniApp(
                                     onDeleteCategory = viewModel::deleteCategory,
                                     onSaveWasteRecord = viewModel::saveWasteRecord,
                                     onDeleteWasteRecord = viewModel::deleteWasteRecord
+                                )
+                            }
+                            "شاشة الجرد وقائمة الجرد" -> {
+                                com.example.dokkani.ui.screens.inventory.InventoryAuditCountSheetScreen(
+                                    currentUserRole = currentUserRole,
+                                    onNavigateToValueSelling = {
+                                        val valIndex = allowedTabs.indexOfFirst { it.title == "إدارة البيع بالقيمة" }
+                                        if (valIndex >= 0) {
+                                            viewModel.selectTab(valIndex)
+                                        }
+                                    }
                                 )
                             }
                             "الخزينة والمصروفات" -> {
@@ -594,6 +641,12 @@ fun DokkaniApp(
                                     onDeleteCurrency = viewModel::deleteCurrency,
                                     onUpdateForeignPricingMode = viewModel::updateForeignCurrencyPricingMode,
                                     onUpdateEnableDailyExchangePrompt = viewModel::updateEnableDailyExchangeRatePrompt
+                                )
+                            }
+                            "إدارة مراكز التكلفة" -> {
+                                CostCentersManagementScreen(
+                                    currentUserRole = currentUserRole,
+                                    onNavigateBack = { viewModel.selectTab(0) }
                                 )
                             }
                             "إعدادات النظام" -> {

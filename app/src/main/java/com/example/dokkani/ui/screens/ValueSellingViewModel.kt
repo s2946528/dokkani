@@ -4,8 +4,15 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.dokkani.data.local.DokkaniDatabase
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
+import com.example.dokkani.data.local.entities.InvoiceEntity
+import com.example.dokkani.data.local.entities.InvoiceItemEntity
+import com.example.dokkani.data.local.entities.InvoiceType
+import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.data.local.entities.InvoiceStatus
 import com.example.dokkani.data.local.entities.ProductWithUnits
+import com.example.dokkani.data.local.entities.ShortageSettlementEntity
 import com.example.dokkani.data.local.entities.StockGroupAuditEntity
 import com.example.dokkani.data.local.entities.StockGroupEntity
 import com.example.dokkani.data.local.entities.StockGroupItemEntity
@@ -38,7 +45,7 @@ data class GroupItemAuditDetail(
  * حالة واجهة بيع بالقيمة وإدارة المجموعات والجرد
  */
 data class ValueSellingUiState(
-    val activeTab: Int = 0, // 0: إدارة المجموعات، 1: الجرد الدوري و COGS
+    val activeTab: Int = 0, // 0: إدارة المجموعات، 1: الجرد الدوري و COGS، 2: تسوية العجز والبيع بالقيمة
     val groupsWithDetails: List<StockGroupWithDetails> = emptyList(),
     val selectedGroupDetails: StockGroupWithDetails? = null,
     val selectedGroupId: Long? = null,
@@ -75,6 +82,23 @@ data class ValueSellingUiState(
     val netProfitCalculated: Double = 0.0,
     val averageCostPerKg: Double = 0.0,
 
+    // تسوية العجز المخزني والبيع بالقيمة (Shortage Settlement & Value Sales)
+    val shortageSettlements: List<ShortageSettlementEntity> = emptyList(),
+    val costCenters: List<CostCenterEntity> = emptyList(),
+    val selectedCostCenterIdFilter: Long? = null, // null = جميع المراكز
+    val selectedStatusFilter: String? = null, // null = الكل، "PENDING"، "SETTLED"
+    val selectedShortageForSettlement: ShortageSettlementEntity? = null,
+    val showSettlementConfirmDialog: Boolean = false,
+    val showManualShortageDialog: Boolean = false,
+    val settlementAdminNotesInput: String = "",
+    val isSettlingShortage: Boolean = false,
+
+    // إحصائيات مالية للعجز والبيع بالقيمة
+    val totalPendingShortageQty: Double = 0.0,
+    val totalPendingShortageCost: Double = 0.0,
+    val totalPendingValueSalesRevenue: Double = 0.0,
+    val totalSettledValueSalesRevenue: Double = 0.0,
+
     // رسائل الملاحظات والحماية البرمجية
     val feedbackMessage: String? = null,
     val isErrorFeedback: Boolean = false,
@@ -91,6 +115,9 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
     private val groupDao = db.stockGroupDao()
     private val productDao = db.productDao()
     private val currencyDao = db.currencyDao()
+    private val costCenterDao = db.costCenterDao()
+    private val shortageDao = db.shortageSettlementDao()
+    private val invoiceDao = db.invoiceDao()
 
     private val _uiState = MutableStateFlow(ValueSellingUiState())
     val uiState: StateFlow<ValueSellingUiState> = _uiState.asStateFlow()
@@ -166,6 +193,31 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
                     )
                 }
                 recalculateCogsEngine()
+            }
+        }
+
+        // 4. مراقبة مراكز التكلفة
+        viewModelScope.launch(Dispatchers.IO) {
+            costCenterDao.getAllCostCenters().collectLatest { centers ->
+                _uiState.update { it.copy(costCenters = centers) }
+            }
+        }
+
+        // 5. مراقبة قيود وتسويات العجز المخزني والبيع بالقيمة
+        viewModelScope.launch(Dispatchers.IO) {
+            shortageDao.getAllShortages().collectLatest { list ->
+                val pending = list.filter { it.status == ShortageSettlementEntity.STATUS_PENDING }
+                val settled = list.filter { it.status == ShortageSettlementEntity.STATUS_SETTLED }
+
+                _uiState.update { state ->
+                    state.copy(
+                        shortageSettlements = list,
+                        totalPendingShortageQty = pending.sumOf { it.shortageQuantity },
+                        totalPendingShortageCost = pending.sumOf { it.totalShortageCost },
+                        totalPendingValueSalesRevenue = pending.sumOf { it.totalValueSalesAmount },
+                        totalSettledValueSalesRevenue = settled.sumOf { it.totalValueSalesAmount }
+                    )
+                }
             }
         }
     }
@@ -566,6 +618,278 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
                 it.copy(
                     isSavingAudit = false,
                     feedbackMessage = "تم حفظ الجرد الدوري وحساب COGS بنجاح (صافي الربح: %.2f %s)".format(state.netProfitCalculated, it.currencySymbol),
+                    isErrorFeedback = false
+                )
+            }
+        }
+    }
+
+    // --- إدارة تسوية العجز والبيع بالقيمة (Shortage Settlement & Value-Based Sales) ---
+
+    fun setCostCenterFilter(costCenterId: Long?) {
+        _uiState.update { it.copy(selectedCostCenterIdFilter = costCenterId) }
+    }
+
+    fun setStatusFilter(status: String?) {
+        _uiState.update { it.copy(selectedStatusFilter = status) }
+    }
+
+    /**
+     * احتساب ورصد العجز المخزني الناتج حصرياً عن اعتماد الجرد الدوري (الدفتري - الفعلي)
+     * مع الضوابط الآتية:
+     * 1. عزل التلف والهادر تماماً كـ مصروف مستقل وعدم دخوله في معادلة العجز.
+     * 2. ربطه بمركز التكلفة المحدد أو مركز التكلفة العام افتراضياً.
+     */
+    fun calculateAndImportShortageFromAudit(targetCostCenterId: Long = 1) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val state = _uiState.value
+            val currentGroupDetails = state.selectedGroupDetails
+            val itemsDetails = state.groupItemsAuditDetails
+
+            val costCenter = costCenterDao.getCostCenterById(targetCostCenterId)
+            val ccName = costCenter?.centerName ?: "مركز التكلفة العام"
+
+            var newShortagesCreated = 0
+            val shortagesToInsert = mutableListOf<ShortageSettlementEntity>()
+
+            // رصد العجز لكل صنف داخل الجرد
+            for (item in itemsDetails) {
+                val bookQty = item.currentStockQty
+                val actualQty = item.endingActualQtyInput.toDoubleOrNull() ?: 0.0
+
+                // العجز = كمية الدفتري المتبقي - كمية الفعلي
+                // (معزول تماماً عن autoWasteQty المخصص للتلف الهادر)
+                if (bookQty > actualQty) {
+                    val shortageQty = bookQty - actualQty
+
+                    // استخراج سعر التكلفة والبيع للصنف من جدول وحدات المنتج
+                    var unitCost = 10.0
+                    var unitPrice = 15.0
+
+                    if (item.productId != null && item.productId > 0) {
+                        val units = productDao.getUnitsForProductSync(item.productId)
+                        val baseUnit = units.firstOrNull { it.isBaseUnit } ?: units.firstOrNull()
+                        if (baseUnit != null) {
+                            unitCost = if (baseUnit.costPrice > 0) baseUnit.costPrice else 10.0
+                            unitPrice = if (baseUnit.sellingPrice > 0) baseUnit.sellingPrice else 15.0
+                        }
+                    }
+
+                    val totalCost = shortageQty * unitCost
+                    val totalValueRevenue = shortageQty * unitPrice
+
+                    shortagesToInsert.add(
+                        ShortageSettlementEntity(
+                            auditId = currentGroupDetails?.group?.id ?: 0,
+                            productId = item.productId,
+                            productName = item.productName,
+                            costCenterId = targetCostCenterId,
+                            costCenterName = ccName,
+                            bookQuantity = bookQty,
+                            actualQuantity = actualQty,
+                            shortageQuantity = shortageQty,
+                            unitCost = unitCost,
+                            unitSellingPrice = unitPrice,
+                            totalShortageCost = totalCost,
+                            totalValueSalesAmount = totalValueRevenue,
+                            status = ShortageSettlementEntity.STATUS_PENDING,
+                            notes = "عجز مخزني ناتج عن جرد ${currentGroupDetails?.group?.name ?: "دوري"}"
+                        )
+                    )
+                    newShortagesCreated++
+                }
+            }
+
+            if (shortagesToInsert.isNotEmpty()) {
+                shortageDao.insertShortages(shortagesToInsert)
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "تم رصد واحتساب ($newShortagesCreated) قيود عجز مخزني جديدة وتحويلها لشاشة البيع بالقيمة بنجاح",
+                        isErrorFeedback = false
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "لا يوجد عجز مخزني مرصود في هذا الجرد (الكمية الفعلية تطابق أو تفوق الدفتري).",
+                        isErrorFeedback = true
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * إدخال قيد عجز/بيع بالقيمة يدوي بواسطة مدير النظام
+     */
+    fun addManualShortageRecord(
+        productName: String,
+        costCenterId: Long,
+        shortageQty: Double,
+        unitCost: Double,
+        unitSellingPrice: Double,
+        notes: String
+    ) {
+        if (productName.isBlank() || shortageQty <= 0) {
+            _uiState.update {
+                it.copy(feedbackMessage = "يرجى كتابة اسم الصنف وكمية العجز بشكل صحيح", isErrorFeedback = true)
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val cc = costCenterDao.getCostCenterById(costCenterId)
+            val ccName = cc?.centerName ?: "مركز التكلفة العام"
+
+            val totalCost = shortageQty * unitCost
+            val totalRevenue = shortageQty * unitSellingPrice
+
+            val entity = ShortageSettlementEntity(
+                productName = productName.trim(),
+                costCenterId = costCenterId,
+                costCenterName = ccName,
+                bookQuantity = shortageQty,
+                actualQuantity = 0.0,
+                shortageQuantity = shortageQty,
+                unitCost = unitCost,
+                unitSellingPrice = unitSellingPrice,
+                totalShortageCost = totalCost,
+                totalValueSalesAmount = totalRevenue,
+                status = ShortageSettlementEntity.STATUS_PENDING,
+                notes = notes.ifBlank { "قيد عجز يدوي للبيع بالقيمة" }
+            )
+
+            shortageDao.insertShortage(entity)
+            _uiState.update {
+                it.copy(
+                    showManualShortageDialog = false,
+                    feedbackMessage = "تم إضافة قيد العجز للصنف '$productName' بنجاح",
+                    isErrorFeedback = false
+                )
+            }
+        }
+    }
+
+    fun openSettlementConfirmDialog(shortage: ShortageSettlementEntity) {
+        _uiState.update {
+            it.copy(
+                selectedShortageForSettlement = shortage,
+                showSettlementConfirmDialog = true,
+                settlementAdminNotesInput = shortage.notes
+            )
+        }
+    }
+
+    fun dismissSettlementConfirmDialog() {
+        _uiState.update {
+            it.copy(
+                selectedShortageForSettlement = null,
+                showSettlementConfirmDialog = false
+            )
+        }
+    }
+
+    fun openManualShortageDialog() {
+        _uiState.update { it.copy(showManualShortageDialog = true) }
+    }
+
+    fun dismissManualShortageDialog() {
+        _uiState.update { it.copy(showManualShortageDialog = false) }
+    }
+
+    fun updateSettlementNotesInput(notes: String) {
+        _uiState.update { it.copy(settlementAdminNotesInput = notes) }
+    }
+
+    /**
+     * تأكيد اعتماد تسوية العجز تحويله إلى مبيعات بالقيمة مقفلة ومسددة (خاص بمدير النظام فقط):
+     * 1. تحديث حالة القيد إلى SETTLED (مقفلة/مسددة).
+     * 2. تسجيل فاتورة مبيعات كاش بالخزينة بقيمة إيراد البيع بالقيمة.
+     * 3. إقفال الدفاتر المخزنية والمحاسبية بنظافة.
+     */
+    fun confirmAndSettleShortage(adminUserName: String = "مدير النظام") {
+        val shortage = _uiState.value.selectedShortageForSettlement ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isSettlingShortage = true) }
+
+            val notes = _uiState.value.settlementAdminNotesInput.ifBlank {
+                "تسوية عجز مخزني كـ مبيعات بالقيمة - معتمد بواسطة $adminUserName"
+            }
+
+            // 1. تحديث حالة التسوية في جدول العجز
+            shortageDao.markAsSettled(
+                id = shortage.id,
+                settledBy = adminUserName,
+                notes = notes,
+                settledAt = System.currentTimeMillis()
+            )
+
+            // 2. إنشاء فاتورة مبيعات كاش لتدخل الخزينة/الصندوق كإيراد مبيعات بالقيمة
+            val baseCurrency = currencyDao.getBaseCurrency() ?: currencyDao.getAllCurrenciesSync().firstOrNull()
+            val currencyId = baseCurrency?.id ?: 1L
+            val invoiceNumber = "INV-VAL-${System.currentTimeMillis() % 100000}"
+
+            val invoice = InvoiceEntity(
+                invoiceNumber = invoiceNumber,
+                type = InvoiceType.SALE,
+                partyId = null,
+                currencyId = currencyId,
+                subtotal = shortage.totalValueSalesAmount,
+                discount = 0.0,
+                total = shortage.totalValueSalesAmount,
+                paidAmount = shortage.totalValueSalesAmount,
+                remainingAmount = 0.0,
+                paymentMethod = PaymentMethod.CASH,
+                status = InvoiceStatus.COMPLETED,
+                costCenterId = shortage.costCenterId,
+                notes = "إيراد مبيعات بالقيمة ناتج عن تسوية عجز الصنف (${shortage.productName}) بمركز (${shortage.costCenterName})"
+            )
+
+            val invoiceId = invoiceDao.insertInvoice(invoice)
+
+            val productUnitId = if (shortage.productId != null && shortage.productId > 0) {
+                productDao.getUnitsForProductSync(shortage.productId).firstOrNull()?.id ?: 1L
+            } else {
+                1L
+            }
+
+            // إدراج صنف الفاتورة التفصيلي
+            invoiceDao.insertInvoiceItems(
+                listOf(
+                    InvoiceItemEntity(
+                        invoiceId = invoiceId,
+                        productId = shortage.productId ?: 1L,
+                        productUnitId = productUnitId,
+                        quantity = shortage.shortageQuantity,
+                        unitConversionFactor = 1.0,
+                        unitCostPrice = shortage.unitCost,
+                        unitSellingPrice = shortage.unitSellingPrice,
+                        totalPrice = shortage.totalValueSalesAmount
+                    )
+                )
+            )
+
+            _uiState.update {
+                it.copy(
+                    isSettlingShortage = false,
+                    showSettlementConfirmDialog = false,
+                    selectedShortageForSettlement = null,
+                    feedbackMessage = "تم تأكيد تسوية عجز الصنف '${shortage.productName}' بقيمة (%.2f %s) وقيده كـ مبيعات بالقيمة مقفلة دخلت الخزينة بنجاح!".format(
+                        shortage.totalValueSalesAmount,
+                        it.currencySymbol
+                    ),
+                    isErrorFeedback = false
+                )
+            }
+        }
+    }
+
+    fun deleteShortageRecord(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            shortageDao.deleteShortageById(id)
+            _uiState.update {
+                it.copy(
+                    feedbackMessage = "تم حذف قيد العجز بنجاح",
                     isErrorFeedback = false
                 )
             }

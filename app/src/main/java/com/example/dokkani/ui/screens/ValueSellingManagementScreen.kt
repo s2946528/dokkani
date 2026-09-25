@@ -33,6 +33,8 @@ import com.example.dokkani.data.local.entities.StockGroupAuditEntity
 import com.example.dokkani.data.local.entities.StockGroupEntity
 import com.example.dokkani.data.local.entities.StockGroupWithDetails
 import com.example.dokkani.data.local.entities.CostValuationMethod
+import com.example.dokkani.data.local.entities.ShortageSettlementEntity
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -150,7 +152,7 @@ fun ValueSellingManagementScreen(
                     }
                 }
 
-                // التبويبان الرئيسيان
+                // التبويبات الرئيسية الثلاثة
                 PrimaryTabRow(
                     selectedTabIndex = uiState.activeTab,
                     containerColor = MaterialTheme.colorScheme.surface
@@ -177,6 +179,17 @@ fun ValueSellingManagementScreen(
                             }
                         }
                     )
+                    Tab(
+                        selected = uiState.activeTab == 2,
+                        onClick = { viewModel.setActiveTab(2) },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.MonetizationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("تسوية العجز والبيع بالقيمة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    )
                 }
 
                 Box(
@@ -187,8 +200,31 @@ fun ValueSellingManagementScreen(
                     when (uiState.activeTab) {
                         0 -> GroupsAndItemsView(uiState = uiState, viewModel = viewModel)
                         1 -> GroupAuditCogsView(uiState = uiState, viewModel = viewModel, currentUserRole = currentUserRole, dateFormat = dateFormat)
+                        2 -> ShortageSettlementView(uiState = uiState, viewModel = viewModel, currentUserRole = currentUserRole, dateFormat = dateFormat)
                     }
                 }
+            }
+
+            // نافذة اعتماد وتسوية العجز تحويله لمبيعات بالقيمة
+            if (uiState.showSettlementConfirmDialog && uiState.selectedShortageForSettlement != null) {
+                ShortageSettlementConfirmDialog(
+                    shortage = uiState.selectedShortageForSettlement!!,
+                    uiState = uiState,
+                    onNotesChange = viewModel::updateSettlementNotesInput,
+                    onDismiss = viewModel::dismissSettlementConfirmDialog,
+                    onConfirm = { viewModel.confirmAndSettleShortage("مدير النظام") }
+                )
+            }
+
+            // نافذة إضافة قيد عجز يدوي
+            if (uiState.showManualShortageDialog) {
+                ManualShortageAddDialog(
+                    costCenters = uiState.costCenters,
+                    onDismiss = viewModel::dismissManualShortageDialog,
+                    onSave = { prodName, ccId, qty, cost, price, notes ->
+                        viewModel.addManualShortageRecord(prodName, ccId, qty, cost, price, notes)
+                    }
+                )
             }
 
             // نافذة إضافة / تعديل مجموعة
@@ -1013,3 +1049,562 @@ private fun GroupEditDialog(
         }
     )
 }
+
+/**
+ * واجهة إدارة وتسوية العجز المخزني والبيع بالقيمة (Value-Based Sales & Shortage Settlement UI)
+ */
+@Composable
+fun ShortageSettlementView(
+    uiState: ValueSellingUiState,
+    viewModel: ValueSellingViewModel,
+    currentUserRole: UserRole,
+    dateFormat: SimpleDateFormat
+) {
+    var selectedCcId by remember { mutableStateOf<Long?>(null) }
+    var selectedStatus by remember { mutableStateOf<String?>(null) }
+
+    val filteredList = uiState.shortageSettlements.filter { shortage ->
+        val matchesCc = (selectedCcId == null || shortage.costCenterId == selectedCcId)
+        val matchesStatus = (selectedStatus == null || shortage.status == selectedStatus)
+        matchesCc && matchesStatus
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // 1. ترويسة وبانر الأمان والتوجيه المحاسبي
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1B4D3E)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFFFFD54F), modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("إدارة البيع بالقيمة وتسوية العجز (مدير النظام فقط)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFC62828)
+                        ) {
+                            Text("ADMIN ONLY", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "• العجز المخزني يُحسب حصرياً من شاشة الجرد الدوري (الدفتري - الفعلي).\n• التلف والهادر معزول تماماً ومسجل كمصروف مستقل سابقاً لمنع ازدواج الحسابات.\n• تسوية العجز تُسجل كـ 'مبيعات بالقيمة مقفلة ومسددة' تدخل الخزينة مباشرة.",
+                        color = Color(0xFFE8F5E9),
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
+
+        // 2. بطاقات المؤشرات المالية والكميات
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("العجز المعلق (غير مقفل)", fontSize = 11.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "%.1f وحدة".format(uiState.totalPendingShortageQty),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFBF360C)
+                        )
+                        Text(
+                            text = "تكلفته: %.1f %s".format(uiState.totalPendingShortageCost, uiState.currencySymbol),
+                            fontSize = 10.sp,
+                            color = Color(0xFFD84315)
+                        )
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EAF6)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("مبيعات بالقيمة مستحقة", fontSize = 11.sp, color = Color(0xFF1A237E), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "%.2f %s".format(uiState.totalPendingValueSalesRevenue, uiState.currencySymbol),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF283593)
+                        )
+                        Text(
+                            text = "بانتظار تأكيد المدير",
+                            fontSize = 10.sp,
+                            color = Color(0xFF3F51B5)
+                        )
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("مبيعات بالقيمة مسددة", fontSize = 11.sp, color = Color(0xFF1B5E20), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "%.2f %s".format(uiState.totalSettledValueSalesRevenue, uiState.currencySymbol),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2E7D32)
+                        )
+                        Text(
+                            text = "دخلت الخزينة ومقفلة",
+                            fontSize = 10.sp,
+                            color = Color(0xFF388E3C)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. شريط الإجراءات والفلاتر
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                val ccId = selectedCcId ?: 1L
+                                viewModel.calculateAndImportShortageFromAudit(ccId)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("احتساب العجز من الجرد الحالي", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.openManualShortageDialog() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("قيد عجز يدوي", fontSize = 11.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // فلتر مراكز التكلفة
+                    Text("تصفية حسب مركز التكلفة:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(
+                                selected = selectedCcId == null,
+                                onClick = {
+                                    selectedCcId = null
+                                    viewModel.setCostCenterFilter(null)
+                                },
+                                label = { Text("جميع المراكز", fontSize = 11.sp) }
+                            )
+                        }
+                        items(uiState.costCenters) { cc ->
+                            FilterChip(
+                                selected = selectedCcId == cc.centerId,
+                                onClick = {
+                                    selectedCcId = cc.centerId
+                                    viewModel.setCostCenterFilter(cc.centerId)
+                                },
+                                label = { Text(cc.centerName, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // فلتر الحالة
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("حالة التسوية:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        FilterChip(
+                            selected = selectedStatus == null,
+                            onClick = {
+                                selectedStatus = null
+                                viewModel.setStatusFilter(null)
+                            },
+                            label = { Text("الكل", fontSize = 10.sp) }
+                        )
+                        FilterChip(
+                            selected = selectedStatus == ShortageSettlementEntity.STATUS_PENDING,
+                            onClick = {
+                                selectedStatus = ShortageSettlementEntity.STATUS_PENDING
+                                viewModel.setStatusFilter(ShortageSettlementEntity.STATUS_PENDING)
+                            },
+                            label = { Text("غير مسدد (معلق)", fontSize = 10.sp) }
+                        )
+                        FilterChip(
+                            selected = selectedStatus == ShortageSettlementEntity.STATUS_SETTLED,
+                            onClick = {
+                                selectedStatus = ShortageSettlementEntity.STATUS_SETTLED
+                                viewModel.setStatusFilter(ShortageSettlementEntity.STATUS_SETTLED)
+                            },
+                            label = { Text("مُقفل ومسدد", fontSize = 10.sp) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4. قائمة قيود العجز المخزني والبيع بالقيمة
+        if (filteredList.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.CheckCircleOutline, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("لا توجد قيود عجز مخزني مسجلة في هذا الفلتر حالياً.", color = Color.Gray, fontSize = 13.sp)
+                        Text("اضغط 'احتساب العجز من الجرد الحالي' لرصد أي نقص مخزني من الجرد الدوري.", color = Color.Gray, fontSize = 11.sp)
+                    }
+                }
+            }
+        } else {
+            items(filteredList) { shortage ->
+                val isSettled = shortage.status == ShortageSettlementEntity.STATUS_SETTLED
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = if (isSettled) Color(0xFFA5D6A7) else Color(0xFFFFCC80)
+                    ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSettled) Color(0xFFF1F8E9) else Color(0xFFFFF8E1)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(shortage.productName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Business, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(shortage.costCenterName, fontSize = 11.sp, color = Color.DarkGray)
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSettled) Color(0xFF2E7D32) else Color(0xFFE65100)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSettled) Icons.Default.Lock else Icons.Default.HourglassTop,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isSettled) "مقفلة / مسددة" else "معلق (قيد الانتظار)",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+
+                        // تفاصيل الكميات والأسعار المتبقية
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("الدفتري: %.1f | الفعلي: %.1f".format(shortage.bookQuantity, shortage.actualQuantity), fontSize = 11.sp, color = Color.Gray)
+                                Text("كمية العجز: %.1f وحدة".format(shortage.shortageQuantity), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD84315))
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("سعر البيع: %.1f %s".format(shortage.unitSellingPrice, uiState.currencySymbol), fontSize = 11.sp, color = Color.Gray)
+                                Text(
+                                    text = "إيراد البيع بالقيمة: %.2f %s".format(shortage.totalValueSalesAmount, uiState.currencySymbol),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1B5E20)
+                                )
+                            }
+                        }
+
+                        if (shortage.notes.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("ملاحظات: ${shortage.notes}", fontSize = 11.sp, color = Color.DarkGray)
+                        }
+
+                        if (isSettled && shortage.settledAt != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "تمت التسوية بتاريخ: ${dateFormat.format(Date(shortage.settledAt))} بواسطة (${shortage.settledBy ?: "المدير"})",
+                                fontSize = 10.sp,
+                                color = Color(0xFF2E7D32),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // الأزرار والإجراءات
+                        if (!isSettled && currentUserRole == UserRole.ADMIN) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { viewModel.deleteShortageRecord(shortage.id) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "حذف القيد", tint = Color.Red, modifier = Modifier.size(18.dp))
+                                }
+
+                                Button(
+                                    onClick = { viewModel.openSettlementConfirmDialog(shortage) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(34.dp)
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("تأكيد استلام القيمة وإقفال الدفاتر", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * نافذة تأكيد اعتماد وتسوية العجز تحويله إلى مبيعات بالقيمة مقفلة ومسددة (خاصة بمدير النظام فقط)
+ */
+@Composable
+fun ShortageSettlementConfirmDialog(
+    shortage: ShortageSettlementEntity,
+    uiState: ValueSellingUiState,
+    onNotesChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.MonetizationOn, contentDescription = null, tint = Color(0xFF1B5E20))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("تأكيد تسوية العجز وتسجيل المبيعات بالقيمة", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("الصنف: ${shortage.productName}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("مركز التكلفة: ${shortage.costCenterName}", fontSize = 11.sp)
+                        Text("كمية العجز الناقصة: %.1f وحدة".format(shortage.shortageQuantity), fontSize = 12.sp, color = Color(0xFFD84315))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "المبلغ الإجمالي المستحق للدخول للخزينة: %.2f %s".format(shortage.totalValueSalesAmount, uiState.currencySymbol),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1B5E20)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "تنبيه محاسبي: عند الضغط على 'تأكيد التسوية والاستلام'، سيقوم النظام بـ:\n1. تسجيل فاتورة مبيعات نقدية بقيمة (%.2f %s) لحساب الخزينة.\n2. إقفال دفاتر العجز لهذا الصنف وتثبيت حالة التسوية إلى 'مقفلة ومسددة'.\n3. إبقاء التلف والهادر معزولاً ومسجلاً كمصروف مستقل.".format(
+                        shortage.totalValueSalesAmount,
+                        uiState.currencySymbol
+                    ),
+                    fontSize = 11.sp,
+                    color = Color.DarkGray,
+                    lineHeight = 15.sp
+                )
+
+                OutlinedTextField(
+                    value = uiState.settlementAdminNotesInput,
+                    onValueChange = onNotesChange,
+                    label = { Text("ملاحظات اعتماد مدير النظام") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = false,
+                    maxLines = 2
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = !uiState.isSettlingShortage,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+            ) {
+                if (uiState.isSettlingShortage) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                } else {
+                    Text("تأكيد واستلام القيمة (إقفال مسدد)")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
+}
+
+/**
+ * نافذة إضافة قيد عجز يدوي للبيع بالقيمة
+ */
+@Composable
+fun ManualShortageAddDialog(
+    costCenters: List<CostCenterEntity>,
+    onDismiss: () -> Unit,
+    onSave: (productName: String, costCenterId: Long, shortageQty: Double, unitCost: Double, unitSellingPrice: Double, notes: String) -> Unit
+) {
+    var prodName by remember { mutableStateOf("") }
+    var selectedCcId by remember { mutableStateOf(costCenters.firstOrNull()?.centerId ?: 1L) }
+    var qtyStr by remember { mutableStateOf("1.0") }
+    var costStr by remember { mutableStateOf("10.0") }
+    var priceStr by remember { mutableStateOf("15.0") }
+    var notesStr by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إضافة قيد عجز مخزني يدوي للبيع بالقيمة", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = prodName,
+                    onValueChange = { prodName = it },
+                    label = { Text("اسم الصنف (مثال: طماطم بلدي)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Text("مركز التكلفة المسند إليه:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(costCenters) { cc ->
+                        FilterChip(
+                            selected = selectedCcId == cc.centerId,
+                            onClick = { selectedCcId = cc.centerId },
+                            label = { Text(cc.centerName, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = qtyStr,
+                        onValueChange = { qtyStr = it },
+                        label = { Text("كمية العجز") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = priceStr,
+                        onValueChange = { priceStr = it },
+                        label = { Text("سعر البيع") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+
+                OutlinedTextField(
+                    value = notesStr,
+                    onValueChange = { notesStr = it },
+                    label = { Text("ملاحظات القيد") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val qty = qtyStr.toDoubleOrNull() ?: 0.0
+                    val cost = costStr.toDoubleOrNull() ?: 0.0
+                    val price = priceStr.toDoubleOrNull() ?: 0.0
+                    onSave(prodName, selectedCcId, qty, cost, price, notesStr)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+            ) {
+                Text("حفظ القيد")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
+}
+

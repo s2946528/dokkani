@@ -1,5 +1,6 @@
 package com.example.dokkani.data.local.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -30,7 +31,8 @@ import androidx.room.PrimaryKey
         Index(value = ["type"]),
         Index(value = ["partyId"]),
         Index(value = ["currencyId"]),
-        Index(value = ["date"])
+        Index(value = ["date"]),
+        Index(value = ["cost_center_id"])
     ]
 )
 data class InvoiceEntity(
@@ -57,7 +59,9 @@ data class InvoiceEntity(
     val secondaryPaidAmount: Double = 0.0, // المبلغ المسدد بالطريقة الثانوية (في حالة MULTI)
     val secondaryPaymentMethod: PaymentMethod? = null, // طريقة السداد الثانوية
     val status: InvoiceStatus = InvoiceStatus.COMPLETED,   // حالة الفاتورة
-    val notes: String = ""                // ملاحظات
+    val notes: String = "",               // ملاحظات
+    @ColumnInfo(name = "cost_center_id")
+    val costCenterId: Long = 1            // معرف مركز التكلفة (1: مركز التكلفة العام افتراضياً)
 )
 
 /**

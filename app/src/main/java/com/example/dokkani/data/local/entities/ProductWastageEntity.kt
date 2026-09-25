@@ -1,5 +1,6 @@
 package com.example.dokkani.data.local.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -23,7 +24,8 @@ import androidx.room.Relation
     ],
     indices = [
         Index(value = ["productId"]),
-        Index(value = ["timestamp"])
+        Index(value = ["timestamp"]),
+        Index(value = ["cost_center_id"])
     ]
 )
 data class ProductWastageEntity(
@@ -37,7 +39,9 @@ data class ProductWastageEntity(
     val totalCost: Double,                   // تكلفة الخسارة المباشرة (total_cost)
     val adminUser: String,                   // معرف أو اسم مدير النظام المسؤول عن الاعتماد (admin_user)
     val timestamp: Long = System.currentTimeMillis(), // تاريخ وساعة القيد (timestamp)
-    val notes: String = ""                   // تفاصيل أو ملاحظات إضافية
+    val notes: String = "",                  // تفاصيل أو ملاحظات إضافية
+    @ColumnInfo(name = "cost_center_id")
+    val costCenterId: Long = 1               // معرف مركز التكلفة (1: مركز التكلفة العام افتراضياً)
 )
 
 /**

@@ -67,11 +67,12 @@ class CostCalculationEngine(
      */
     suspend fun calculateCostAccordingToSettings(
         productId: Long,
-        targetUnitId: Long? = null
+        targetUnitId: Long? = null,
+        costCenterId: Long? = null
     ): CostCalculationResult {
         val settings = systemSettingsDao.getSettingsSync()
         val valuationMethod = settings?.costValuationMethod ?: CostValuationMethod.WAC
-        return calculateProductCost(productId, valuationMethod, targetUnitId)
+        return calculateProductCost(productId, valuationMethod, targetUnitId, costCenterId)
     }
 
     /**
@@ -80,11 +81,13 @@ class CostCalculationEngine(
      * @param productId معرّف الصنف
      * @param valuationMethod طريقة التقييم: WAC أو FIFO أو LAST_PURCHASE_PRICE
      * @param targetUnitId الوحدة المطلوبة لاحتساب التكلفة لها (إذا كانت null يتم احتساب الوحدة الأساسية)
+     * @param costCenterId مركز التكلفة المراد الفلترة عليه (اختياري)
      */
     suspend fun calculateProductCost(
         productId: Long,
         valuationMethod: CostValuationMethod,
-        targetUnitId: Long? = null
+        targetUnitId: Long? = null,
+        costCenterId: Long? = null
     ): CostCalculationResult {
         val product = productDao.getProductById(productId)
             ?: throw IllegalArgumentException("الصنف غير موجود بالرقم: $productId")
@@ -112,16 +115,16 @@ class CostCalculationEngine(
 
         return when (valuationMethod) {
             CostValuationMethod.WAC -> {
-                calculateWacCost(product, baseUnit, targetUnit, steps)
+                calculateWacCost(product, baseUnit, targetUnit, steps, costCenterId)
             }
             CostValuationMethod.FIFO -> {
-                calculateFifoCurrentUnitCost(product, baseUnit, targetUnit, steps)
+                calculateFifoCurrentUnitCost(product, baseUnit, targetUnit, steps, costCenterId)
             }
             CostValuationMethod.LAST_PURCHASE_PRICE -> {
-                calculateLastPurchaseCost(product, baseUnit, targetUnit, steps)
+                calculateLastPurchaseCost(product, baseUnit, targetUnit, steps, costCenterId)
             }
             CostValuationMethod.LIFO -> {
-                calculateFifoCurrentUnitCost(product, baseUnit, targetUnit, steps)
+                calculateFifoCurrentUnitCost(product, baseUnit, targetUnit, steps, costCenterId)
             }
         }
     }
@@ -135,10 +138,11 @@ class CostCalculationEngine(
         product: ProductEntity,
         baseUnit: ProductUnitEntity,
         targetUnit: ProductUnitEntity,
-        steps: MutableList<String>
+        steps: MutableList<String>,
+        costCenterId: Long? = null
     ): CostCalculationResult {
-        steps.add("بدء احتساب التكلفة بطريقة [المتوسط المرجح - WAC] للصنف: ${product.name}")
-        val activeLots = stockMovementDao.getActiveStockLotsForWac(product.id)
+        steps.add("بدء احتساب التكلفة بطريقة [المتوسط المرجح - WAC] للصنف: ${product.name}" + if (costCenterId != null) " لمركز التكلفة #$costCenterId" else "")
+        val activeLots = stockMovementDao.getActiveStockLotsForWac(product.id, costCenterId)
 
         var totalQty = 0.0
         var totalCostValue = 0.0
@@ -169,7 +173,7 @@ class CostCalculationEngine(
             }
         } else {
             unitCostBase = baseUnit.costPrice
-            steps.add("لم توجد حركات توريد مسجلة في المخزن، تم استخدام التكلفة المعيارية للوحدة الأساسية: $unitCostBase ر.س")
+            steps.add("لم توجد حركات توريد مسجلة في المخزن لمركز التكلفة، تم استخدام التكلفة المعيارية للوحدة الأساسية: $unitCostBase ر.س")
             isFallback = true
         }
 
@@ -189,7 +193,7 @@ class CostCalculationEngine(
             conversionFactor = targetUnit.conversionFactor,
             totalStockAvailable = totalQty,
             calculationSteps = steps,
-            formulaExplanation = "WAC = مجموع (كميات الطبقات المتاحة × تكلفة كل طبقة) ÷ مجموع الكميات المتاحة بالمخزن",
+            formulaExplanation = "WAC = مجموع (كميات الطبقات المتاحة × تكلفة كل طبقة) ÷ مجموع الكميات المتاحة بالمخزن لمركز التكلفة",
             isFallbackToStandardPrice = isFallback
         )
     }
@@ -202,10 +206,11 @@ class CostCalculationEngine(
         product: ProductEntity,
         baseUnit: ProductUnitEntity,
         targetUnit: ProductUnitEntity,
-        steps: MutableList<String>
+        steps: MutableList<String>,
+        costCenterId: Long? = null
     ): CostCalculationResult {
-        steps.add("بدء احتساب التكلفة بطريقة [الوارد أولاً صادر أولاً - FIFO] للصنف: ${product.name}")
-        val fifoLots = stockMovementDao.getAvailableFifoLots(product.id)
+        steps.add("بدء احتساب التكلفة بطريقة [الوارد أولاً صادر أولاً - FIFO] للصنف: ${product.name}" + if (costCenterId != null) " لمركز التكلفة #$costCenterId" else "")
+        val fifoLots = stockMovementDao.getAvailableFifoLots(product.id, costCenterId)
 
         var totalQty = 0.0
         val isFallback: Boolean
@@ -243,7 +248,7 @@ class CostCalculationEngine(
             conversionFactor = targetUnit.conversionFactor,
             totalStockAvailable = totalQty,
             calculationSteps = steps,
-            formulaExplanation = "FIFO = تكلفة أقدم طبقة شراء/توريد متوفرة في المخزن (الوارد أولاً يصرف أولاً)",
+            formulaExplanation = "FIFO = تكلفة أقدم طبقة شراء/توريد متوفرة في المخزن بمركز التكلفة",
             isFallbackToStandardPrice = isFallback
         )
     }
@@ -254,9 +259,10 @@ class CostCalculationEngine(
      */
     suspend fun calculateFifoCogsForSaleQuantity(
         productId: Long,
-        saleQuantityBaseUnit: Double
+        saleQuantityBaseUnit: Double,
+        costCenterId: Long? = null
     ): FifoCogsResult {
-        val availableLots = stockMovementDao.getAvailableFifoLots(productId)
+        val availableLots = stockMovementDao.getAvailableFifoLots(productId, costCenterId)
         var remainingNeeded = saleQuantityBaseUnit
         var totalCost = 0.0
         val consumedLots = mutableListOf<ConsumedLotDetail>()
@@ -300,11 +306,12 @@ class CostCalculationEngine(
         product: ProductEntity,
         baseUnit: ProductUnitEntity,
         targetUnit: ProductUnitEntity,
-        steps: MutableList<String>
+        steps: MutableList<String>,
+        costCenterId: Long? = null
     ): CostCalculationResult {
-        steps.add("بدء احتساب التكلفة بطريقة [آخر سعر شراء - Last Purchase Price] للصنف: ${product.name}")
-        val lastMovement = stockMovementDao.getLastPurchaseMovement(product.id)
-        val totalStock = stockMovementDao.getTotalStockQuantity(product.id)
+        steps.add("بدء احتساب التكلفة بطريقة [آخر سعر شراء - Last Purchase Price] للصنف: ${product.name}" + if (costCenterId != null) " لمركز التكلفة #$costCenterId" else "")
+        val lastMovement = stockMovementDao.getLastPurchaseMovement(product.id, costCenterId)
+        val totalStock = stockMovementDao.getTotalStockQuantity(product.id, costCenterId)
 
         val isFallback: Boolean
         val unitCostBase: Double
@@ -319,7 +326,7 @@ class CostCalculationEngine(
             isFallback = false
         } else {
             unitCostBase = baseUnit.costPrice
-            steps.add("لم يتم العثور على حركات شراء سابقة، تم استخدام سعر الشراء المعياري المسجل: $unitCostBase ر.س")
+            steps.add("لم يتم العثور على حركات شراء سابقة لمركز التكلفة، تم استخدام سعر الشراء المعياري المسجل: $unitCostBase ر.س")
             isFallback = true
         }
 
@@ -339,7 +346,7 @@ class CostCalculationEngine(
             conversionFactor = targetUnit.conversionFactor,
             totalStockAvailable = totalStock,
             calculationSteps = steps,
-            formulaExplanation = "Last Purchase Price = سعر الشراء للوحدة الأساسية المسجل في آخر فاتورة مشتريات واردة",
+            formulaExplanation = "Last Purchase Price = سعر الشراء للوحدة الأساسية المسجل في آخر فاتورة مشتريات بمركز التكلفة",
             isFallbackToStandardPrice = isFallback
         )
     }

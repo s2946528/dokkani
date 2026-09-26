@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -599,6 +600,45 @@ private fun SupplierDataCard(
                 leadingIcon = { Icon(Icons.Default.Receipt, contentDescription = null) },
                 singleLine = true
             )
+
+            // اختيار مركز التكلفة الفعّال للفاتورة
+            var costCenterDropdownExpanded by remember { mutableStateOf(false) }
+            val activeCostCenter = uiState.costCenters.firstOrNull { it.centerId == uiState.selectedCostCenterId }
+
+            ExposedDropdownMenuBox(
+                expanded = costCenterDropdownExpanded,
+                onExpandedChange = { costCenterDropdownExpanded = !costCenterDropdownExpanded },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = activeCostCenter?.centerName ?: "مركز التكلفة العام",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("مركز التكلفة المخصص للفاتورة *") },
+                    leadingIcon = { Icon(Icons.Default.Store, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = costCenterDropdownExpanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                        .testTag("purchase_cost_center_dropdown"),
+                    singleLine = true
+                )
+
+                ExposedDropdownMenu(
+                    expanded = costCenterDropdownExpanded,
+                    onDismissRequest = { costCenterDropdownExpanded = false }
+                ) {
+                    uiState.costCenters.forEach { cc ->
+                        DropdownMenuItem(
+                            text = { Text(cc.centerName, fontWeight = FontWeight.SemiBold) },
+                            onClick = {
+                                viewModel.selectCostCenter(cc.centerId)
+                                costCenterDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
             // ملاحظات الفاتورة
             OutlinedTextField(

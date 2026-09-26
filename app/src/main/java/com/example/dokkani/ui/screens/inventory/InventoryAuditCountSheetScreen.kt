@@ -7,6 +7,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.dokkani.data.local.entities.UserRole
+import com.example.dokkani.ui.components.NumericOutlinedTextField
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -146,6 +148,7 @@ fun InventoryAuditCountSheetScreen(
                 // أولاً: بطاقات المؤشرات الحية والإحصائيات
                 // ==========================================
                 item {
+                    val isDark = isSystemInDarkTheme()
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -153,39 +156,40 @@ fun InventoryAuditCountSheetScreen(
                         Card(
                             modifier = Modifier.weight(1f),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
-                                Text("الأصناف المجرودة", fontSize = 11.sp, color = Color.Gray)
+                                Text("الأصناف المجرودة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text("$totalItemsCount صنف", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text("مخزن مسجل", fontSize = 10.sp, color = Color(0xFF2E7D32))
+                                Text("$totalItemsCount صنف", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                                Text("مخزن مسجل", fontSize = 10.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF2E7D32))
                             }
                         }
 
                         Card(
                             modifier = Modifier.weight(1f),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                            border = BorderStroke(1.dp, Color(0xFFFFB74D))
+                            colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF2A2010) else Color(0xFFFFF3E0)),
+                            border = BorderStroke(1.dp, if (isDark) Color(0xFF6B4F1B) else Color(0xFFFFB74D))
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
-                                Text("إجمالي كمية العجز", fontSize = 11.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
+                                Text("إجمالي كمية العجز", fontSize = 11.sp, color = if (isDark) Color(0xFFFB923C) else Color(0xFFE65100), fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text("%.1f وحدة".format(totalShortageQty), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFFD84315))
-                                Text("فارق دفتري-فعلي", fontSize = 10.sp, color = Color(0xFFE65100))
+                                Text("%.1f وحدة".format(totalShortageQty), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = if (isDark) Color(0xFFFF8A65) else Color(0xFFD84315))
+                                Text("فارق دفتري-فعلي", fontSize = 10.sp, color = if (isDark) Color(0xFFFFAB91) else Color(0xFFE65100))
                             }
                         }
 
                         Card(
                             modifier = Modifier.weight(1f),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
-                            border = BorderStroke(1.dp, Color(0xFF81C784))
+                            colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF122C1F) else Color(0xFFE8F5E9)),
+                            border = BorderStroke(1.dp, if (isDark) Color(0xFF23583C) else Color(0xFF81C784))
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
-                                Text("إيراد البيع بالقيمة", fontSize = 11.sp, color = Color(0xFF1B5E20), fontWeight = FontWeight.Bold)
+                                Text("إيراد البيع بالقيمة", fontSize = 11.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20), fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text("%.2f %s".format(totalShortageValue, uiState.currencySymbol), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1B5E20))
-                                Text("يُرحل للبيع بالقيمة", fontSize = 10.sp, color = Color(0xFF2E7D32))
+                                Text("%.2f %s".format(totalShortageValue, uiState.currencySymbol), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = if (isDark) Color(0xFF86EFAC) else Color(0xFF1B5E20))
+                                Text("يُرحل للبيع بالقيمة", fontSize = 10.sp, color = if (isDark) Color(0xFFA7F3D0) else Color(0xFF2E7D32))
                             }
                         }
                     }
@@ -469,11 +473,10 @@ fun InventoryAuditCountSheetScreen(
                                     )
 
                                     // إدخال بضاعة آخر المدة الفعلي
-                                    OutlinedTextField(
+                                    NumericOutlinedTextField(
                                         value = item.actualEndingQtyInput,
                                         onValueChange = { viewModel.updateActualEndingQty(item.productId, it) },
                                         label = { Text("آخر المدة الفعلي *") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         modifier = Modifier.weight(1.2f),
                                         singleLine = true,
                                         shape = RoundedCornerShape(8.dp),

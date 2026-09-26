@@ -29,9 +29,19 @@ object FinancialReportsEngine {
         invoiceItems: List<InvoiceItemEntity>,
         expenses: List<ExpenseEntity>,
         productUnitCosts: Map<Long, Double>,
-        valuationMethod: CostValuationMethod
+        valuationMethod: CostValuationMethod,
+        costCenterId: Long? = null
     ): ProfitAndLossReport {
-        val saleInvoices = invoices.filter { it.type == InvoiceType.SALE }
+        // تصفية الفواتير والمصروفات حسب مركز التكلفة المختار (إن وجد)
+        val filteredInvoices = if (costCenterId != null) {
+            invoices.filter { it.costCenterId == costCenterId }
+        } else invoices
+
+        val filteredExpenses = if (costCenterId != null) {
+            expenses.filter { it.costCenterId == costCenterId }
+        } else expenses
+
+        val saleInvoices = filteredInvoices.filter { it.type == InvoiceType.SALE }
 
         val grossSales = saleInvoices.sumOf { it.subtotal }
         val totalDiscounts = saleInvoices.sumOf { it.discount }
@@ -57,7 +67,7 @@ object FinancialReportsEngine {
         val grossMarginPercent = if (netSalesRevenue > 0.001) (grossProfit / netSalesRevenue) * 100 else 0.0
 
         // المصروفات التشغيلية الحقيقية (استبعاد شراء الأصول الثابتة والمسحوبات الشخصية)
-        val operationalExpenses = expenses.filter { exp ->
+        val operationalExpenses = filteredExpenses.filter { exp ->
             val cat = exp.category.trim()
             !cat.contains("أصل") && !cat.contains("أصول") && !cat.contains("مسحوبات") && !cat.contains("رأس المال")
         }
@@ -253,13 +263,14 @@ object FinancialReportsEngine {
     }
 
     /**
-     * توليد تقرير ميزان المراجعة المحاسبي (Trial Balance Report)
+     * توليد تقرير ميزان المراجعة المحاسبي (Trial Balance Report) مع فحص التدقيق الآلي
      */
     fun generateTrialBalanceReport(
         financialAccounts: List<FinancialAccountEntity>,
         parties: List<PartyEntity>,
         pnlReport: ProfitAndLossReport?,
-        equityResult: EquityCalculationResult?
+        equityResult: EquityCalculationResult?,
+        costCenterId: Long? = null
     ): TrialBalanceReport {
         val items = mutableListOf<TrialBalanceItem>()
 
@@ -328,13 +339,147 @@ object FinancialReportsEngine {
 
         val totalDebit = items.sumOf { it.debit }
         val totalCredit = items.sumOf { it.credit }
-        val isBalanced = abs(totalDebit - totalCredit) < 1.0
+        val diff = abs(totalDebit - totalCredit)
+        val isBalanced = diff < 1.0
+
+        val unbalanced = if (!isBalanced) {
+            items.filter { abs(it.debit - it.credit) > 0.01 }
+        } else emptyList()
+
+        val auditMessage = if (isBalanced) {
+            "نظام التدقيق المحاسبي الآلي: ميزان المراجعة متوازن ومطابق تماماً للمواصفات المعيارية (إجمالي المدين = إجمالي الدائن) ✓"
+        } else {
+            "تنبيه عدم توازن في ميزان المراجعة! الفرق الحسابي قدره %.2f ر.ي بين إجمالي المدين (%.2f) وإجمالي الدائن (%.2f)".format(diff, totalDebit, totalCredit)
+        }
 
         return TrialBalanceReport(
             items = items,
             totalDebit = totalDebit,
             totalCredit = totalCredit,
-            isBalanced = isBalanced
+            isBalanced = isBalanced,
+            differenceAmount = diff,
+            unbalancedAccounts = unbalanced,
+            auditCheckMessage = auditMessage
+        )
+    }
+
+    /**
+     * توليد تقرير حركة المخزون الشامل (Stock Movement Report)
+     */
+    fun generateStockMovementReport(
+        productsWithUnits: List<ProductWithUnits>,
+        stockMovements: List<StockMovementEntity>,
+        valuationMethod: CostValuationMethod,
+        costCenterId: Long? = null,
+        costCenterName: String = "جميع مراكز التكلفة"
+    ): StockMovementReport {
+        val filteredMovements = if (costCenterId != null) {
+            stockMovements.filter { it.costCenterId == costCenterId }
+        } else {
+            stockMovements
+        }
+
+        val movementsByProduct = filteredMovements.groupBy { it.productId }
+        val itemsList = mutableListOf<ProductStockMovementItem>()
+
+        for (pwu in productsWithUnits) {
+            val prod = pwu.product
+            val baseUnit = pwu.units.firstOrNull { it.isBaseUnit } ?: pwu.units.firstOrNull()
+            val baseUnitName = baseUnit?.unitName ?: "حبة"
+            val standardUnitCost = baseUnit?.costPrice ?: 0.0
+
+            val pMovements = movementsByProduct[prod.id] ?: emptyList()
+
+            // Purchases & Sorted Produce
+            val purchasesQty = pMovements
+                .filter { it.movementType == com.example.dokkani.data.local.entities.MovementType.PURCHASE_IN || it.movementType == com.example.dokkani.data.local.entities.MovementType.PRODUCE_SORTING }
+                .sumOf { it.quantityBaseUnit }
+
+            // Purchase Returns
+            val purchaseReturnsQty = pMovements
+                .filter { it.movementType == com.example.dokkani.data.local.entities.MovementType.RETURN_OUT }
+                .sumOf { abs(it.quantityBaseUnit) }
+
+            // Sales Out
+            val salesQty = pMovements
+                .filter { it.movementType == com.example.dokkani.data.local.entities.MovementType.SALE_OUT }
+                .sumOf { abs(it.quantityBaseUnit) }
+
+            // Sale Returns In
+            val saleReturnsQty = pMovements
+                .filter { it.movementType == com.example.dokkani.data.local.entities.MovementType.RETURN_IN }
+                .sumOf { it.quantityBaseUnit }
+
+            // Wastage & Shortage
+            val wastageAndShortageQty = pMovements
+                .filter { it.movementType == com.example.dokkani.data.local.entities.MovementType.WASTAGE_OUT || (it.movementType == com.example.dokkani.data.local.entities.MovementType.INVENTORY_ADJUSTMENT && it.quantityBaseUnit < 0) }
+                .sumOf { abs(it.quantityBaseUnit) }
+
+            // Closing stock net qty
+            val closingStockQty = pMovements.sumOf { it.quantityBaseUnit }
+
+            // Opening stock qty
+            val netActivity = purchasesQty - purchaseReturnsQty - salesQty + saleReturnsQty - wastageAndShortageQty
+            val openingStockQty = (closingStockQty - netActivity).coerceAtLeast(0.0)
+
+            // Effective cost per unit according to valuation method
+            val effectiveUnitCost = when (valuationMethod) {
+                CostValuationMethod.WAC -> {
+                    val purchaseLots = pMovements.filter { it.movementType == com.example.dokkani.data.local.entities.MovementType.PURCHASE_IN || it.movementType == com.example.dokkani.data.local.entities.MovementType.PRODUCE_SORTING }
+                    val totalPurchaseCost = purchaseLots.sumOf { it.quantityBaseUnit * it.unitCostPriceBase }
+                    val totalPurchaseQty = purchaseLots.sumOf { it.quantityBaseUnit }
+                    if (totalPurchaseQty > 0.0001) totalPurchaseCost / totalPurchaseQty else standardUnitCost
+                }
+                CostValuationMethod.FIFO -> {
+                    val activeFifoLot = pMovements.firstOrNull { it.remainingQuantityForFifo > 0.0001 }
+                    activeFifoLot?.unitCostPriceBase ?: standardUnitCost
+                }
+                CostValuationMethod.LAST_PURCHASE_PRICE -> {
+                    val lastPurchase = pMovements.lastOrNull { it.movementType == com.example.dokkani.data.local.entities.MovementType.PURCHASE_IN || it.movementType == com.example.dokkani.data.local.entities.MovementType.PRODUCE_SORTING }
+                    lastPurchase?.unitCostPriceBase ?: standardUnitCost
+                }
+                CostValuationMethod.LIFO -> {
+                    val lastPurchase = pMovements.lastOrNull { it.movementType == com.example.dokkani.data.local.entities.MovementType.PURCHASE_IN || it.movementType == com.example.dokkani.data.local.entities.MovementType.PRODUCE_SORTING }
+                    lastPurchase?.unitCostPriceBase ?: standardUnitCost
+                }
+            }
+
+            val finalUnitCost = if (effectiveUnitCost > 0.0) effectiveUnitCost else standardUnitCost
+            val closingStockValue = closingStockQty * finalUnitCost
+            val cogs = (salesQty - saleReturnsQty).coerceAtLeast(0.0) * finalUnitCost
+
+            itemsList.add(
+                ProductStockMovementItem(
+                    productId = prod.id,
+                    productCode = prod.code,
+                    productName = prod.name,
+                    category = prod.category,
+                    baseUnitName = baseUnitName,
+                    openingStockQty = openingStockQty,
+                    purchasesQty = purchasesQty,
+                    purchaseReturnsQty = purchaseReturnsQty,
+                    salesQty = salesQty,
+                    saleReturnsQty = saleReturnsQty,
+                    wastageAndShortageQty = wastageAndShortageQty,
+                    closingStockQty = closingStockQty,
+                    unitCostPrice = finalUnitCost,
+                    closingStockValue = closingStockValue,
+                    calculatedCogs = cogs
+                )
+            )
+        }
+
+        return StockMovementReport(
+            valuationMethodUsed = valuationMethod,
+            items = itemsList,
+            totalOpeningStockQty = itemsList.sumOf { it.openingStockQty },
+            totalPurchasesQty = itemsList.sumOf { it.purchasesQty },
+            totalSalesQty = itemsList.sumOf { it.salesQty },
+            totalWastageAndShortageQty = itemsList.sumOf { it.wastageAndShortageQty },
+            totalClosingStockQty = itemsList.sumOf { it.closingStockQty },
+            totalClosingStockValue = itemsList.sumOf { it.closingStockValue },
+            totalCogsValue = itemsList.sumOf { it.calculatedCogs },
+            selectedCostCenterName = costCenterName
         )
     }
 }

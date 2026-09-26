@@ -80,3 +80,11 @@ enum class BatchStatus(val labelArabic: String) {
     SORTED("تم الفرز واحتساب الصافي"),
     STOCKED("تم توريدها للمخزن والرفوف")
 }
+
+/**
+ * أنواع سندات القبض والصرف
+ */
+enum class VoucherType(val labelArabic: String) {
+    RECEIPT("سند قبض (قبض نقدية/تحويل من عميل)"),
+    PAYMENT("سند صرف (صرف نقدية/سداد لمورد)")
+}

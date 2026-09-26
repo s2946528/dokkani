@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.entities.CashShiftEntity
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.ExpenseEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
@@ -78,6 +79,8 @@ data class PosUiState(
     val discount: Double = 0.0,
     val paidAmountInput: String = "",
     val searchQuery: String = "",
+    val costCenters: List<CostCenterEntity> = emptyList(),
+    val selectedCostCenterId: Long = 1L,
     val categories: List<String> = listOf("الكل"),
     val selectedCategory: String = "الكل",
     val sortOption: com.example.dokkani.ui.models.ProductSortOption = com.example.dokkani.ui.models.ProductSortOption.POPULAR,
@@ -258,6 +261,23 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        // 0.2 مراقبة مراكز التكلفة الفعالة وتحديث الاختيار تلقائياً
+        viewModelScope.launch(Dispatchers.IO) {
+            db.costCenterDao().getAllActiveCostCenters().collectLatest { centers ->
+                _uiState.update { state ->
+                    val defaultId = if (centers.any { it.centerId == state.selectedCostCenterId }) {
+                        state.selectedCostCenterId
+                    } else {
+                        centers.firstOrNull { it.isGeneral }?.centerId ?: centers.firstOrNull()?.centerId ?: 1L
+                    }
+                    state.copy(
+                        costCenters = centers,
+                        selectedCostCenterId = defaultId
+                    )
+                }
+            }
+        }
+
         // 1. مراقبة المنتجات والوحدات واستخراج التصنيفات المحفوظة ديناميكياً
         viewModelScope.launch(Dispatchers.IO) {
             productDao.getProductsWithUnits().collectLatest { products ->
@@ -388,53 +408,82 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(valueSaleAmountInput = amountStr) }
     }
 
+    private suspend fun getOrCreateGroupProduct(group: StockGroupEntity): ProductEntity {
+        val groupCode = group.code.ifBlank { "GRP-%04d".format(group.id) }
+
+        // 1. البحث عن الصنف الممثل للمجموعة في جدول المنتجات باستخدام الكود أو الاسم
+        val existingByCode = productDao.findProductByCode(groupCode)
+        if (existingByCode != null) {
+            return existingByCode.product
+        }
+
+        val allProducts = productDao.getAllProductsSync()
+        val existingByName = allProducts.firstOrNull { it.name == group.name && !it.isWeighted }
+        if (existingByName != null) {
+            return existingByName
+        }
+
+        // 2. إنشاء بند أساسي ومستقل باسم المجموعة الرئيسية (مثل: "خضار مشكل") في جدول المنتجات
+        val newProduct = ProductEntity(
+            code = groupCode,
+            name = group.name,
+            englishName = group.name,
+            category = "مجموعات مخزنية",
+            isWeighted = false,
+            isActive = true,
+            costCenterId = group.costCenterId
+        )
+        val newProdId = productDao.insertProduct(newProduct)
+
+        // 3. إنشاء وحدة أساسية للصنف الممثل للمجموعة
+        val newUnit = ProductUnitEntity(
+            productId = newProdId,
+            unitName = "مجموعة",
+            conversionFactor = 1.0,
+            barcode = groupCode,
+            costPrice = 0.0,
+            sellingPrice = 0.0,
+            isBaseUnit = true
+        )
+        productDao.insertUnit(newUnit)
+
+        // 4. ربط الصنف الممثل للمجموعة في عناصر المجموعة لضمان احتساب واسترجاع الفواتير بدقة أثناء الجرد
+        val existingGroupItems = stockGroupDao.getItemsForGroup(group.id)
+        if (existingGroupItems.none { it.productId == newProdId }) {
+            val groupMainItem = com.example.dokkani.data.local.entities.StockGroupItemEntity(
+                groupId = group.id,
+                productId = newProdId,
+                productName = group.name,
+                unitSellingPrice = 0.0,
+                notes = "صنف رئيسي ممثل للمجموعة"
+            )
+            stockGroupDao.insertGroupItems(listOf(groupMainItem))
+        }
+
+        return newProduct.copy(id = newProdId)
+    }
+
     fun addValueSaleToCart(group: StockGroupEntity, amount: Double) {
         if (amount <= 0) return
         viewModelScope.launch(Dispatchers.IO) {
-            val groupItems = stockGroupDao.getItemsForGroup(group.id)
-            val fallbackProduct = productDao.getAllProductsSync().firstOrNull()
-
-            val primaryProductId = groupItems.firstOrNull { it.productId != null && it.productId > 0 }?.productId
-                ?: fallbackProduct?.id ?: 1L
-
-            val primaryProduct = productDao.getProductById(primaryProductId) ?: fallbackProduct
-            val resolvedProductId = primaryProduct?.id ?: 1L
-
-            val productUnits = productDao.getUnitsForProductSync(resolvedProductId)
-            val resolvedUnit = productUnits.firstOrNull()
+            // جلب أو إنشاء الصنف الممثل للمجموعة الرئيسية باسمها ومعرفها المستقل مباشرة
+            val groupProduct = getOrCreateGroupProduct(group)
+            val productUnits = productDao.getUnitsForProductSync(groupProduct.id)
+            val resolvedUnit = productUnits.firstOrNull { it.isBaseUnit } ?: productUnits.firstOrNull()
             val resolvedUnitId = resolvedUnit?.id ?: 1L
 
             val state = _uiState.value
             val allowNegativeStock = state.systemSettings?.enableNegativeStock ?: false
 
-            // الرقابة المخزنية والتنبيهات الفورية لمكونات المجموعة والأصناف
-            if (!allowNegativeStock && (state.activeOperation == PosOperation.SALE || state.activeOperation == PosOperation.PURCHASE_RETURN)) {
-                for (gItem in groupItems) {
-                    if (gItem.productId != null && gItem.productId > 0) {
-                        val compProduct = productDao.getProductById(gItem.productId)
-                        val availableStock = stockMovementDao.getTotalStockQuantity(gItem.productId)
-                        val requiredQty = gItem.defaultRatio * 1.0 // كمية المكون التقديرية
-
-                        if (availableStock < requiredQty) {
-                            _uiState.update {
-                                it.copy(
-                                    userFeedbackMessage = "عفواً! لا يمكن البيع بالقيمة للمجموعة '${group.name}': الكمية المتاحة في المخزن للمكون الأصلي (${compProduct?.name ?: gItem.productName}) هي (${"%.1f".format(availableStock)}) فقط. تم منع البيع بالسالب!",
-                                    isError = true
-                                )
-                            }
-                            return@launch
-                        }
-                    }
-                }
-            }
+            // مجموعات البيع بالقيمة تم استثناؤها من الرقابة المباشرة على المخزن لأنها تعتمد على الجرد الدوري
 
             _uiState.update { s ->
                 val updatedItems = s.cartItems.toMutableList()
                 updatedItems.add(
                     PosCartItem(
-                        productId = resolvedProductId,
-                        productName = "${group.name} (بالقيمة)",
-                        productCode = group.code,
+                        productId = groupProduct.id,
+                        productName = group.name,
+                        productCode = groupProduct.code,
                         unitId = resolvedUnitId,
                         unitName = resolvedUnit?.unitName ?: "مجموعة",
                         conversionFactor = resolvedUnit?.conversionFactor ?: 1.0,
@@ -564,7 +613,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             vouchers.forEach { v ->
-                val party = partyDao.getPartyById(v.partyId)
+                val party = v.partyId?.let { partyDao.getPartyById(it) }
                 val isPay = v.isPayment || (party?.type == PartyType.SUPPLIER && !v.voucherNumber.startsWith("RCV"))
                 val defaultName = if (isPay) "مورد عام" else "عميل عام"
                 val op = if (isPay) PosOperation.EXPENSE else PosOperation.RECEIPT
@@ -658,7 +707,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             } else if (record.id.startsWith("RCV") || record.id.startsWith("PAY") || record.operation == PosOperation.RECEIPT) {
                 val voucher = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
                 if (voucher != null) {
-                    val party = partyDao.getPartyById(voucher.partyId)
+                    val party = voucher.partyId?.let { partyDao.getPartyById(it) }
                     _uiState.update {
                         it.copy(
                             selectedVoucherDetails = voucher,
@@ -745,7 +794,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             } else if (record.id.startsWith("RCV") || record.id.startsWith("PAY") || record.operation == PosOperation.RECEIPT) {
                 val voucher = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
                 if (voucher != null) {
-                    val party = partyDao.getPartyById(voucher.partyId)
+                    val party = voucher.partyId?.let { partyDao.getPartyById(it) }
                     val op = if (voucher.isPayment) PosOperation.EXPENSE else PosOperation.RECEIPT
 
                     _uiState.update { state ->
@@ -821,6 +870,10 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { it.copy(selectedParty = freshParty) }
             }
         }
+    }
+
+    fun onCostCenterSelected(costCenterId: Long) {
+        _uiState.update { it.copy(selectedCostCenterId = costCenterId) }
     }
 
     fun selectVoucherParty(party: PartyEntity?) {
@@ -1043,6 +1096,18 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(paymentMethod = method) }
     }
 
+    fun setPaidAmountInput(input: String) {
+        _uiState.update { it.copy(paidAmountInput = input) }
+    }
+
+    fun openCheckoutDialog() {
+        _uiState.update { it.copy(showCheckoutDialog = true) }
+    }
+
+    fun dismissCheckoutDialog() {
+        _uiState.update { it.copy(showCheckoutDialog = false) }
+    }
+
     fun setSelectedPaymentAccount(accountId: Long?) {
         _uiState.update { it.copy(selectedPaymentAccountId = accountId) }
     }
@@ -1160,8 +1225,22 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         val allowNegativeStock = state.systemSettings?.enableNegativeStock ?: false
         if (!allowNegativeStock && (state.activeOperation == PosOperation.SALE || state.activeOperation == PosOperation.PURCHASE_RETURN)) {
             viewModelScope.launch(Dispatchers.IO) {
+                val allGroups = stockGroupDao.getAllGroupsWithDetailsSync()
+
                 for (item in state.cartItems) {
                     if (item.productId > 0) {
+                        // استثناء مجموعات البيع بالقيمة من فحص المخزن المباشر (تعتمد على الجرد الدوري ولا يتم خصمها كرصيد مباشر مسبق)
+                        val product = productDao.getProductById(item.productId)
+                        val isValueSellingGroup = product?.category == "مجموعات مخزنية" ||
+                                product?.code?.startsWith("GRP-") == true ||
+                                allGroups.any { g ->
+                                    g.group.code == product?.code || g.items.any { it.productId == item.productId }
+                                }
+
+                        if (isValueSellingGroup) {
+                            continue
+                        }
+
                         val requiredBase = item.quantity * item.conversionFactor
                         val availableBase = stockMovementDao.getTotalStockQuantity(item.productId)
                         if (availableBase < requiredBase) {
@@ -1260,7 +1339,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             receiptImagePath = state.paymentReceiptImagePath,
                             paymentProviderName = actualAccountName,
                             status = InvoiceStatus.COMPLETED,
-                            notes = "عملية نقطة البيع (${state.activeOperation.titleArabic})$returnNotePart"
+                            notes = "عملية نقطة البيع (${state.activeOperation.titleArabic})$returnNotePart",
+                            costCenterId = state.selectedCostCenterId
                         )
                     )
 
@@ -1298,12 +1378,11 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         )
 
-                        // حركة المخزون المحاسبية
-                        // سياسة حركة المخزون: الأصناف الفرعية المكونة للمجموعات لا تُخصم لحظياً أثناء البيع اليومي ويبقى رصيدها ثابتاً لحين الجرد الدوري
-                        val isSubItemInGroup = validProdId in subItemProductIds
-                        val isDailySale = state.activeOperation == PosOperation.SALE
+                        // خصم وتحديث المخزون الفوري عند إتمام البيع العادي لجميع الأصناف المباعة داخل معامل قاعدة بيانات آمن (Database Transaction)
+                        val product = productDao.getProductById(validProdId)
+                        val isValueSellingGroupMainProduct = product?.category == "مجموعات مخزنية" || product?.code?.startsWith("GRP-") == true
 
-                        if (!isDailySale || !isSubItemInGroup) {
+                        if (!isValueSellingGroupMainProduct) {
                             val movementType = when (state.activeOperation) {
                                 PosOperation.SALE -> MovementType.SALE_OUT
                                 PosOperation.PURCHASE -> MovementType.PURCHASE_IN
@@ -1315,7 +1394,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             val qtyBase = when (state.activeOperation) {
                                 PosOperation.SALE, PosOperation.PURCHASE_RETURN -> -(item.quantity * item.conversionFactor)
                                 PosOperation.PURCHASE, PosOperation.SALE_RETURN -> (item.quantity * item.conversionFactor)
-                                else -> 0.0
+                                else -> -(item.quantity * item.conversionFactor)
                             }
 
                             movementsToInsert.add(
@@ -1327,9 +1406,24 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     remainingQuantityForFifo = if (movementType == MovementType.PURCHASE_IN) item.quantity * item.conversionFactor else 0.0,
                                     unitCostPriceBase = item.costPrice / item.conversionFactor,
                                     timestamp = timestamp,
-                                    referenceNumber = invoiceNumber
+                                    referenceNumber = invoiceNumber,
+                                    costCenterId = state.selectedCostCenterId
                                 )
                             )
+
+                            // خصم واستهلاك أقدم طبقات الشراء لطريقة FIFO عند الصرف/البيع
+                            if (movementType == MovementType.SALE_OUT) {
+                                var remainingToDeduct = item.quantity * item.conversionFactor
+                                val availableLots = stockMovementDao.getAvailableFifoLots(validProdId)
+                                for (lot in availableLots) {
+                                    if (remainingToDeduct <= 0.0001) break
+                                    val lotQty = lot.remainingQuantityForFifo
+                                    val deductFromLot = minOf(remainingToDeduct, lotQty)
+                                    val updatedLot = lot.copy(remainingQuantityForFifo = lotQty - deductFromLot)
+                                    stockMovementDao.updateMovement(updatedLot)
+                                    remainingToDeduct -= deductFromLot
+                                }
+                            }
                         }
 
                         // تحديث المتوسط المرجح للتكلفة (WAC) في حالة الشراء
@@ -1596,7 +1690,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                 receiptImagePath = state.paymentReceiptImagePath,
                                 date = timestamp,
                                 receivedBy = "كاشير 1",
-                                notes = state.voucherNotesInput.ifEmpty { "سداد دين من العميل ${party.name}" }
+                                notes = state.voucherNotesInput.ifEmpty { "سداد دين من العميل ${party.name}" },
+                                costCenterId = state.selectedCostCenterId
                             )
                         )
 
@@ -1656,7 +1751,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     receiptImagePath = state.paymentReceiptImagePath,
                                     date = timestamp,
                                     receivedBy = "كاشير 1",
-                                    notes = state.voucherNotesInput.ifEmpty { "دفعة مسددة للمورد ${supplier.name}" }
+                                    notes = state.voucherNotesInput.ifEmpty { "دفعة مسددة للمورد ${supplier.name}" },
+                                    costCenterId = state.selectedCostCenterId
                                 )
                             )
 
@@ -1676,7 +1772,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     date = timestamp,
                                     paidTo = state.voucherPaidToInput.ifEmpty { "جهة غير محددة" },
                                     notes = state.voucherNotesInput,
-                                    recordedBy = "كاشير 1"
+                                    recordedBy = "كاشير 1",
+                                    costCenterId = state.selectedCostCenterId
                                 )
                             )
                         }
@@ -2148,7 +2245,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         PosOperation.RECEIPT -> {
                             val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
                             if (v != null) {
-                                val party = partyDao.getPartyById(v.partyId)
+                                val party = v.partyId?.let { partyDao.getPartyById(it) }
                                 if (party != null) {
                                     val isSupplier = party.type == PartyType.SUPPLIER || v.isPayment
                                     val newBal = if (isSupplier) party.currentBalance - v.amount else party.currentBalance + v.amount
@@ -2189,7 +2286,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             } else {
                                 val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
                                 if (v != null) {
-                                    val party = partyDao.getPartyById(v.partyId)
+                                    val party = v.partyId?.let { partyDao.getPartyById(it) }
                                     if (party != null) {
                                         partyDao.updateParty(party.copy(currentBalance = party.currentBalance - v.amount))
                                     }
@@ -2416,7 +2513,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             }
 
                             // ضبط رصيد العميل
-                            val party = partyDao.getPartyById(v.partyId)
+                            val party = v.partyId?.let { partyDao.getPartyById(it) }
                             if (party != null && finalAmount != oldAmount) {
                                 val diff = finalAmount - oldAmount
                                 partyDao.updateParty(party.copy(currentBalance = party.currentBalance - diff))
@@ -2462,7 +2559,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     shiftDao.updateExpenses(openShift.id, openShift.totalCashExpenses + diff)
                                 }
 
-                                val party = partyDao.getPartyById(v.partyId)
+                                val party = v.partyId?.let { partyDao.getPartyById(it) }
                                 if (party != null && finalAmount != oldAmount) {
                                     val diff = finalAmount - oldAmount
                                     partyDao.updateParty(party.copy(currentBalance = party.currentBalance + diff))

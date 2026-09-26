@@ -13,14 +13,6 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "shortage_settlements",
-    foreignKeys = [
-        ForeignKey(
-            entity = CostCenterEntity::class,
-            parentColumns = ["center_id"],
-            childColumns = ["cost_center_id"],
-            onDelete = ForeignKey.SET_DEFAULT
-        )
-    ],
     indices = [
         Index(value = ["cost_center_id"]),
         Index(value = ["auditId"]),

@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Payments
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
@@ -76,6 +78,9 @@ fun PosCheckoutDialog(
     openDrawerOnCash: Boolean,
     isProcessing: Boolean,
     currencySymbol: String = "ر.ي",
+    costCenters: List<CostCenterEntity> = emptyList(),
+    selectedCostCenterId: Long = 1L,
+    onCostCenterSelect: (Long) -> Unit = {},
     onPaymentMethodSelect: (PaymentMethod) -> Unit,
     onCustomerSelect: (Long?) -> Unit,
     onPaidAmountChange: (String) -> Unit,
@@ -90,6 +95,7 @@ fun PosCheckoutDialog(
 
     val selectedCustomer = customers.firstOrNull { it.id == selectedCustomerPartyId }
     var customerDropdownExpanded by remember { mutableStateOf(false) }
+    var costCenterDropdownExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -135,6 +141,52 @@ fun PosCheckoutDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // 0. اختيار مركز التكلفة الفعّال
+                if (costCenters.isNotEmpty()) {
+                    Text(
+                        text = "مركز التكلفة *",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    val activeCc = costCenters.firstOrNull { it.centerId == selectedCostCenterId }
+                    ExposedDropdownMenuBox(
+                        expanded = costCenterDropdownExpanded,
+                        onExpandedChange = { costCenterDropdownExpanded = !costCenterDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = activeCc?.centerName ?: "مركز التكلفة العام",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = costCenterDropdownExpanded) },
+                            leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("cost_center_dropdown"),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = costCenterDropdownExpanded,
+                            onDismissRequest = { costCenterDropdownExpanded = false }
+                        ) {
+                            costCenters.forEach { cc ->
+                                DropdownMenuItem(
+                                    text = { Text(cc.centerName, fontWeight = FontWeight.SemiBold) },
+                                    onClick = {
+                                        onCostCenterSelect(cc.centerId)
+                                        costCenterDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+
                 // 1. اختيار طريقة الدفع
                 Text(
                     text = "طريقة الدفع:",

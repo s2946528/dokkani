@@ -45,6 +45,9 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE id = :id LIMIT 1")
     suspend fun getProductById(id: Long): ProductEntity?
 
+    @Query("SELECT * FROM products WHERE id IN (:ids)")
+    suspend fun getProductsByIds(ids: List<Long>): List<ProductEntity>
+
     @Query("SELECT * FROM product_units WHERE productId = :productId ORDER BY isBaseUnit DESC, conversionFactor ASC")
     fun getUnitsForProduct(productId: Long): Flow<List<ProductUnitEntity>>
 

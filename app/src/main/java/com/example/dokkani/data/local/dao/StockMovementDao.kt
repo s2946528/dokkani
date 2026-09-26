@@ -33,10 +33,11 @@ interface StockMovementDao {
         WHERE productId = :productId 
           AND remainingQuantityForFifo > 0.0001
           AND movementType IN ('PURCHASE_IN', 'PRODUCE_SORTING', 'RETURN_IN')
+          AND (:costCenterId IS NULL OR cost_center_id = :costCenterId)
         ORDER BY timestamp ASC
         """
     )
-    suspend fun getAvailableFifoLots(productId: Long): List<StockMovementEntity>
+    suspend fun getAvailableFifoLots(productId: Long, costCenterId: Long? = null): List<StockMovementEntity>
 
     /**
      * استرداد آخر حركة توريد/شراء لحساب (آخر سعر شراء - Last Purchase Price)
@@ -46,11 +47,12 @@ interface StockMovementDao {
         SELECT * FROM stock_movements 
         WHERE productId = :productId 
           AND movementType IN ('PURCHASE_IN', 'PRODUCE_SORTING')
+          AND (:costCenterId IS NULL OR cost_center_id = :costCenterId)
         ORDER BY timestamp DESC 
         LIMIT 1
         """
     )
-    suspend fun getLastPurchaseMovement(productId: Long): StockMovementEntity?
+    suspend fun getLastPurchaseMovement(productId: Long, costCenterId: Long? = null): StockMovementEntity?
 
     /**
      * استرداد جميع الطبقات المتاحة بالمخزن لحساب المتوسط المرجح WAC
@@ -62,10 +64,11 @@ interface StockMovementDao {
         WHERE productId = :productId 
           AND remainingQuantityForFifo > 0.0001
           AND movementType IN ('PURCHASE_IN', 'PRODUCE_SORTING', 'RETURN_IN')
+          AND (:costCenterId IS NULL OR cost_center_id = :costCenterId)
         ORDER BY timestamp ASC
         """
     )
-    suspend fun getActiveStockLotsForWac(productId: Long): List<StockMovementEntity>
+    suspend fun getActiveStockLotsForWac(productId: Long, costCenterId: Long? = null): List<StockMovementEntity>
 
     /**
      * إجمالي الرصيد الحالي للصنف بالمخزن بالوحدة الأساسية
@@ -75,9 +78,10 @@ interface StockMovementDao {
         SELECT COALESCE(SUM(quantityBaseUnit), 0.0) 
         FROM stock_movements 
         WHERE productId = :productId
+          AND (:costCenterId IS NULL OR cost_center_id = :costCenterId)
         """
     )
-    suspend fun getTotalStockQuantity(productId: Long): Double
+    suspend fun getTotalStockQuantity(productId: Long, costCenterId: Long? = null): Double
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMovement(movement: StockMovementEntity): Long

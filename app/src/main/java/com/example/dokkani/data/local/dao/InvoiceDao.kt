@@ -77,4 +77,20 @@ interface InvoiceDao {
 
     @Query("SELECT * FROM invoices WHERE type = :type AND (invoiceNumber LIKE '%' || :query || '%' OR notes LIKE '%' || :query || '%') ORDER BY date DESC LIMIT 50")
     suspend fun searchInvoicesByType(type: InvoiceType, query: String): List<InvoiceEntity>
+
+    @Transaction
+    @Query("SELECT DISTINCT i.* FROM invoices i INNER JOIN invoice_items ii ON i.id = ii.invoiceId INNER JOIN products p ON ii.productId = p.id WHERE i.type = 'SALE' AND i.date > :startDate AND i.date <= :endDate AND ii.productId IN (:productIds) AND p.isWeighted = 0 ORDER BY i.date DESC")
+    suspend fun getGroupSaleInvoicesInDateRange(
+        productIds: List<Long>,
+        startDate: Long,
+        endDate: Long
+    ): List<InvoiceWithDetails>
+
+    @Transaction
+    @Query("SELECT DISTINCT i.* FROM invoices i INNER JOIN invoice_items ii ON i.id = ii.invoiceId INNER JOIN products p ON ii.productId = p.id WHERE i.type = 'SALE' AND i.date > :startDate AND i.date <= :endDate AND ii.productId IN (:productIds) AND p.isWeighted = 0 ORDER BY i.date DESC")
+    suspend fun getValueSaleInvoicesForGroupInDateRange(
+        productIds: List<Long>,
+        startDate: Long,
+        endDate: Long
+    ): List<InvoiceWithDetails>
 }

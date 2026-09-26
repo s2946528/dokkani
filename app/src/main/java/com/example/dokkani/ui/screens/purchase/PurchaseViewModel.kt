@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.entities.CashShiftEntity
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
@@ -78,6 +79,8 @@ data class WacCalculationSummary(
 data class PurchaseUiState(
     val suppliers: List<PartyEntity> = emptyList(),
     val selectedSupplier: PartyEntity? = null,
+    val costCenters: List<CostCenterEntity> = emptyList(),
+    val selectedCostCenterId: Long = 1L,
     val supplierInvoiceNumber: String = "",
     val paymentMethod: PaymentMethod = PaymentMethod.CASH,
     val productsWithUnits: List<ProductWithUnits> = emptyList(),
@@ -198,6 +201,22 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         }
 
         viewModelScope.launch(Dispatchers.IO) {
+            db.costCenterDao().getAllActiveCostCenters().collectLatest { centers ->
+                _uiState.update { state ->
+                    val defaultId = if (centers.any { it.centerId == state.selectedCostCenterId }) {
+                        state.selectedCostCenterId
+                    } else {
+                        centers.firstOrNull { it.isGeneral }?.centerId ?: centers.firstOrNull()?.centerId ?: 1L
+                    }
+                    state.copy(
+                        costCenters = centers,
+                        selectedCostCenterId = defaultId
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
             productDao.getProductsWithUnits().collectLatest { products ->
                 val defaultCategories = listOf(
                     "خضار وفواكه",
@@ -306,6 +325,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                 _uiState.update { it.copy(selectedSupplier = freshSupplier) }
             }
         }
+    }
+
+    fun selectCostCenter(costCenterId: Long) {
+        _uiState.update { it.copy(selectedCostCenterId = costCenterId) }
     }
 
     fun setSupplierInvoiceNumber(number: String) {
@@ -482,7 +505,8 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                             remainingAmount = remainingLocal,
                             paymentMethod = state.paymentMethod,
                             status = InvoiceStatus.COMPLETED,
-                            notes = "فاتورة شراء مورد رقم: ${state.supplierInvoiceNumber.ifEmpty { "غير محدد" }} - ${state.notes}"
+                            notes = "فاتورة شراء مورد رقم: ${state.supplierInvoiceNumber.ifEmpty { "غير محدد" }} - ${state.notes}",
+                            costCenterId = state.selectedCostCenterId
                         )
                     )
 
@@ -523,7 +547,8 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                                 remainingQuantityForFifo = baseQtyPurchased,
                                 unitCostPriceBase = unitCostBasePurchasedLocal,
                                 timestamp = timestamp,
-                                referenceNumber = invoiceNumber
+                                referenceNumber = invoiceNumber,
+                                costCenterId = state.selectedCostCenterId
                             )
                         )
 

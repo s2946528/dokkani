@@ -429,6 +429,7 @@ fun DokkaniApp(
                                     onDismissPaymentVoucherDialog = viewModel::dismissPaymentVoucherDialog,
                                     onVoucherInputsChanged = viewModel::updateVoucherInputs,
                                     onVoucherReceiptImagePathChanged = viewModel::updateVoucherReceiptImagePath,
+                                    onVoucherCostCenterSelected = viewModel::setVoucherCostCenterId,
                                     onSubmitPaymentVoucher = viewModel::submitPaymentVoucher,
                                     onSaveParty = viewModel::saveParty,
                                     onDeleteParty = viewModel::requestDeletePartyWithProtection,
@@ -516,6 +517,7 @@ fun DokkaniApp(
                                     uiState = uiState,
                                     onSelectSubTab = viewModel::selectReportSubTab,
                                     onSelectValuationMethod = viewModel::selectValuationMethod,
+                                    onSelectCostCenter = viewModel::selectReportCostCenterId,
                                     onSelectStatementMode = viewModel::selectReportStatementMode,
                                     onRefreshReports = viewModel::refreshReports
                                 )

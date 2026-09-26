@@ -203,6 +203,7 @@ private fun EmptyInvoiceSelectionPrompt(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ActivePurchaseReturnContent(
     uiState: PurchaseReturnUiState,
@@ -255,6 +256,47 @@ private fun ActivePurchaseReturnContent(
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // اختيار مركز التكلفة لمردود الشراء
+                var costCenterExpanded by remember { mutableStateOf(false) }
+                val activeCostCenter = uiState.costCenters.firstOrNull { it.centerId == uiState.selectedCostCenterId }
+
+                ExposedDropdownMenuBox(
+                    expanded = costCenterExpanded,
+                    onExpandedChange = { costCenterExpanded = !costCenterExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = activeCostCenter?.centerName ?: "مركز التكلفة العام",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("مركز التكلفة لمردود الشراء *") },
+                        leadingIcon = { Icon(Icons.Default.Store, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = costCenterExpanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                            .testTag("return_cost_center_dropdown"),
+                        singleLine = true
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = costCenterExpanded,
+                        onDismissRequest = { costCenterExpanded = false }
+                    ) {
+                        uiState.costCenters.forEach { cc ->
+                            DropdownMenuItem(
+                                text = { Text(cc.centerName, fontWeight = FontWeight.SemiBold) },
+                                onClick = {
+                                    viewModel.selectCostCenter(cc.centerId)
+                                    costCenterExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
 

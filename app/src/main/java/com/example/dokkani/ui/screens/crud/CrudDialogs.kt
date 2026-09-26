@@ -28,6 +28,8 @@ import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.ProductEntity
+import com.example.dokkani.ui.components.NumericOutlinedTextField
+import com.example.dokkani.util.safeToDouble
 import com.example.dokkani.ui.components.ProductImagePickerSection
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.ui.components.BarcodeTextField
@@ -428,11 +430,10 @@ fun AddEditProductDialog(
                     Text("يباع بالوزن / الميزان (خضار وفواكه)", fontSize = 14.sp)
                 }
 
-                OutlinedTextField(
+                NumericOutlinedTextField(
                     value = minStockAlert,
-                    onValueChange = { minStockAlert = filterIntegerInput(it) },
+                    onValueChange = { minStockAlert = it },
                     label = { Text("حد إعادة الطلب للتنبيه بالنواقص") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )
@@ -482,19 +483,17 @@ fun AddEditProductDialog(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = costPrice,
-                            onValueChange = { costPrice = filterIntegerInput(it) },
+                            onValueChange = { costPrice = it },
                             label = { Text("سعر الشراء (ر.ي)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp)
                         )
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = sellingPrice,
-                            onValueChange = { sellingPrice = filterIntegerInput(it) },
+                            onValueChange = { sellingPrice = it },
                             label = { Text("سعر البيع (ر.ي)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp)
                         )
@@ -524,7 +523,7 @@ fun AddEditProductDialog(
                             category = category.ifBlank { "عام" }.trim(),
                             englishName = englishName.trim(),
                             isWeighted = isWeighted,
-                            minStockAlert = minStockAlert.toDoubleOrNull() ?: 5.0,
+                            minStockAlert = minStockAlert.safeToDouble(5.0),
                             imagePath = imagePath.ifBlank { null }
                         )).copy(
                             name = name.trim(),
@@ -532,14 +531,14 @@ fun AddEditProductDialog(
                             category = category.ifBlank { "عام" }.trim(),
                             englishName = englishName.trim(),
                             isWeighted = isWeighted,
-                            minStockAlert = minStockAlert.toDoubleOrNull() ?: 5.0,
+                            minStockAlert = minStockAlert.safeToDouble(5.0),
                             imagePath = imagePath.ifBlank { null }
                         )
                         onSaveProduct(
                             prod,
                             baseUnitName.ifBlank { "حبة" }.trim(),
-                            costPrice.toDoubleOrNull() ?: 0.0,
-                            sellingPrice.toDoubleOrNull() ?: 0.0,
+                            costPrice.safeToDouble(),
+                            sellingPrice.safeToDouble(),
                             barcode.trim(),
                             isBaseUnit
                         )
@@ -696,11 +695,10 @@ fun AddEditPartyDialog(
                     )
                 }
 
-                OutlinedTextField(
+                NumericOutlinedTextField(
                     value = creditLimit,
                     onValueChange = { creditLimit = it },
                     label = { Text("سقف الدين المسموح به (${currencySymbol})") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )
@@ -723,13 +721,13 @@ fun AddEditPartyDialog(
                             phone = phone.trim(),
                             type = partyType,
                             taxNumber = taxNumber.trim(),
-                            creditLimit = creditLimit.toDoubleOrNull() ?: 1000.0
+                            creditLimit = creditLimit.safeToDouble(1000.0)
                         )).copy(
                             name = name.trim(),
                             phone = phone.trim(),
                             type = partyType,
                             taxNumber = taxNumber.trim(),
-                            creditLimit = creditLimit.toDoubleOrNull() ?: 1000.0
+                            creditLimit = creditLimit.safeToDouble(1000.0)
                         )
                         onSaveParty(party)
                     }
@@ -802,12 +800,11 @@ fun AddEditCurrencyDialog(
                     )
                 }
 
-                OutlinedTextField(
+                NumericOutlinedTextField(
                     value = if (isBaseCurrency) "1.0" else exchangeRate,
                     onValueChange = { if (!isBaseCurrency) exchangeRate = it },
                     enabled = !isBaseCurrency,
                     label = { Text(if (isBaseCurrency) "سعر الصرف (العملة الأساسية = 1.0 ثابتاً)" else "سعر الصرف مقابل العملة الأساسية") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )

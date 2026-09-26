@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -428,6 +429,31 @@ fun PosScreen(
             ReturnQuantityWarningDialog(
                 message = uiState.returnQuantityWarningMessage,
                 onDismiss = { viewModel.dismissReturnQuantityWarningDialog() }
+            )
+        }
+
+        // نافذة الدفع وإصدار الفاتورة
+        if (uiState.showCheckoutDialog) {
+            PosCheckoutDialog(
+                cartSummary = uiState.cartSummary,
+                selectedPaymentMethod = uiState.paymentMethod,
+                customers = uiState.parties,
+                selectedCustomerPartyId = uiState.selectedParty?.id,
+                paidAmountInput = uiState.paidAmountInput,
+                discountInput = uiState.discount.toString(),
+                openDrawerOnCash = true,
+                isProcessing = uiState.isProcessingCheckout,
+                currencySymbol = uiState.currencySymbol,
+                costCenters = uiState.costCenters,
+                selectedCostCenterId = uiState.selectedCostCenterId,
+                onCostCenterSelect = { viewModel.onCostCenterSelected(it) },
+                onPaymentMethodSelect = { viewModel.setPaymentMethod(it) },
+                onCustomerSelect = { id -> viewModel.selectParty(uiState.parties.firstOrNull { it.id == id }) },
+                onPaidAmountChange = { viewModel.setPaidAmountInput(it) },
+                onDiscountChange = { viewModel.setDiscount(it.toDoubleOrNull() ?: 0.0) },
+                onToggleOpenDrawer = { },
+                onConfirmCheckout = { viewModel.executeInvoiceTransaction() },
+                onDismiss = { viewModel.dismissCheckoutDialog() }
             )
         }
 
@@ -1404,6 +1430,64 @@ private fun PosCartPanel(
                             onClick = {
                                 viewModel.selectParty(party)
                                 partyDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // اختيار مركز التكلفة المخصص للعملية
+            var costCenterDropdownExpanded by remember { mutableStateOf(false) }
+            val activeCostCenter = uiState.costCenters.firstOrNull { it.centerId == uiState.selectedCostCenterId }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .clickable { costCenterDropdownExpanded = true }
+                    .testTag("pos_cost_center_selector"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Store,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Column {
+                        Text(
+                            text = "مركز التكلفة: ${activeCostCenter?.centerName ?: "مركز التكلفة العام"}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "تخصيص الإيرادات والتكاليف لهذا المركز",
+                            fontSize = 10.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+
+                DropdownMenu(
+                    expanded = costCenterDropdownExpanded,
+                    onDismissRequest = { costCenterDropdownExpanded = false }
+                ) {
+                    uiState.costCenters.forEach { cc ->
+                        DropdownMenuItem(
+                            text = { Text(cc.centerName, fontWeight = FontWeight.SemiBold) },
+                            onClick = {
+                                viewModel.onCostCenterSelected(cc.centerId)
+                                costCenterDropdownExpanded = false
                             }
                         )
                     }

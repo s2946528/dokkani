@@ -23,7 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.MoneyOff
@@ -32,7 +34,9 @@ import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
@@ -52,6 +56,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.ScrollableTabRow
@@ -82,6 +87,7 @@ import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.domain.reports.BalanceSheetReport
 import com.example.dokkani.domain.reports.InventoryHealthReport
 import com.example.dokkani.domain.reports.ProfitAndLossReport
+import com.example.dokkani.domain.reports.StockMovementReport
 import com.example.dokkani.domain.reports.TopProductsReport
 import com.example.dokkani.domain.reports.TrialBalanceReport
 import com.example.dokkani.ui.DokkaniUiState
@@ -99,15 +105,24 @@ fun ReportsDashboardScreen(
     uiState: DokkaniUiState,
     onSelectSubTab: (Int) -> Unit,
     onSelectValuationMethod: (CostValuationMethod) -> Unit,
+    onSelectCostCenter: (Long?) -> Unit = {},
     onSelectStatementMode: (Int) -> Unit = {},
     onRefreshReports: () -> Unit
 ) {
     val context = LocalContext.current
     var showPrintDialog by remember { mutableStateOf(false) }
     var hideZeroAccounts by remember { mutableStateOf(true) }
+    var costCenterDropdownExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         onRefreshReports()
+    }
+
+    val activeCostCenterName = remember(uiState.selectedReportCostCenterId, uiState.costCenters) {
+        val selectedId = uiState.selectedReportCostCenterId
+        if (selectedId != null) {
+            uiState.costCenters.find { it.centerId == selectedId }?.centerName ?: "مركز تكلفة #$selectedId"
+        } else "جميع مراكز التكلفة"
     }
 
     Column(
@@ -139,7 +154,7 @@ fun ReportsDashboardScreen(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "قائمة الدخل P&L، الميزانية العمومية، ميزان المراجعة، كشوفات الحسابات، والتحليلات",
+                    text = "قائمة الدخل P&L، الميزانية العمومية، ميزان المراجعة، حركة المخزون، وكشوفات الحسابات",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -148,12 +163,53 @@ fun ReportsDashboardScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // شريط الأدوات السريعة: أزرار الطباعة والتصدير والإنعاش وتصفية الحسابات الصفرية
+                // محدد مركز التكلفة الموحد (Cost Center Filter Dropdown)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box {
+                        OutlinedButton(
+                            onClick = { costCenterDropdownExpanded = true },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            border = BorderStroke(1.dp, Color(0xFF0F5132)),
+                            modifier = Modifier.testTag("btn_cost_center_filter")
+                        ) {
+                            Icon(Icons.Default.Store, contentDescription = null, tint = Color(0xFF0F5132), modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "مركز التكلفة: $activeCostCenterName",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F5132)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = costCenterDropdownExpanded,
+                            onDismissRequest = { costCenterDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("جميع مراكز التكلفة (عام)", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                                onClick = {
+                                    onSelectCostCenter(null)
+                                    costCenterDropdownExpanded = false
+                                }
+                            )
+                            uiState.costCenters.forEach { cc ->
+                                DropdownMenuItem(
+                                    text = { Text(cc.centerName, fontSize = 11.sp) },
+                                    onClick = {
+                                        onSelectCostCenter(cc.centerId)
+                                        costCenterDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     // مفتاح تصفية الحسابات الصفرية
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -174,7 +230,7 @@ fun ReportsDashboardScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "إخفاء الحسابات الصفرية",
+                            text = "إخفاء الصفرية",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (hideZeroAccounts) Color(0xFF15803D) else Color(0xFF475569)
@@ -267,6 +323,7 @@ fun ReportsDashboardScreen(
                 Pair("قائمة الدخل (P&L)", Icons.Default.Assessment),
                 Pair("الميزانية العمومية", Icons.Default.AccountBalance),
                 Pair("ميزان المراجعة", Icons.Default.Calculate),
+                Pair("حركة المخزون", Icons.Default.Category),
                 Pair("كشوفات الحسابات", Icons.Default.ReceiptLong),
                 Pair("الحركة والتحليلات", Icons.Default.TrendingUp)
             )
@@ -299,6 +356,7 @@ fun ReportsDashboardScreen(
                 0 -> ProfitAndLossView(
                     report = uiState.pnlReport,
                     selectedMethod = uiState.selectedReportValuationMethod,
+                    costCenterName = activeCostCenterName,
                     onSelectMethod = onSelectValuationMethod,
                     currencySymbol = uiState.currencySymbol
                 )
@@ -309,15 +367,23 @@ fun ReportsDashboardScreen(
                 2 -> TrialBalanceView(
                     report = uiState.trialBalanceReport,
                     hideZeroAccounts = hideZeroAccounts,
+                    costCenterName = activeCostCenterName,
                     currencySymbol = uiState.currencySymbol
                 )
-                3 -> AccountStatementsReportView(
+                3 -> StockMovementView(
+                    report = uiState.stockMovementReport,
+                    selectedMethod = uiState.selectedReportValuationMethod,
+                    costCenterName = activeCostCenterName,
+                    onSelectMethod = onSelectValuationMethod,
+                    currencySymbol = uiState.currencySymbol
+                )
+                4 -> AccountStatementsReportView(
                     uiState = uiState,
                     hideZeroAccounts = hideZeroAccounts,
                     onSelectStatementMode = onSelectStatementMode,
                     currencySymbol = uiState.currencySymbol
                 )
-                4 -> TopProductsAndHealthView(
+                5 -> TopProductsAndHealthView(
                     topReport = uiState.topProductsReport,
                     healthReport = uiState.inventoryHealthReport,
                     currencySymbol = uiState.currencySymbol
@@ -332,7 +398,8 @@ fun ReportsDashboardScreen(
             0 -> "تقرير قائمة الدخل والأرباح والخسائر"
             1 -> "تقرير الميزانية العمومية الختامية"
             2 -> "تقرير ميزان المراجعة المحاسبي"
-            3 -> if (uiState.reportStatementMode == 0) "كشف الحسابات التفصيلي" else "كشف أرصدة الحسابات الإجمالي"
+            3 -> "تقرير حركة وتقييم المخزون"
+            4 -> if (uiState.reportStatementMode == 0) "كشف الحسابات التفصيلي" else "كشف أرصدة الحسابات الإجمالي"
             else -> "تقرير تحليل المبيعات والمخزون"
         }
 
@@ -342,6 +409,7 @@ fun ReportsDashboardScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("التقرير المحدد: $activeReportTitle", fontWeight = FontWeight.Bold, color = Color(0xFF0F5132), fontSize = 12.sp)
+                    Text("مركز التكلفة: $activeCostCenterName", fontSize = 11.sp, color = Color(0xFF0F5132))
                     if (hideZeroAccounts) {
                         Text("• التصفية مفعلة: سيتم استبعاد الحسابات الصفرية تلقائياً من المستند.", fontSize = 11.sp, color = Color(0xFF15803D))
                     }
@@ -398,11 +466,15 @@ private fun handlePrintOrExport(
 ) {
     val storeName = uiState.settings?.storeName ?: "دكاني POS"
     val currency = uiState.currencySymbol
+    val ccName = uiState.selectedReportCostCenterId?.let { id ->
+        uiState.costCenters.find { it.centerId == id }?.centerName
+    } ?: "جميع مراكز التكلفة"
 
     when (uiState.reportSubTab) {
         0 -> { // P&L
             val pnl = uiState.pnlReport ?: return
             val kpi = listOf(
+                "مركز التكلفة" to ccName,
                 "صافي الربح التشغيلي" to "${"%.2f".format(pnl.netOperatingProfit)} $currency",
                 "إجمالي المبيعات" to "${"%.2f".format(pnl.grossSales)} $currency",
                 "تكلفة البضاعة المباعة" to "${"%.2f".format(pnl.cogs)} $currency",
@@ -418,7 +490,7 @@ private fun handlePrintOrExport(
                 ReportPdfPrinter.TableRowData("المصروفات التشغيلية", "%.2f".format(pnl.totalOperatingExpenses), "-"),
                 ReportPdfPrinter.TableRowData("صافي الربح التشغيلي", "%.2f".format(pnl.netOperatingProfit), "%.1f%%".format(pnl.netProfitMarginPercent), isTotal = true)
             )
-            ReportPdfPrinter.generateAndPrintReport(context, storeName, "تقرير قائمة الدخل الأرباح والخسائر", "معيار: ${pnl.valuationMethodUsed.name}", kpi, rows, action)
+            ReportPdfPrinter.generateAndPrintReport(context, storeName, "تقرير قائمة الدخل الأرباح والخسائر", "مركز التكلفة: $ccName | معيار: ${pnl.valuationMethodUsed.name}", kpi, rows, action)
         }
         1 -> { // Balance Sheet
             val bs = uiState.balanceSheetReport ?: return
@@ -448,6 +520,7 @@ private fun handlePrintOrExport(
             } else tb.items
 
             val kpi = listOf(
+                "مركز التكلفة" to ccName,
                 "إجمالي المدين (+)" to "${"%.2f".format(tb.totalDebit)} $currency",
                 "إجمالي الدائن (-)" to "${"%.2f".format(tb.totalCredit)} $currency",
                 "الحالة المحاسبية" to if (tb.isBalanced) "متوازن تماماً ✓" else "غير متوازن"
@@ -459,9 +532,41 @@ private fun handlePrintOrExport(
                 rows.add(ReportPdfPrinter.TableRowData(item.accountCode, item.accountName, "%.2f".format(item.debit), "%.2f".format(item.credit)))
             }
             rows.add(ReportPdfPrinter.TableRowData("الجامع", "إجمالي ميزان المراجعة", "%.2f".format(tb.totalDebit), "%.2f".format(tb.totalCredit), isTotal = true))
-            ReportPdfPrinter.generateAndPrintReport(context, storeName, "تقرير ميزان المراجعة المحاسبي", "توازن القيد المزدوج ${if (hideZeroAccounts) "(تم استبعاد الصفرية)" else ""}", kpi, rows, action)
+            ReportPdfPrinter.generateAndPrintReport(context, storeName, "تقرير ميزان المراجعة المحاسبي", "مركز التكلفة: $ccName ${if (hideZeroAccounts) "(استبعاد الصفرية)" else ""}", kpi, rows, action)
         }
-        3 -> { // Account Statements
+        3 -> { // Stock Movement
+            val sm = uiState.stockMovementReport ?: return
+            val kpi = listOf(
+                "مركز التكلفة" to sm.selectedCostCenterName,
+                "طريقة التقييم" to sm.valuationMethodUsed.name,
+                "تقييم المخزون الختامي" to "${"%.2f".format(sm.totalClosingStockValue)} $currency",
+                "إجمالي تكلفة المبيعات (COGS)" to "${"%.2f".format(sm.totalCogsValue)} $currency"
+            )
+            val rows = mutableListOf(
+                ReportPdfPrinter.TableRowData("اسم الصنف والمجموعة", "المشتريات / المبيعات", "رصيد آخر المدة", "تقييم التكلفة ($currency)", isHeader = true)
+            )
+            sm.items.forEach { item ->
+                rows.add(
+                    ReportPdfPrinter.TableRowData(
+                        item.productName,
+                        "+%.1f / -%.1f".format(item.purchasesQty, item.salesQty),
+                        "%.1f %s".format(item.closingStockQty, item.baseUnitName),
+                        "قيمة: %.2f | COGS: %.2f".format(item.closingStockValue, item.calculatedCogs)
+                    )
+                )
+            }
+            rows.add(
+                ReportPdfPrinter.TableRowData(
+                    "الإجمالي الكلي",
+                    "+%.1f / -%.1f".format(sm.totalPurchasesQty, sm.totalSalesQty),
+                    "%.1f".format(sm.totalClosingStockQty),
+                    "قيمة: %.2f | COGS: %.2f".format(sm.totalClosingStockValue, sm.totalCogsValue),
+                    isTotal = true
+                )
+            )
+            ReportPdfPrinter.generateAndPrintReport(context, storeName, "تقرير حركة وتقييم المخزون", "مركز التكلفة: ${sm.selectedCostCenterName}", kpi, rows, action)
+        }
+        4 -> { // Account Statements
             val isDetailed = uiState.reportStatementMode == 0
             val reportName = if (isDetailed) "كشف حساب تفصيلي" else "كشف أرصدة الحسابات الإجمالي"
             val kpi = listOf(
@@ -526,12 +631,13 @@ private fun PnlLineItem(label: String, value: String, color: Color, isBold: Bool
 }
 
 /**
- * تبويب تقرير الأرباح والخسائر (P&L) مع قائمة منسدلة أنيقة لاختيار معيار التقييم
+ * تبويب تقرير الأرباح والخسائر (P&L) مع دعم التصفية بمركز التكلفة
  */
 @Composable
 private fun ProfitAndLossView(
     report: ProfitAndLossReport?,
     selectedMethod: CostValuationMethod,
+    costCenterName: String,
     onSelectMethod: (CostValuationMethod) -> Unit,
     currencySymbol: String = "ر.ي"
 ) {
@@ -552,14 +658,28 @@ private fun ProfitAndLossView(
     ) {
         // عنوان التقرير الموسّط
         item {
-            Text(
-                text = "تقرير قائمة الدخل (الأرباح والخسائر - P&L)",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF0F5132),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "تقرير قائمة الدخل (الأرباح والخسائر - P&L)",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F5132),
+                    textAlign = TextAlign.Center
+                )
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFFE8F5E9),
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = "مركز التكلفة: $costCenterName",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF15803D),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
 
         // شريط اختيار طريقة تقييم التكلفة بداخل قائمة منسدلة Dropdown موفرة للمساحة
@@ -722,7 +842,7 @@ private fun ProfitAndLossView(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = "تفاصيل قائمة الدخل والعمليات P&L:",
+                        text = "تفاصيل قائمة الدخل لـ ($costCenterName):",
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         color = Color(0xFF1E293B)
@@ -877,14 +997,17 @@ private fun BalanceSheetView(
 }
 
 /**
- * تبويب تقرير ميزان المراجعة المحاسبي (Trial Balance View) مع دعم خيار إخفاء الحسابات الصفرية
+ * تبويب تقرير ميزان المراجعة المحاسبي (Trial Balance View) مع دعم نظام التدقيق الآلي والرقابة المحاسبية
  */
 @Composable
 private fun TrialBalanceView(
     report: TrialBalanceReport?,
     hideZeroAccounts: Boolean,
+    costCenterName: String = "جميع مراكز التكلفة",
     currencySymbol: String = "ر.ي"
 ) {
+    var showAuditDetailsDialog by remember { mutableStateOf(false) }
+
     if (report == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("جاري توليد ميزان المراجعة...", color = Color(0xFF64748B), fontSize = 12.sp)
@@ -906,17 +1029,31 @@ private fun TrialBalanceView(
     ) {
         // عنوان موسّط
         item {
-            Text(
-                text = "تقرير ميزان المراجعة المحاسبي ${if (hideZeroAccounts) "(تصفية الحسابات الفعالة)" else ""}",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF0F5132),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "تقرير ميزان المراجعة المحاسبي ${if (hideZeroAccounts) "(الحسابات الفعالة)" else ""}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F5132),
+                    textAlign = TextAlign.Center
+                )
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFFE8F5E9),
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = "مركز التكلفة: $costCenterName",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF15803D),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
 
-        // شريط رأس التوازن
+        // شريط حالة نظام التدقيق المحاسبي الآلي (Audit Validation Check)
         item {
             Card(
                 shape = RoundedCornerShape(8.dp),
@@ -926,38 +1063,48 @@ private fun TrialBalanceView(
                 border = BorderStroke(1.dp, if (report.isBalanced) Color(0xFFBBF7D0) else Color(0xFFFCA5A5)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (report.isBalanced) Icons.Default.CheckCircle else Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = if (report.isBalanced) Color(0xFF16A34A) else Color(0xFFDC2626),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column {
-                            Text(
-                                text = if (report.isBalanced) "ميزان المراجعة متوازن محاسبياً (القيد المزدوج)" else "يوجد عدم توازن في ميزان المراجعة",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = if (report.isBalanced) Color(0xFF15803D) else Color(0xFF991B1B)
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = if (report.isBalanced) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (report.isBalanced) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                modifier = Modifier.size(20.dp)
                             )
-                            Text("مجموع الأرصدة المدينة = مجموع الأرصدة الدائنة", fontSize = 10.sp, color = Color(0xFF475569))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Text(
+                                    text = if (report.isBalanced) "نظام التدقيق المحاسبي الآلي: القيد المزدوج متوازن ✓" else "تنبيه وجود عدم توازن محاسبي!",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = if (report.isBalanced) Color(0xFF15803D) else Color(0xFF991B1B)
+                                )
+                                Text(
+                                    text = report.auditCheckMessage,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF334155)
+                                )
+                            }
+                        }
+
+                        if (!report.isBalanced) {
+                            Button(
+                                onClick = { showAuditDetailsDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.FactCheck, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("فحص التفاصيل", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
-
-                    Text(
-                        text = "${"%.2f".format(report.totalDebit)} $currencySymbol",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = Color(0xFF0F172A)
-                    )
                 }
             }
         }
@@ -1051,6 +1198,332 @@ private fun TrialBalanceView(
                     Text("الإجمالي والجامع النهائي:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White, modifier = Modifier.weight(3f))
                     Text("${"%.2f".format(report.totalDebit)} $currencySymbol", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF86EFAC), modifier = Modifier.weight(1f))
                     Text("${"%.2f".format(report.totalCredit)} $currencySymbol", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFFFCA5A5), modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+
+    // حوار فحص التدقيق المحاسبي التفصيلي (Audit Validation Check Dialog)
+    if (showAuditDetailsDialog) {
+        AlertDialog(
+            onDismissRequest = { showAuditDetailsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.FactCheck, contentDescription = null, tint = Color(0xFFDC2626))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("نتائج التدقيق والرقابة المحاسبية", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "وفقاً لمعايير المحاسبة والقيد المزدوج، يجب أن يتطابق مجموع جانب المدين تماماً مع مجموع جانب الدائن.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF334155)
+                    )
+                    Surface(shape = RoundedCornerShape(6.dp), color = Color(0xFFFEF2F2), border = BorderStroke(1.dp, Color(0xFFFCA5A5))) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text("الفرق الحسابي القائم: ${"%.2f".format(report.differenceAmount)} $currencySymbol", fontWeight = FontWeight.Bold, color = Color(0xFF991B1B), fontSize = 12.sp)
+                            Text("إجمالي المدين: ${"%.2f".format(report.totalDebit)} $currencySymbol", fontSize = 11.sp, color = Color(0xFF15803D))
+                            Text("إجمالي الدائن: ${"%.2f".format(report.totalCredit)} $currencySymbol", fontSize = 11.sp, color = Color(0xFFDC2626))
+                        }
+                    }
+
+                    if (report.unbalancedAccounts.isNotEmpty()) {
+                        Text("الحسابات المرتبطة بالفروق المحاسبية:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF0F172A))
+                        report.unbalancedAccounts.forEach { acc ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("• ${acc.accountName} (#${acc.accountCode})", fontSize = 10.sp, color = Color(0xFF475569))
+                                Text("مدين: ${"%.2f".format(acc.debit)} | دائن: ${"%.2f".format(acc.credit)}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            }
+                        }
+                    } else {
+                        Text("ملاحظة: ينصح بإجراء قيد تسوية أو فحص السندات الافتتاحية للموردين والعملاء لتصحيح الفرق.", fontSize = 10.sp, color = Color(0xFF64748B))
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showAuditDetailsDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132))
+                ) {
+                    Text("حسناً، فهمت")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * تبويب وشاشة "حركة المخزون" الاحترافية
+ */
+@Composable
+private fun StockMovementView(
+    report: StockMovementReport?,
+    selectedMethod: CostValuationMethod,
+    costCenterName: String,
+    onSelectMethod: (CostValuationMethod) -> Unit,
+    currencySymbol: String = "ر.ي"
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var methodDropdownExpanded by remember { mutableStateOf(false) }
+
+    if (report == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("جاري توليد تقرير حركة المخزون...", color = Color(0xFF64748B), fontSize = 12.sp)
+        }
+        return
+    }
+
+    val filteredItems = remember(report.items, searchQuery) {
+        if (searchQuery.isBlank()) {
+            report.items
+        } else {
+            val q = searchQuery.trim().lowercase()
+            report.items.filter {
+                it.productName.lowercase().contains(q) ||
+                it.productCode.lowercase().contains(q) ||
+                it.category.lowercase().contains(q)
+            }
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // العنوان الرئيسي
+        item {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "تقرير حركة وتقييم المخزون الشامل (Stock Movement)",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F5132),
+                    textAlign = TextAlign.Center
+                )
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFFE8F5E9),
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = "مركز التكلفة: $costCenterName",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF15803D),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+
+        // أداة البحث + اختيار طريقة تقييم التكلفة
+        item {
+            Card(
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("بحث باسم الصنف، الكود، أو المجموعة...", fontSize = 10.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Box {
+                            OutlinedButton(
+                                onClick = { methodDropdownExpanded = true },
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(42.dp)
+                            ) {
+                                Text(
+                                    text = when (selectedMethod) {
+                                        CostValuationMethod.WAC -> "WAC (المتوسط المرجح)"
+                                        CostValuationMethod.FIFO -> "FIFO (الوارد أولاً)"
+                                        CostValuationMethod.LIFO -> "LIFO (الوارد أخيراً)"
+                                        CostValuationMethod.LAST_PURCHASE_PRICE -> "آخر سعر شراء"
+                                    },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F5132)
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = methodDropdownExpanded,
+                                onDismissRequest = { methodDropdownExpanded = false }
+                            ) {
+                                CostValuationMethod.values().forEach { method ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = when (method) {
+                                                    CostValuationMethod.WAC -> "المتوسط المرجح (WAC)"
+                                                    CostValuationMethod.FIFO -> "الوارد أولاً صادر أولاً (FIFO)"
+                                                    CostValuationMethod.LIFO -> "الوارد أخيراً صادر أولاً (LIFO)"
+                                                    CostValuationMethod.LAST_PURCHASE_PRICE -> "آخر سعر شراء للفواتير"
+                                                },
+                                                fontSize = 11.sp,
+                                                fontWeight = if (method == selectedMethod) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        },
+                                        onClick = {
+                                            onSelectMethod(method)
+                                            methodDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // بطاقات إجماليات KPIs لحركة المخزون
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)), shape = RoundedCornerShape(6.dp), modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.padding(6.dp)) {
+                        Text("رصيد أول المدة", fontSize = 9.sp, color = Color(0xFF475569))
+                        Text("%.1f".format(report.totalOpeningStockQty), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                    }
+                }
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)), shape = RoundedCornerShape(6.dp), modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.padding(6.dp)) {
+                        Text("إجمالي المشتريات", fontSize = 9.sp, color = Color(0xFF166534))
+                        Text("%.1f".format(report.totalPurchasesQty), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D))
+                    }
+                }
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)), shape = RoundedCornerShape(6.dp), modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.padding(6.dp)) {
+                        Text("إجمالي المبيعات", fontSize = 9.sp, color = Color(0xFF1E40AF))
+                        Text("%.1f".format(report.totalSalesQty), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8))
+                    }
+                }
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)), shape = RoundedCornerShape(6.dp), modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.padding(6.dp)) {
+                        Text("العجز والتالف", fontSize = 9.sp, color = Color(0xFF991B1B))
+                        Text("%.1f".format(report.totalWastageAndShortageQty), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+                    }
+                }
+            }
+        }
+
+        // بطاقة إجمالي التقييم وـ COGS
+        item {
+            Card(
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F5132)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("تقييم المخزون الختامي بالتكلفة", fontSize = 10.sp, color = Color(0xFFD1E7DD))
+                        Text("${"%.2f".format(report.totalClosingStockValue)} $currencySymbol", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    HorizontalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = Color(0xFF198754))
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("تكلفة المبيعات (COGS)", fontSize = 10.sp, color = Color(0xFFD1E7DD))
+                        Text("${"%.2f".format(report.totalCogsValue)} $currencySymbol", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF86EFAC))
+                    }
+                }
+            }
+        }
+
+        // ترويسة الجدول التفصيلي لحركة الأصناف
+        item {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFF1E293B),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("الصنف والمجموعة", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color.White, modifier = Modifier.weight(2f))
+                    Text("أول المدة", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color.White, modifier = Modifier.weight(1f))
+                    Text("مشتريات", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color(0xFF86EFAC), modifier = Modifier.weight(1f))
+                    Text("مبيعات", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color(0xFF93C5FD), modifier = Modifier.weight(1f))
+                    Text("عجز/تالف", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color(0xFFFCA5A5), modifier = Modifier.weight(1f))
+                    Text("آخر المدة", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color.White, modifier = Modifier.weight(1f))
+                    Text("قيمة التكلفة", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color(0xFF86EFAC), modifier = Modifier.weight(1f))
+                }
+            }
+        }
+
+        // سطور الأصناف المفلترة
+        items(filteredItems) { item ->
+            Card(
+                shape = RoundedCornerShape(6.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(2f)) {
+                            Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF0F172A))
+                            Text("${item.category} | #${item.productCode}", fontSize = 9.sp, color = Color(0xFF64748B))
+                        }
+                        Text("%.1f %s".format(item.openingStockQty, item.baseUnitName), fontSize = 10.sp, color = Color(0xFF475569), modifier = Modifier.weight(1f))
+                        Text("+%.1f".format(item.purchasesQty - item.purchaseReturnsQty), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D), modifier = Modifier.weight(1f))
+                        Text("-%.1f".format(item.salesQty - item.saleReturnsQty), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8), modifier = Modifier.weight(1f))
+                        Text("-%.1f".format(item.wastageAndShortageQty), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626), modifier = Modifier.weight(1f))
+                        Text("%.1f".format(item.closingStockQty), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), modifier = Modifier.weight(1f))
+                        Text("${"%.2f".format(item.closingStockValue)} $currencySymbol", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F5132), modifier = Modifier.weight(1f))
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Text(
+                            text = "سعر تكلفة الوحدة: ${"%.2f".format(item.unitCostPrice)} $currencySymbol | COGS الصنف: ${"%.2f".format(item.calculatedCogs)} $currencySymbol",
+                            fontSize = 9.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (filteredItems.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                    Text("لا توجد أصناف مطابقة للبحث حالياً", color = Color(0xFF64748B), fontSize = 11.sp)
                 }
             }
         }
@@ -1606,28 +2079,7 @@ private fun AccountStatementsReportView(
             if (summaryRows.isEmpty()) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                        Text("لا توجد أرصدة أو حسابات متوفرة في هذه الفئة", color = Color(0xFF64748B), fontSize = 11.sp)
-                    }
-                }
-            }
-
-            // سطر المجموع الكلي للإجمالي
-            item {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color(0xFF0F5132),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("إجمالي الفئة المحدد:", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color.White, modifier = Modifier.weight(2f))
-                        Text("${"%.2f".format(totalOpeningSum)}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color.White, modifier = Modifier.weight(1f))
-                        Text("${"%.2f".format(totalPeriodDebitSum)}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color(0xFF86EFAC), modifier = Modifier.weight(1f))
-                        Text("${"%.2f".format(totalPeriodCreditSum)}", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color(0xFFFCA5A5), modifier = Modifier.weight(1f))
-                        Text("${"%.2f".format(totalClosingSum)} $currencySymbol", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color(0xFF93C5FD), modifier = Modifier.weight(1f))
+                        Text("لا توجد حسابات مسجلة بهذه الفئة", color = Color(0xFF64748B), fontSize = 11.sp)
                     }
                 }
             }
@@ -1636,7 +2088,7 @@ private fun AccountStatementsReportView(
 }
 
 /**
- * تبويب الحركة والتحليلات للأصناف والنواقص والصلاحيات
+ * تبويب تقارير الحركة والتحليلات ونواقص المخزون والصلاحيات
  */
 @Composable
 private fun TopProductsAndHealthView(
@@ -1648,74 +2100,137 @@ private fun TopProductsAndHealthView(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // عنوان موسّط
+        // 1. الأصناف الأكثر مبيعاً حسب الكمية
         item {
-            Text(
-                text = "تقرير حركة المبيعات والمخزون والتحليلات",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF0F5132),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-            )
-        }
+            Card(
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.TrendingUp, contentDescription = null, tint = Color(0xFF0F5132), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("الأصناف الأكثر حركة ومبيعاً حسب الكمية:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
 
-        // الأصناف الأكثر حركة
-        item {
-            Text("الأصناف الأكثر مبيعاً وحركة (الأعلى تصريفاً):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF1E293B))
-        }
-
-        if (topReport != null) {
-            items(topReport.topMovingByQuantity.take(5)) { item ->
-                Card(
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
-                            Text("إجمالي المبيعات: ${"%.2f".format(item.totalRevenue)} $currencySymbol", fontSize = 10.sp, color = Color(0xFF64748B))
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("${"%.1f".format(item.totalQuantitySold)} ${item.baseUnitName}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F5132))
-                            Text("ربح: ${"%.2f".format(item.grossProfit)} $currencySymbol", fontSize = 10.sp, color = Color(0xFF16A34A))
+                    if (topReport?.topMovingByQuantity.isNullOrEmpty()) {
+                        Text("لا توجد مبيعات مسجلة بعد تظهر في هذا التقرير", fontSize = 11.sp, color = Color(0xFF64748B))
+                    } else {
+                        topReport!!.topMovingByQuantity.take(10).forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(2f)) {
+                                    Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF0F172A))
+                                    Text(item.category, fontSize = 9.sp, color = Color(0xFF64748B))
+                                }
+                                Text("${"%.1f".format(item.totalQuantitySold)} ${item.baseUnitName}", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF15803D), modifier = Modifier.weight(1f))
+                                Text("${"%.2f".format(item.totalRevenue)} $currencySymbol", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF0F172A), modifier = Modifier.weight(1f))
+                                Text("ربح: ${"%.2f".format(item.grossProfit)}", fontSize = 10.sp, color = Color(0xFF16A34A), modifier = Modifier.weight(1f))
+                            }
+                            HorizontalDivider(color = Color(0xFFF1F5F9))
                         }
                     }
                 }
             }
         }
 
-        // النواقص والصلاحيات
-        if (healthReport != null) {
-            item {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("الأصناف التي وصلت حد النواقص وإعادة الطلب (${healthReport.totalLowStockCount}):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF1E293B))
-            }
+        // 2. الأصناف الأكثر ربحية حسب هامش الربح
+        item {
+            Card(
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Assessment, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("الأصناف الأكثر ربحية وإسهاماً بالأرباح:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
 
-            items(healthReport.lowStockItems.take(5)) { item ->
-                Card(
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(item.name, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
+                    if (topReport?.topProfitableByMargin.isNullOrEmpty()) {
+                        Text("لا توجد مبيعات مسجلة بعد تظهر في هذا التقرير", fontSize = 11.sp, color = Color(0xFF64748B))
+                    } else {
+                        topReport!!.topProfitableByMargin.take(10).forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(2f)) {
+                                    Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF0F172A))
+                                    Text(item.category, fontSize = 9.sp, color = Color(0xFF64748B))
+                                }
+                                Text("${"%.2f".format(item.grossProfit)} $currencySymbol", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF16A34A), modifier = Modifier.weight(1f))
+                                Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFFE8F5E9)) {
+                                    Text("هامش ${"%.1f".format(item.profitMarginPercent)}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                }
+                            }
+                            HorizontalDivider(color = Color(0xFFF1F5F9))
                         }
-                        Text("المتبقي: ${"%.1f".format(item.currentStock)} ${item.baseUnitName}", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFFDC2626))
+                    }
+                }
+            }
+        }
+
+        // 3. تنبيهات النواقص والصلاحيات
+        item {
+            Card(
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("نواقص المخزون وتنبيهات الصلاحيات:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (healthReport?.lowStockItems.isNullOrEmpty()) {
+                        Text("المخزون متوفر بصورة جيدة ولا توجد نواقص حرجة حالياً ✓", fontSize = 11.sp, color = Color(0xFF15803D))
+                    } else {
+                        healthReport!!.lowStockItems.take(10).forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(2f)) {
+                                    Text(item.name, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF0F172A))
+                                    Text("${item.category} | حد الإنذار: ${item.minStockAlert}", fontSize = 9.sp, color = Color(0xFF64748B))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (item.isOutOfStock) Color(0xFFFEF2F2) else Color(0xFFFFFBEB)
+                                ) {
+                                    Text(
+                                        text = if (item.isOutOfStock) "منتهي بالكامل (0)" else "منخفض: ${"%.1f".format(item.currentStock)} ${item.baseUnitName}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (item.isOutOfStock) Color(0xFFDC2626) else Color(0xFFD97706),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            HorizontalDivider(color = Color(0xFFF1F5F9))
+                        }
                     }
                 }
             }

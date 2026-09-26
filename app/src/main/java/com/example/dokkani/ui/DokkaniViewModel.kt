@@ -9,6 +9,7 @@ import com.example.dokkani.data.local.SessionManager
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.repository.DokkaniRepository
 import com.example.dokkani.data.local.entities.CashShiftEntity
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.CurrencyExchangeHistoryEntity
@@ -181,6 +182,8 @@ data class DokkaniUiState(
     val isLoadingStatement: Boolean = false,
     val showPaymentVoucherDialog: Boolean = false,
     val voucherPartyId: Long? = null,
+    val voucherCostCenterId: Long = 1L,
+    val costCenters: List<CostCenterEntity> = emptyList(),
     val voucherAmountInput: String = "",
     val voucherNotesInput: String = "",
     val voucherPaymentMethod: PaymentMethod = PaymentMethod.CASH,
@@ -194,6 +197,8 @@ data class DokkaniUiState(
     val pnlReport: ProfitAndLossReport? = null,
     val balanceSheetReport: BalanceSheetReport? = null,
     val trialBalanceReport: TrialBalanceReport? = null,
+    val stockMovementReport: com.example.dokkani.domain.reports.StockMovementReport? = null,
+    val selectedReportCostCenterId: Long? = null, // null = جميع مراكز التكلفة
     val selectedReportValuationMethod: CostValuationMethod = CostValuationMethod.WAC,
     val topProductsReport: TopProductsReport? = null,
     val inventoryHealthReport: InventoryHealthReport? = null,
@@ -328,6 +333,21 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun observeData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.costCenterDao().getAllActiveCostCenters().collectLatest { centers ->
+                _uiState.update { state ->
+                    val defaultId = if (centers.any { it.centerId == state.voucherCostCenterId }) {
+                        state.voucherCostCenterId
+                    } else {
+                        centers.firstOrNull { it.isGeneral }?.centerId ?: centers.firstOrNull()?.centerId ?: 1L
+                    }
+                    state.copy(
+                        costCenters = centers,
+                        voucherCostCenterId = defaultId
+                    )
+                }
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             db.productDao().getAllUnitsFlow().collectLatest { units ->
                 _uiState.update { it.copy(allUnits = units) }
@@ -857,6 +877,10 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(voucherReceiptImagePath = path) }
     }
 
+    fun setVoucherCostCenterId(costCenterId: Long) {
+        _uiState.update { it.copy(voucherCostCenterId = costCenterId) }
+    }
+
     fun submitPaymentVoucher() {
         val state = _uiState.value
         val partyId = state.voucherPartyId ?: return
@@ -880,7 +904,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 transactionRef = state.voucherNotesInput,
                 receiptImagePath = state.voucherReceiptImagePath,
                 notes = state.voucherNotesInput,
-                receivedBy = "كاشير النظام"
+                receivedBy = "كاشير النظام",
+                costCenterId = state.voucherCostCenterId
             )
             db.paymentVoucherDao().insertVoucher(voucher)
 
@@ -941,9 +966,19 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         refreshReports()
     }
 
+    fun selectReportCostCenterId(costCenterId: Long?) {
+        _uiState.update { it.copy(selectedReportCostCenterId = costCenterId) }
+        refreshReports()
+    }
+
     fun refreshReports() {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isLoadingReports = true) }
+            val costCenterId = _uiState.value.selectedReportCostCenterId
+            val costCenterName = if (costCenterId != null) {
+                _uiState.value.costCenters.find { it.centerId == costCenterId }?.centerName ?: "مركز تكلفة #$costCenterId"
+            } else "جميع مراكز التكلفة"
+
             val invoices = db.invoiceDao().getAllInvoicesSync()
             val invoiceItems = db.invoiceDao().getAllInvoiceItemsSync()
             val expenses = db.expenseDao().getExpensesByDateRangeSync(0, System.currentTimeMillis())
@@ -959,7 +994,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 invoiceItems = invoiceItems,
                 expenses = expenses,
                 productUnitCosts = productUnitCosts,
-                valuationMethod = _uiState.value.selectedReportValuationMethod
+                valuationMethod = _uiState.value.selectedReportValuationMethod,
+                costCenterId = costCenterId
             )
             val topProds = FinancialReportsEngine.generateTopProductsReport(
                 productsWithUnits = products,
@@ -970,6 +1006,13 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 productsWithUnits = products,
                 stockMovements = movements
             )
+            val stockMovementRep = FinancialReportsEngine.generateStockMovementReport(
+                productsWithUnits = products,
+                stockMovements = movements,
+                valuationMethod = _uiState.value.selectedReportValuationMethod,
+                costCenterId = costCenterId,
+                costCenterName = costCenterName
+            )
 
             recalculateEquity()
             val equityRes = _uiState.value.equityResult
@@ -977,13 +1020,14 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             val parties = _uiState.value.parties
 
             val balanceSheet = FinancialReportsEngine.generateBalanceSheetReport(equityRes)
-            val trialBalance = FinancialReportsEngine.generateTrialBalanceReport(accounts, parties, pnl, equityRes)
+            val trialBalance = FinancialReportsEngine.generateTrialBalanceReport(accounts, parties, pnl, equityRes, costCenterId)
 
             _uiState.update {
                 it.copy(
                     pnlReport = pnl,
                     balanceSheetReport = balanceSheet,
                     trialBalanceReport = trialBalance,
+                    stockMovementReport = stockMovementRep,
                     topProductsReport = topProds,
                     inventoryHealthReport = inventoryHealth,
                     isLoadingReports = false
@@ -1508,7 +1552,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 val v = db.paymentVoucherDao().getVoucherById(voucherId)
                 if (v != null) {
                     val isPay = v.isPayment
-                    val party = db.partyDao().getPartyById(v.partyId)
+                    val party = v.partyId?.let { db.partyDao().getPartyById(it) }
                     if (party != null) {
                         val isSupplier = party.type == PartyType.SUPPLIER
                         val newBal = if (isSupplier || isPay) party.currentBalance - v.amount else party.currentBalance + v.amount
@@ -1656,7 +1700,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 )
                 db.paymentVoucherDao().updateVoucher(updatedV)
 
-                val party = db.partyDao().getPartyById(oldV.partyId)
+                val party = oldV.partyId?.let { db.partyDao().getPartyById(it) }
                 if (party != null) {
                     val isSupplier = party.type == PartyType.SUPPLIER
                     val oldBalChange = if (isSupplier || isPay) -oldAmount else +oldAmount

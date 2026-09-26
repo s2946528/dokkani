@@ -38,6 +38,7 @@ import com.example.dokkani.data.local.entities.MixedProduceBatchEntity
 import com.example.dokkani.data.local.entities.MixedProduceYieldItemEntity
 import com.example.dokkani.data.local.entities.OwnerTransactionEntity
 import com.example.dokkani.data.local.entities.PartyEntity
+import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentVoucherEntity
 import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
@@ -115,7 +116,7 @@ import com.example.dokkani.data.local.entities.ShortageSettlementEntity
         CostCenterEntity::class,
         ShortageSettlementEntity::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -345,6 +346,120 @@ abstract class DokkaniDatabase : RoomDatabase() {
                     )
                 )
             }
+
+            // 6. إضافة المورد الأساسي
+            val partyDao = db.partyDao()
+            partyDao.insertParty(
+                PartyEntity(
+                    name = "العودي للمواد الغذائية",
+                    type = PartyType.SUPPLIER,
+                    phone = "",
+                    notes = "المورد الأساسي الافتراضي"
+                )
+            )
+
+            // 7. إضافة الأصناف الثلاثة (طماطم، بطاطس، كوسة)
+            val productDao = db.productDao()
+
+            val tomatoId = productDao.insertProduct(
+                ProductEntity(
+                    code = "PROD-TOMATO",
+                    name = "طماطم",
+                    englishName = "Tomato",
+                    category = "خضار وفواكه",
+                    isWeighted = true,
+                    isActive = true
+                )
+            )
+            productDao.insertUnit(
+                ProductUnitEntity(
+                    productId = tomatoId,
+                    unitName = "كيلو",
+                    conversionFactor = 1.0,
+                    barcode = "TOMATO-KG",
+                    costPrice = 200.0,
+                    sellingPrice = 250.0,
+                    isBaseUnit = true
+                )
+            )
+
+            val potatoId = productDao.insertProduct(
+                ProductEntity(
+                    code = "PROD-POTATO",
+                    name = "بطاطس",
+                    englishName = "Potato",
+                    category = "خضار وفواكه",
+                    isWeighted = true,
+                    isActive = true
+                )
+            )
+            productDao.insertUnit(
+                ProductUnitEntity(
+                    productId = potatoId,
+                    unitName = "كيلو",
+                    conversionFactor = 1.0,
+                    barcode = "POTATO-KG",
+                    costPrice = 200.0,
+                    sellingPrice = 250.0,
+                    isBaseUnit = true
+                )
+            )
+
+            val zucchiniId = productDao.insertProduct(
+                ProductEntity(
+                    code = "PROD-ZUCCHINI",
+                    name = "كوسة",
+                    englishName = "Zucchini",
+                    category = "خضار وفواكه",
+                    isWeighted = true,
+                    isActive = true
+                )
+            )
+            productDao.insertUnit(
+                ProductUnitEntity(
+                    productId = zucchiniId,
+                    unitName = "كيلو",
+                    conversionFactor = 1.0,
+                    barcode = "ZUCCHINI-KG",
+                    costPrice = 200.0,
+                    sellingPrice = 250.0,
+                    isBaseUnit = true
+                )
+            )
+
+            // 8. إضافة مجموعة البيع بالقيمة ("خضار مشكل") وربط الأصناف الثلاثة بها
+            val stockGroupDao = db.stockGroupDao()
+            val groupId = stockGroupDao.insertGroup(
+                StockGroupEntity(
+                    name = "خضار مشكل",
+                    code = "GRP-PRODUCE",
+                    description = "مجموعة البيع بالقيمة للخضار المشكل",
+                    isActive = true
+                )
+            )
+
+            stockGroupDao.insertGroupItems(
+                listOf(
+                    StockGroupItemEntity(
+                        groupId = groupId,
+                        productId = tomatoId,
+                        productName = "طماطم",
+                        unitSellingPrice = 250.0
+                    ),
+                    StockGroupItemEntity(
+                        groupId = groupId,
+                        productId = potatoId,
+                        productName = "بطاطس",
+                        unitSellingPrice = 250.0
+                    ),
+                    StockGroupItemEntity(
+                        groupId = groupId,
+                        productId = zucchiniId,
+                        productName = "كوسة",
+                        unitSellingPrice = 250.0
+                    )
+                )
+            )
         }
     }
 }

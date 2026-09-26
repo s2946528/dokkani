@@ -3,6 +3,7 @@ package com.example.dokkani.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -33,6 +34,8 @@ import com.example.dokkani.data.local.entities.StockGroupAuditEntity
 import com.example.dokkani.data.local.entities.StockGroupEntity
 import com.example.dokkani.data.local.entities.StockGroupWithDetails
 import com.example.dokkani.data.local.entities.CostValuationMethod
+import com.example.dokkani.ui.components.NumericOutlinedTextField
+import com.example.dokkani.util.safeToDouble
 import com.example.dokkani.data.local.entities.ShortageSettlementEntity
 import com.example.dokkani.data.local.entities.CostCenterEntity
 import java.text.SimpleDateFormat
@@ -48,6 +51,7 @@ fun ValueSellingManagementScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+    val isDark = isSystemInDarkTheme()
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Scaffold(
@@ -56,7 +60,7 @@ fun ValueSellingManagementScreen(
                     title = {
                         Column {
                             Text("إدارة البيع بالقيمة والمجموعات المخزنية", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("التحكم الكامل بالمجموعات والجرد الدوري", fontSize = 11.sp, color = Color.LightGray)
+                            Text("التحكم الكامل بالمجموعات والجرد الدوري", fontSize = 11.sp, color = if (isDark) Color(0xFFCBD5E1) else Color.LightGray)
                         }
                     },
                     navigationIcon = {
@@ -65,7 +69,7 @@ fun ValueSellingManagementScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF133E32),
+                        containerColor = if (isDark) Color(0xFF0F291E) else Color(0xFF133E32),
                         titleContentColor = Color.White
                     ),
                     actions = {
@@ -79,7 +83,7 @@ fun ValueSellingManagementScreen(
                 uiState.feedbackMessage?.let { msg ->
                     Snackbar(
                         modifier = Modifier.padding(16.dp),
-                        containerColor = if (uiState.isErrorFeedback) MaterialTheme.colorScheme.errorContainer else Color(0xFF1B5E20),
+                        containerColor = if (uiState.isErrorFeedback) MaterialTheme.colorScheme.errorContainer else (if (isDark) Color(0xFF16A34A) else Color(0xFF1B5E20)),
                         contentColor = if (uiState.isErrorFeedback) MaterialTheme.colorScheme.onErrorContainer else Color.White,
                         action = {
                             TextButton(onClick = { viewModel.dismissFeedback() }) {
@@ -100,7 +104,7 @@ fun ValueSellingManagementScreen(
             ) {
                 // شريط اختيار المجموعة المخزنية النشطة
                 Surface(
-                    color = Color(0xFF1B4D3E),
+                    color = if (isDark) Color(0xFF14382B) else Color(0xFF1B4D3E),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -112,7 +116,7 @@ fun ValueSellingManagementScreen(
                             Text("المجموعات المخزنية المسجلة (${uiState.groupsWithDetails.size}):", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             Button(
                                 onClick = { viewModel.openAddGroupDialog() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF2E7D32)),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                 modifier = Modifier.height(30.dp)
                             ) {
@@ -126,6 +130,7 @@ fun ValueSellingManagementScreen(
 
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             items(uiState.groupsWithDetails) { details ->
@@ -137,13 +142,14 @@ fun ValueSellingManagementScreen(
                                         Text(
                                             text = "${details.group.name} (${details.items.size} أصناف)",
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 12.sp
+                                            fontSize = 12.sp,
+                                            softWrap = false
                                         )
                                     },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFF81C784),
-                                        selectedLabelColor = Color(0xFF003300),
-                                        containerColor = Color.White.copy(alpha = 0.15f),
+                                        selectedContainerColor = if (isDark) Color(0xFF22C55E) else Color(0xFF81C784),
+                                        selectedLabelColor = if (isDark) Color(0xFF052E16) else Color(0xFF003300),
+                                        containerColor = Color.White.copy(alpha = if (isDark) 0.12f else 0.15f),
                                         labelColor = Color.White
                                     )
                                 )
@@ -292,6 +298,7 @@ private fun GroupsAndItemsView(
     viewModel: ValueSellingViewModel
 ) {
     val currentDetails = uiState.selectedGroupDetails
+    val isDark = isSystemInDarkTheme()
 
     if (currentDetails == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -313,6 +320,7 @@ private fun GroupsAndItemsView(
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -323,7 +331,7 @@ private fun GroupsAndItemsView(
                     ) {
                         Column {
                             Text(currentDetails.group.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("الكود: ${currentDetails.group.code} | التصنيف: ${currentDetails.group.category}", fontSize = 11.sp, color = Color.Gray)
+                            Text("الكود: ${currentDetails.group.code}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
 
                         Row {
@@ -331,7 +339,7 @@ private fun GroupsAndItemsView(
                                 Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = MaterialTheme.colorScheme.primary)
                             }
                             IconButton(onClick = { viewModel.checkAndDeleteGroup(currentDetails.group) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "حذف آمن", tint = Color.Red)
+                                Icon(Icons.Default.Delete, contentDescription = "حذف آمن", tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -339,13 +347,13 @@ private fun GroupsAndItemsView(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("طريقة تقييم التكلفة: ${currentDetails.group.costMethod.labelArabic}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1B5E20))
+                        Text("طريقة تقييم التكلفة: ${uiState.auditCostMethod.labelArabic}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
                         Text("عدد الأصناف: ${currentDetails.items.size}", fontSize = 12.sp)
                     }
 
                     if (currentDetails.group.description.isNotBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("الوصف: ${currentDetails.group.description}", fontSize = 11.sp, color = Color.DarkGray)
+                        Text("الوصف: ${currentDetails.group.description}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -354,12 +362,12 @@ private fun GroupsAndItemsView(
         // إضافة صنف جديد للمجموعة محصور حصرياً بقائمة الأصناف المسجلة بقاعدة البيانات
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8E9)),
-                border = BorderStroke(1.dp, Color(0xFFA5D6A7)),
+                colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF122C1F) else Color(0xFFF1F8E9)),
+                border = BorderStroke(1.dp, if (isDark) Color(0xFF23583C) else Color(0xFFA5D6A7)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("اختيار صنف مكون من قاعدة البيانات الفعليّة للمجموعة:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1B5E20))
+                    Text("اختيار صنف مكون من قاعدة البيانات الفعليّة للمجموعة:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -368,7 +376,7 @@ private fun GroupsAndItemsView(
                                 onClick = { productDropdownExpanded = true },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, Color(0xFF1B5E20))
+                                border = BorderStroke(1.dp, if (isDark) Color(0xFF2E6B48) else Color(0xFF1B5E20))
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -379,9 +387,9 @@ private fun GroupsAndItemsView(
                                         text = selectedProduct?.product?.name ?: "اضغط لاختيار صنف مسجل بالقاعدة...",
                                         fontWeight = if (selectedProduct != null) FontWeight.Bold else FontWeight.Normal,
                                         fontSize = 12.sp,
-                                        color = if (selectedProduct != null) Color(0xFF1B5E20) else Color.Gray
+                                        color = if (selectedProduct != null) (if (isDark) Color(0xFF86EFAC) else Color(0xFF1B5E20)) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color(0xFF1B5E20))
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
                                 }
                             }
 
@@ -405,7 +413,7 @@ private fun GroupsAndItemsView(
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Text(pw.product.name, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                                    Text("${pw.product.category} | %.2f %s".format(pw.units.firstOrNull()?.sellingPrice ?: 0.0, uiState.currencySymbol), fontSize = 11.sp, color = Color(0xFF2E7D32))
+                                                    Text("${pw.product.category} | %.2f %s".format(pw.units.firstOrNull()?.sellingPrice ?: 0.0, uiState.currencySymbol), fontSize = 11.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF2E7D32))
                                                 }
                                             },
                                             onClick = {
@@ -423,11 +431,10 @@ private fun GroupsAndItemsView(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            OutlinedTextField(
+                            NumericOutlinedTextField(
                                 value = newItemRatio,
                                 onValueChange = { newItemRatio = it },
                                 label = { Text("معامل القيمة النسبية") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -436,19 +443,18 @@ private fun GroupsAndItemsView(
                                 onClick = {
                                     val sel = selectedProduct
                                     if (sel != null) {
-                                        val r = newItemRatio.toDoubleOrNull() ?: 1.0
+                                        val r = newItemRatio.safeToDouble(1.0)
                                         viewModel.addItemToGroup(
                                             groupId = currentDetails.group.id,
                                             productId = sel.product.id,
-                                            productName = sel.product.name,
-                                            ratio = r
+                                            unitPrice = r
                                         )
                                         selectedProduct = null
                                         newItemRatio = "1.0"
                                     }
                                 },
                                 enabled = selectedProduct != null,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+                                colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF1B5E20))
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null)
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -468,6 +474,7 @@ private fun GroupsAndItemsView(
         items(currentDetails.items) { item ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -478,9 +485,9 @@ private fun GroupsAndItemsView(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(item.productName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text(
-                            text = "معامل القيمة: ${item.defaultRatio} ${if (item.productId != null) "| مرسخ بقاعدة البيانات (ID: ${item.productId})" else ""}",
+                            text = "سعر البيع المقترح: ${item.unitSellingPrice} ${if (item.productId != null) "| مرسخ بقاعدة البيانات (ID: ${item.productId})" else ""}",
                             fontSize = 11.sp,
-                            color = Color.Gray
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -490,16 +497,16 @@ private fun GroupsAndItemsView(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFFE8F5E9)
+                            color = if (isDark) Color(0xFF163E2A) else Color(0xFFE8F5E9)
                         ) {
-                            Text("مرتبط ✓", color = Color(0xFF1B5E20), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                            Text("مرتبط ✓", color = if (isDark) Color(0xFF86EFAC) else Color(0xFF1B5E20), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                         }
 
                         IconButton(
                             onClick = { viewModel.deleteGroupItem(item.id) },
                             modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "حذف الصنف", tint = Color.Red, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Delete, contentDescription = "حذف الصنف", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -520,6 +527,7 @@ private fun GroupAuditCogsView(
 ) {
     val currentDetails = uiState.selectedGroupDetails ?: return
     val isAdmin = currentUserRole == UserRole.ADMIN
+    val isDark = isSystemInDarkTheme()
 
     var editingAudit by remember { mutableStateOf<StockGroupAuditEntity?>(null) }
     var deletingAuditId by remember { mutableStateOf<Long?>(null) }
@@ -533,7 +541,10 @@ private fun GroupAuditCogsView(
         // ==========================================
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isDark) Color(0xFF132E21) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                ),
+                border = BorderStroke(1.dp, if (isDark) Color(0xFF23583C) else MaterialTheme.colorScheme.outlineVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -543,35 +554,61 @@ private fun GroupAuditCogsView(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Category, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Category, contentDescription = null, tint = if (isDark) Color(0xFF4ADE80) else MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("الخطوة 1: اختيار المجموعة المستهدفة بالجرد الدوري", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                text = "الخطوة 1: اختيار المجموعة المستهدفة بالجرد الدوري",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                softWrap = true
+                            )
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primary
+                            color = if (isDark) Color(0xFF16A34A) else MaterialTheme.colorScheme.primary
                         ) {
                             Text(
                                 text = currentDetails.group.name,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         items(uiState.groupsWithDetails) { gDetails ->
                             val isSelected = gDetails.group.id == uiState.selectedGroupId
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { viewModel.selectGroup(gDetails.group.id) },
-                                label = { Text("${gDetails.group.name} (${gDetails.items.size} أصناف)") },
+                                label = {
+                                    Text(
+                                        text = "${gDetails.group.name} (${gDetails.items.size} أصناف)",
+                                        softWrap = false,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = if (isDark) Color(0xFF22C55E) else Color(0xFF81C784),
+                                    selectedLabelColor = if (isDark) Color(0xFF052E16) else Color(0xFF003300)
+                                ),
                                 leadingIcon = if (isSelected) {
                                     { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp)) }
                                 } else null
@@ -588,6 +625,7 @@ private fun GroupAuditCogsView(
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -598,11 +636,21 @@ private fun GroupAuditCogsView(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Inventory2, contentDescription = null, tint = if (isDark) Color(0xFF4ADE80) else MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("الخطوة 2: أصناف المجموعة (${uiState.groupItemsAuditDetails.size}) والمخزون الفعلي", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                text = "الخطوة 2: أصناف المجموعة (${uiState.groupItemsAuditDetails.size}) والمخزون الفعلي",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                softWrap = true
+                            )
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         // اختيار طريقة التقييم
                         var menuExpanded by remember { mutableStateOf(false) }
@@ -610,8 +658,12 @@ private fun GroupAuditCogsView(
                             FilterChip(
                                 selected = true,
                                 onClick = { menuExpanded = true },
-                                label = { Text(uiState.auditCostMethod.labelArabic, fontSize = 11.sp) },
-                                leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                label = { Text(uiState.auditCostMethod.labelArabic, fontSize = 11.sp, softWrap = false) },
+                                leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(12.dp)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = if (isDark) Color(0xFF163E2A) else Color(0xFFE8F5E9),
+                                    selectedLabelColor = if (isDark) Color(0xFF86EFAC) else Color(0xFF1B5E20)
+                                )
                             )
                             DropdownMenu(
                                 expanded = menuExpanded,
@@ -634,23 +686,31 @@ private fun GroupAuditCogsView(
 
                     if (uiState.groupItemsAuditDetails.isEmpty()) {
                         Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            Text("لا توجد أصناف مرتبطة بهذة المجموعة حالياً. يرجى إضافة أصناف من تبويب 'المجموعات والأصناف'.", color = Color.Gray, fontSize = 12.sp)
+                            Text("لا توجد أصناف مرتبطة بهذة المجموعة حالياً. يرجى إضافة أصناف من تبويب 'المجموعات والأصناف'.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, textAlign = TextAlign.Center)
                         }
                     } else {
                         // جدول الأصناف التابعة للمجموعة
                         uiState.groupItemsAuditDetails.forEach { itemDetail ->
                             Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDark) 0.6f else 0.5f)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
+                                Column(modifier = Modifier.padding(12.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(itemDetail.productName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(
+                                            text = itemDetail.productName,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier.weight(1f, fill = false),
+                                            softWrap = true
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Surface(
                                             shape = RoundedCornerShape(6.dp),
                                             color = MaterialTheme.colorScheme.secondaryContainer
@@ -659,12 +719,14 @@ private fun GroupAuditCogsView(
                                                 text = "الوحدة: ${itemDetail.unitName} | العملة: ${itemDetail.currencySymbol}",
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                softWrap = false
                                             )
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
 
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -676,18 +738,19 @@ private fun GroupAuditCogsView(
                                             value = String.format(Locale.US, "%.1f", itemDetail.currentStockQty),
                                             onValueChange = {},
                                             readOnly = true,
-                                            label = { Text("مخزون الصنف (أول+مشتريات)") },
+                                            label = { Text("مخزون الصنف (أول+مشتريات)", fontSize = 11.sp, softWrap = true) },
+                                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.End),
                                             modifier = Modifier.weight(1f),
                                             shape = RoundedCornerShape(8.dp),
                                             singleLine = true
                                         )
 
-                                        // إدخال آخر المدة الفعلي للصنف
-                                        OutlinedTextField(
+                                         // إدخال آخر المدة الفعلي للصنف
+                                        NumericOutlinedTextField(
                                             value = itemDetail.endingActualQtyInput,
                                             onValueChange = { viewModel.updateItemEndingQty(itemDetail.itemId, it) },
-                                            label = { Text("آخر المدة الفعلي *") },
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            label = { Text("آخر المدة الفعلي *", fontSize = 11.sp, softWrap = true) },
+                                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.End),
                                             modifier = Modifier.weight(1f),
                                             shape = RoundedCornerShape(8.dp),
                                             singleLine = true
@@ -697,19 +760,156 @@ private fun GroupAuditCogsView(
                             }
                         }
                     }
+                }
+            }
+        }
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // إجمالي المبيعات بالقيمة
-                    OutlinedTextField(
-                        value = uiState.auditRecordedSalesRevenueInput,
-                        onValueChange = { viewModel.updateAuditInputs(recordedSalesRevenue = it) },
-                        label = { Text("إجمالي المبيعات بالقيمة المسجلة بالفواتير (${uiState.currencySymbol}) *") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        // ==========================================
+        // الخطوة الثالثة: سجل الفواتير المؤثرة وإجمالي المبيعات بالقيمة للمجموعة
+        // ==========================================
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        singleLine = true
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = if (isDark) Color(0xFF4ADE80) else MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "الخطوة 3: سجل فواتير بنود المجموعة واحتساب مبيعات القيمة",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                softWrap = true
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isDark) Color(0xFF163E2A) else MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = if (uiState.lastAuditTimestamp != null)
+                                    "منذ آخر جرد: ${dateFormat.format(Date(uiState.lastAuditTimestamp))}"
+                                else
+                                    "من بداية النظام (أول جرد)",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isDark) Color(0xFF86EFAC) else MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "يتم الفحص التلقائي لبنود الفواتير واستخراج القيم الخاصة بأصناف مجموعة '${currentDetails.group.name}' فقط خلال النطاق الزمني المحدد.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    // سجل فواتير بنود المجموعة
+                    if (uiState.groupInvoiceSummaries.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "لا توجد فواتير مبيعات سابقة تحتوي على أصناف هذة المجموعة بالفترة المحددة.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDark) 0.5f else 0.3f)),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                // رأس الجدول
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(if (isDark) Color(0xFF163E2A) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                        .padding(vertical = 6.dp, horizontal = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("رقم الفاتورة", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                                    Text("التاريخ والوقت", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1.3f), textAlign = TextAlign.Center)
+                                    Text("قيمة بنود المجموعة", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                }
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                                // صفوف الفواتير
+                                uiState.groupInvoiceSummaries.forEach { summary ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp, horizontal = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(summary.invoiceNumber, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                        Text(dateFormat.format(Date(summary.date)), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.3f), textAlign = TextAlign.Center)
+                                        Text("%.2f %s".format(summary.groupItemsTotal, uiState.currencySymbol), fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                    }
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // صف حقل المجموع وعدد الفواتير في أسفل السجل
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (isDark) Color(0xFF163E2A) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "المجموع من الفواتير (${uiState.groupInvoiceSummaries.size} فاتورة):",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = if (isDark) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Text(
+                                            text = "%.2f %s".format(uiState.groupInvoiceSummaries.sumOf { it.groupItemsTotal }, uiState.currencySymbol),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 13.sp,
+                                            color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -719,51 +919,110 @@ private fun GroupAuditCogsView(
         // ==========================================
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
-                border = BorderStroke(1.dp, Color(0xFF81C784)),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isDark) Color(0xFF10281C) else Color(0xFFF0FDF4)
+                ),
+                border = BorderStroke(1.dp, if (isDark) Color(0xFF1E4D35) else Color(0xFFBBF7D0)),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Calculate, contentDescription = null, tint = Color(0xFF1B5E20))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("الخطوة 4: مخرجات محرك التكلفة COGS ونتائج الجرد", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1B5E20))
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column {
-                            Text("كمية المباع COGS:", fontSize = 11.sp, color = Color.Gray)
-                            Text("%.1f كجم/وحدة".format(uiState.cogsCalculatedQty), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-
-                        Column {
-                            Text("تكلفة المباع (COGS):", fontSize = 11.sp, color = Color.Gray)
-                            Text("%.2f %s".format(uiState.cogsCalculatedCost, uiState.currencySymbol), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFFC62828))
-                        }
-
-                        Column {
-                            Text("صافي الربح المحقق:", fontSize = 11.sp, color = Color.Gray)
-                            Text("%.2f %s".format(uiState.netProfitCalculated, uiState.currencySymbol), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1B5E20))
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Calculate,
+                            contentDescription = null,
+                            tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "الخطوة 4: مخرجات محرك التكلفة COGS ونتائج الجرد بمركز التكلفة",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(
+                        color = if (isDark) Color(0xFF1E4D35) else Color(0xFFDCFCE7),
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+
+                    // العناصر مرتبة عمودياً تحت بعضها بتسلسل منظم ومريح للعين:
+                    // 1. كمية المباع (COGS)
+                    ResultOutputRow(
+                        label = "1. كمية المباع (COGS):",
+                        value = "%.1f كجم/وحدة".format(uiState.cogsCalculatedQty),
+                        valueColor = if (isDark) Color(0xFFF1F5F9) else Color(0xFF0F172A),
+                        isDark = isDark
+                    )
+
+                    // 2. إجمالي تكلفة المباع (COGS) بمركز التكلفة
+                    ResultOutputRow(
+                        label = "2. إجمالي تكلفة المباع (COGS) بمركز التكلفة:",
+                        value = "%.2f %s".format(uiState.cogsCalculatedCost, uiState.currencySymbol),
+                        valueColor = if (isDark) Color(0xFFFCA5A5) else Color(0xFFDC2626),
+                        isDark = isDark
+                    )
+
+                    // 3. سعر البيع / إجمالي المبيعات بالقيمة
+                    val step3SalesValue = if (uiState.groupInvoiceSummaries.isNotEmpty()) {
+                        uiState.groupInvoiceSummaries.sumOf { it.groupItemsTotal }
+                    } else {
+                        uiState.auditRecordedSalesRevenueInput.toDoubleOrNull() ?: 0.0
+                    }
+                    ResultOutputRow(
+                        label = "3. سعر البيع / إجمالي المبيعات بالقيمة:",
+                        value = "%.2f %s".format(step3SalesValue, uiState.currencySymbol),
+                        valueColor = if (isDark) Color(0xFF86EFAC) else Color(0xFF16A34A),
+                        isDark = isDark
+                    )
+
+                    // 4. صافي الربح المحقق بمركز التكلفة
+                    ResultOutputRow(
+                        label = "4. صافي الربح المحقق بمركز التكلفة:",
+                        value = "%.2f %s".format(uiState.netProfitCalculated, uiState.currencySymbol),
+                        valueColor = if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D),
+                        isHighlight = true,
+                        isDark = isDark
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Surface(
+                        color = if (isDark) Color(0xFF183B2A) else Color(0xFFDCFCE7),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "معادلة صافي الربح = سعر البيع / إجمالي المبيعات بالقيمة - إجمالي تكلفة المباع (COGS) بمركز التكلفة",
+                            fontSize = 11.sp,
+                            color = if (isDark) Color(0xFF86EFAC) else Color(0xFF166534),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
                         onClick = { viewModel.saveAudit() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF15803D)),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth().height(46.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = null)
+                        Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("حفظ وتسجيل يومية الجرد الدوري", fontWeight = FontWeight.Bold)
+                        Text("حفظ وتسجيل يومية الجرد الدوري", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
                     }
                 }
             }
@@ -785,7 +1044,7 @@ private fun GroupAuditCogsView(
                 )
 
                 if (!isAdmin) {
-                    Text("عرض فقط (صلاحية مدير النظام مطلوبة للتحكم)", fontSize = 11.sp, color = Color.Gray)
+                    Text("عرض فقط (صلاحية مدير النظام مطلوبة للتحكم)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -793,7 +1052,7 @@ private fun GroupAuditCogsView(
         if (currentDetails.audits.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text("لا توجد سجلات جرد دوري مسجلة لهذه المجموعة حتى الآن", color = Color.Gray)
+                    Text("لا توجد سجلات جرد دوري مسجلة لهذه المجموعة حتى الآن", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -812,7 +1071,7 @@ private fun GroupAuditCogsView(
                         ) {
                             Column {
                                 Text("تاريخ الجرد: ${dateFormat.format(Date(audit.auditDate))}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("طريقة التقييم: ${audit.costValuationMethod.labelArabic}", fontSize = 11.sp, color = Color(0xFF1B5E20))
+                                Text("القائم بالجرد: ${audit.conductedBy}", fontSize = 11.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
                             }
 
                             // أيقونات التعديل والحذف (مدير النظام فقط)
@@ -841,9 +1100,9 @@ private fun GroupAuditCogsView(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("COGS: %.2f %s".format(audit.cogsCost, uiState.currencySymbol), fontSize = 12.sp, color = Color.Red, fontWeight = FontWeight.Bold)
-                            Text("المبيعات: %.2f %s".format(audit.totalSalesRevenue, uiState.currencySymbol), fontSize = 12.sp)
-                            Text("صافي الربح: %.2f %s".format(audit.netProfit, uiState.currencySymbol), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+                            Text("COGS: %.2f %s".format(audit.totalCogsCost, uiState.currencySymbol), fontSize = 12.sp, color = if (isDark) Color(0xFFF87171) else Color.Red, fontWeight = FontWeight.Bold)
+                            Text("المبيعات: %.2f %s".format(audit.totalValueSalesAmount, uiState.currencySymbol), fontSize = 12.sp)
+                            Text("صافي الربح: %.2f %s".format(audit.netProfit, uiState.currencySymbol), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
                         }
                     }
                 }
@@ -853,30 +1112,22 @@ private fun GroupAuditCogsView(
 
     // نافذة تعديل سجل الجرد
     editingAudit?.let { audit ->
-        var editSales by remember { mutableStateOf(audit.totalSalesRevenue.toString()) }
-        var editEndingQty by remember { mutableStateOf(audit.endingActualQtyKg.toString()) }
-        var editWasteQty by remember { mutableStateOf(audit.wasteQtyKg.toString()) }
+        var editSales by remember { mutableStateOf(audit.totalValueSalesAmount.toString()) }
+        var editEndingQty by remember { mutableStateOf(audit.actualEndingQty.toString()) }
 
         AlertDialog(
             onDismissRequest = { editingAudit = null },
             title = { Text("تعديل سجل الجرد الدوري", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
+                    NumericOutlinedTextField(
                         value = editEndingQty,
                         onValueChange = { editEndingQty = it },
-                        label = { Text("آخر المدة الفعلي (كجم)") },
+                        label = { Text("آخر المدة الفعلي") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                    OutlinedTextField(
-                        value = editWasteQty,
-                        onValueChange = { editWasteQty = it },
-                        label = { Text("التالف الهالك (كجم)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
+                    NumericOutlinedTextField(
                         value = editSales,
                         onValueChange = { editSales = it },
                         label = { Text("إجمالي المبيعات بالقيمة") },
@@ -888,25 +1139,11 @@ private fun GroupAuditCogsView(
             confirmButton = {
                 Button(
                     onClick = {
-                        val end = editEndingQty.toDoubleOrNull() ?: audit.endingActualQtyKg
-                        val waste = editWasteQty.toDoubleOrNull() ?: audit.wasteQtyKg
-                        val rev = editSales.toDoubleOrNull() ?: audit.totalSalesRevenue
-
-                        val totalAvail = audit.beginningQtyKg + audit.newPurchasesQtyKg
-                        val cogsQty = (totalAvail - end - waste).coerceAtLeast(0.0)
-                        val unitCost = if (totalAvail > 0) (audit.beginningCost + audit.newPurchasesCost) / totalAvail else 0.0
-                        val cogsCost = cogsQty * unitCost
-                        val netProfit = rev - cogsCost
-
-                        val updated = audit.copy(
-                            endingActualQtyKg = end,
-                            wasteQtyKg = waste,
-                            totalSalesRevenue = rev,
-                            cogsQtyKg = cogsQty,
-                            cogsCost = cogsCost,
-                            netProfit = netProfit
-                        )
-                        viewModel.updateAuditRecord(updated)
+                        val end = editEndingQty.safeToDouble(audit.actualEndingQty)
+                        val rev = editSales.safeToDouble(audit.totalValueSalesAmount)
+                        val cogsQty = (audit.beginningStockQty + audit.purchasesQty - end).coerceAtLeast(0.0)
+                        val cogsCost = audit.totalCogsCost
+                        viewModel.updateAuditRecord(audit, end, 0.0, rev, cogsQty, cogsCost)
                         editingAudit = null
                     },
                     shape = RoundedCornerShape(8.dp)
@@ -1045,6 +1282,7 @@ fun ShortageSettlementView(
     currentUserRole: UserRole,
     dateFormat: SimpleDateFormat
 ) {
+    val isDark = isSystemInDarkTheme()
     var selectedCcId by remember { mutableStateOf<Long?>(null) }
     var selectedStatus by remember { mutableStateOf<String?>(null) }
 
@@ -1061,7 +1299,7 @@ fun ShortageSettlementView(
         // 1. ترويسة وبانر الأمان والتوجيه المحاسبي
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1B4D3E)),
+                colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF112E24) else Color(0xFF1B4D3E)),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -1088,7 +1326,7 @@ fun ShortageSettlementView(
 
                     Text(
                         text = "• العجز المخزني يُحسب حصرياً من شاشة الجرد الدوري (الدفتري - الفعلي).\n• التلف والهادر معزول تماماً ومسجل كمصروف مستقل سابقاً لمنع ازدواج الحسابات.\n• تسوية العجز تُسجل كـ 'مبيعات بالقيمة مقفلة ومسددة' تدخل الخزينة مباشرة.",
-                        color = Color(0xFFE8F5E9),
+                        color = if (isDark) Color(0xFFD1E7DD) else Color(0xFFE8F5E9),
                         fontSize = 11.sp,
                         lineHeight = 16.sp
                     )
@@ -1104,66 +1342,69 @@ fun ShortageSettlementView(
             ) {
                 Card(
                     modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF2A2010) else Color(0xFFFFF3E0)),
+                    border = BorderStroke(1.dp, if (isDark) Color(0xFF6B4F1B) else Color(0xFFFFB74D)),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text("العجز المعلق (غير مقفل)", fontSize = 11.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
+                        Text("العجز المعلق (غير مقفل)", fontSize = 11.sp, color = if (isDark) Color(0xFFFB923C) else Color(0xFFE65100), fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "%.1f وحدة".format(uiState.totalPendingShortageQty),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFBF360C)
+                            color = if (isDark) Color(0xFFFF8A65) else Color(0xFFBF360C)
                         )
                         Text(
                             text = "تكلفته: %.1f %s".format(uiState.totalPendingShortageCost, uiState.currencySymbol),
                             fontSize = 10.sp,
-                            color = Color(0xFFD84315)
+                            color = if (isDark) Color(0xFFFFAB91) else Color(0xFFD84315)
                         )
                     }
                 }
 
                 Card(
                     modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EAF6)),
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF1B2238) else Color(0xFFE8EAF6)),
+                    border = BorderStroke(1.dp, if (isDark) Color(0xFF3B487A) else Color(0xFFC5CAE9)),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text("مبيعات بالقيمة مستحقة", fontSize = 11.sp, color = Color(0xFF1A237E), fontWeight = FontWeight.Bold)
+                        Text("مبيعات بالقيمة مستحقة", fontSize = 11.sp, color = if (isDark) Color(0xFF818CF8) else Color(0xFF1A237E), fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "%.2f %s".format(uiState.totalPendingValueSalesRevenue, uiState.currencySymbol),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF283593)
+                            color = if (isDark) Color(0xFFA5B4FC) else Color(0xFF283593)
                         )
                         Text(
                             text = "بانتظار تأكيد المدير",
                             fontSize = 10.sp,
-                            color = Color(0xFF3F51B5)
+                            color = if (isDark) Color(0xFFC7D2FE) else Color(0xFF3F51B5)
                         )
                     }
                 }
 
                 Card(
                     modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF122C1F) else Color(0xFFE8F5E9)),
+                    border = BorderStroke(1.dp, if (isDark) Color(0xFF23583C) else Color(0xFFA5D6A7)),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text("مبيعات بالقيمة مسددة", fontSize = 11.sp, color = Color(0xFF1B5E20), fontWeight = FontWeight.Bold)
+                        Text("مبيعات بالقيمة مسددة", fontSize = 11.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20), fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "%.2f %s".format(uiState.totalSettledValueSalesRevenue, uiState.currencySymbol),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32)
+                            color = if (isDark) Color(0xFF86EFAC) else Color(0xFF2E7D32)
                         )
                         Text(
                             text = "دخلت الخزينة ومقفلة",
                             fontSize = 10.sp,
-                            color = Color(0xFF388E3C)
+                            color = if (isDark) Color(0xFFA7F3D0) else Color(0xFF388E3C)
                         )
                     }
                 }
@@ -1174,6 +1415,7 @@ fun ShortageSettlementView(
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -1185,16 +1427,15 @@ fun ShortageSettlementView(
                     ) {
                         Button(
                             onClick = {
-                                val ccId = selectedCcId ?: 1L
-                                viewModel.calculateAndImportShortageFromAudit(ccId)
+                                viewModel.calculateAndImportShortageFromAudit()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF1B5E20)),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             modifier = Modifier.height(36.dp)
                         ) {
-                            Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Calculate, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("احتساب العجز من الجرد الحالي", fontSize = 11.sp)
+                            Text("احتساب العجز من الجرد الحالي", fontSize = 11.sp, color = Color.White)
                         }
 
                         OutlinedButton(
@@ -1283,10 +1524,10 @@ fun ShortageSettlementView(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.CheckCircleOutline, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.CheckCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("لا توجد قيود عجز مخزني مسجلة في هذا الفلتر حالياً.", color = Color.Gray, fontSize = 13.sp)
-                        Text("اضغط 'احتساب العجز من الجرد الحالي' لرصد أي نقص مخزني من الجرد الدوري.", color = Color.Gray, fontSize = 11.sp)
+                        Text("لا توجد قيود عجز مخزني مسجلة في هذا الفلتر حالياً.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                        Text("اضغط 'احتساب العجز من الجرد الحالي' لرصد أي نقص مخزني من الجرد الدوري.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                     }
                 }
             }
@@ -1299,10 +1540,10 @@ fun ShortageSettlementView(
                     shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = if (isSettled) Color(0xFFA5D6A7) else Color(0xFFFFCC80)
+                        color = if (isSettled) (if (isDark) Color(0xFF23583C) else Color(0xFFA5D6A7)) else (if (isDark) Color(0xFF6B4F1B) else Color(0xFFFFCC80))
                     ),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isSettled) Color(0xFFF1F8E9) else Color(0xFFFFF8E1)
+                        containerColor = if (isSettled) (if (isDark) Color(0xFF122C1F) else Color(0xFFF1F8E9)) else (if (isDark) Color(0xFF2A2111) else Color(0xFFFFF8E1))
                     )
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -1314,9 +1555,9 @@ fun ShortageSettlementView(
                             Column {
                                 Text(shortage.productName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Business, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(12.dp))
+                                    Icon(Icons.Default.Business, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
                                     Spacer(modifier = Modifier.width(2.dp))
-                                    Text(shortage.costCenterName, fontSize = 11.sp, color = Color.DarkGray)
+                                    Text(shortage.costCenterName, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
 
@@ -1345,7 +1586,7 @@ fun ShortageSettlementView(
                             }
                         }
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                         // تفاصيل الكميات والأسعار المتبقية
                         Row(
@@ -1353,24 +1594,24 @@ fun ShortageSettlementView(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text("الدفتري: %.1f | الفعلي: %.1f".format(shortage.bookQuantity, shortage.actualQuantity), fontSize = 11.sp, color = Color.Gray)
-                                Text("كمية العجز: %.1f وحدة".format(shortage.shortageQuantity), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD84315))
+                                Text("الدفتري: %.1f | الفعلي: %.1f".format(shortage.bookQuantity, shortage.actualQuantity), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("كمية العجز: %.1f وحدة".format(shortage.shortageQuantity), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isDark) Color(0xFFFF7043) else Color(0xFFD84315))
                             }
 
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("سعر البيع: %.1f %s".format(shortage.unitSellingPrice, uiState.currencySymbol), fontSize = 11.sp, color = Color.Gray)
+                                Text("سعر البيع: %.1f %s".format(shortage.unitSellingPrice, uiState.currencySymbol), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
                                     text = "إيراد البيع بالقيمة: %.2f %s".format(shortage.totalValueSalesAmount, uiState.currencySymbol),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1B5E20)
+                                    color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20)
                                 )
                             }
                         }
 
                         if (shortage.notes.isNotBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("ملاحظات: ${shortage.notes}", fontSize = 11.sp, color = Color.DarkGray)
+                            Text("ملاحظات: ${shortage.notes}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
                         }
 
                         if (isSettled && shortage.settledAt != null) {
@@ -1378,7 +1619,7 @@ fun ShortageSettlementView(
                             Text(
                                 text = "تمت التسوية بتاريخ: ${dateFormat.format(Date(shortage.settledAt))} بواسطة (${shortage.settledBy ?: "المدير"})",
                                 fontSize = 10.sp,
-                                color = Color(0xFF2E7D32),
+                                color = if (isDark) Color(0xFF86EFAC) else Color(0xFF2E7D32),
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1395,18 +1636,18 @@ fun ShortageSettlementView(
                                     onClick = { viewModel.deleteShortageRecord(shortage.id) },
                                     modifier = Modifier.size(32.dp)
                                 ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "حذف القيد", tint = Color.Red, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Delete, contentDescription = "حذف القيد", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                                 }
 
                                 Button(
                                     onClick = { viewModel.openSettlementConfirmDialog(shortage) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF1B5E20)),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                     modifier = Modifier.height(34.dp)
                                 ) {
-                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("تأكيد استلام القيمة وإقفال الدفاتر", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("تأكيد استلام القيمة وإقفال الدفاتر", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
                             }
                         }
@@ -1428,11 +1669,13 @@ fun ShortageSettlementConfirmDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    val isDark = isSystemInDarkTheme()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MonetizationOn, contentDescription = null, tint = Color(0xFF1B5E20))
+                Icon(Icons.Default.MonetizationOn, contentDescription = null, tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("تأكيد تسوية العجز وتسجيل المبيعات بالقيمة", fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
@@ -1443,19 +1686,20 @@ fun ShortageSettlementConfirmDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF122C1F) else Color(0xFFE8F5E9)),
+                    border = BorderStroke(1.dp, if (isDark) Color(0xFF23583C) else Color(0xFF81C784)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text("الصنف: ${shortage.productName}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text("مركز التكلفة: ${shortage.costCenterName}", fontSize = 11.sp)
-                        Text("كمية العجز الناقصة: %.1f وحدة".format(shortage.shortageQuantity), fontSize = 12.sp, color = Color(0xFFD84315))
+                        Text("كمية العجز الناقصة: %.1f وحدة".format(shortage.shortageQuantity), fontSize = 12.sp, color = if (isDark) Color(0xFFFF7043) else Color(0xFFD84315))
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "المبلغ الإجمالي المستحق للدخول للخزينة: %.2f %s".format(shortage.totalValueSalesAmount, uiState.currencySymbol),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1B5E20)
+                            color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20)
                         )
                     }
                 }
@@ -1466,7 +1710,7 @@ fun ShortageSettlementConfirmDialog(
                         uiState.currencySymbol
                     ),
                     fontSize = 11.sp,
-                    color = Color.DarkGray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 15.sp
                 )
 
@@ -1484,12 +1728,12 @@ fun ShortageSettlementConfirmDialog(
             Button(
                 onClick = onConfirm,
                 enabled = !uiState.isSettlingShortage,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+                colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF1B5E20))
             ) {
                 if (uiState.isSettlingShortage) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
                 } else {
-                    Text("تأكيد واستلام القيمة (إقفال مسدد)")
+                    Text("تأكيد واستلام القيمة (إقفال مسدد)", color = Color.White)
                 }
             }
         },
@@ -1516,6 +1760,7 @@ fun ManualShortageAddDialog(
     var costStr by remember { mutableStateOf("10.0") }
     var priceStr by remember { mutableStateOf("15.0") }
     var notesStr by remember { mutableStateOf("") }
+    val isDark = isSystemInDarkTheme()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1545,19 +1790,17 @@ fun ManualShortageAddDialog(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    NumericOutlinedTextField(
                         value = qtyStr,
                         onValueChange = { qtyStr = it },
                         label = { Text("كمية العجز") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
-                    OutlinedTextField(
+                    NumericOutlinedTextField(
                         value = priceStr,
                         onValueChange = { priceStr = it },
                         label = { Text("سعر البيع") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
@@ -1575,14 +1818,14 @@ fun ManualShortageAddDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val qty = qtyStr.toDoubleOrNull() ?: 0.0
-                    val cost = costStr.toDoubleOrNull() ?: 0.0
-                    val price = priceStr.toDoubleOrNull() ?: 0.0
+                    val qty = qtyStr.safeToDouble()
+                    val cost = costStr.safeToDouble()
+                    val price = priceStr.safeToDouble()
                     onSave(prodName, selectedCcId, qty, cost, price, notesStr)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+                colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF1B5E20))
             ) {
-                Text("حفظ القيد")
+                Text("حفظ القيد", color = Color.White)
             }
         },
         dismissButton = {
@@ -1591,5 +1834,56 @@ fun ManualShortageAddDialog(
             }
         }
     )
+}
+
+@Composable
+private fun ResultOutputRow(
+    label: String,
+    value: String,
+    valueColor: Color,
+    isDark: Boolean,
+    isHighlight: Boolean = false
+) {
+    Surface(
+        color = if (isHighlight) {
+            if (isDark) Color(0xFF163E2A) else Color(0xFFDCFCE7)
+        } else {
+            if (isDark) Color(0xFF162E22) else Color(0xFFF8FAFC)
+        },
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(
+            1.dp,
+            if (isHighlight) {
+                if (isDark) Color(0xFF22C55E) else Color(0xFF86EFAC)
+            } else {
+                if (isDark) Color(0xFF1E4D35) else Color(0xFFE2E8F0)
+            }
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = if (isHighlight) FontWeight.Bold else FontWeight.Medium,
+                color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF334155),
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = value,
+                fontSize = if (isHighlight) 14.sp else 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = valueColor,
+                textAlign = TextAlign.End
+            )
+        }
+    }
 }
 

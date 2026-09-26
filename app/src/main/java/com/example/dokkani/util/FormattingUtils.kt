@@ -79,3 +79,34 @@ fun Float.formatAmount(showDecimals: Boolean = false): String {
 fun Int.formatAmount(showDecimals: Boolean = false): String {
     return NumberFormatter.formatNumber(this.toDouble(), showDecimals)
 }
+
+/**
+ * تحويل نص رقمي إلى Double بأمان تام مع تحويل الأرقام العربية إلى إنجليزية والتعامل مع الفواصل العشرية.
+ * يمنع استثناءات NumberFormatException ويعيد 0.0 أو القيمة الافتراضية.
+ */
+fun String?.safeToDouble(default: Double = 0.0): Double {
+    if (this.isNullOrBlank()) return default
+    val clean = this.trim()
+        .replace(',', '.')
+        .replace('٫', '.')
+        .replace('٠', '0')
+        .replace('١', '1')
+        .replace('٢', '2')
+        .replace('٣', '3')
+        .replace('٤', '4')
+        .replace('٥', '5')
+        .replace('٦', '6')
+        .replace('٧', '7')
+        .replace('٨', '8')
+        .replace('٩', '9')
+    return clean.toDoubleOrNull() ?: default
+}
+
+/**
+ * تحويل نص رقمي إلى Int بأمان تام.
+ */
+fun String?.safeToInt(default: Int = 0): Int {
+    if (this.isNullOrBlank()) return default
+    return this.safeToDouble(default.toDouble()).toInt()
+}
+

@@ -1,19 +1,13 @@
 package com.example.dokkani.data.local.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class VoucherType(val labelArabic: String) {
-    RECEIPT("سند قبض"), // قبض نقدية من عميل
-    PAYMENT("سند صرف")  // صرف نقدية لمورد
-}
-
 /**
- * جدول سندات القبض والدفع (Payment Vouchers)
- * يسجل عمليات سداد الديون والمقبوضات من عملاء الدفتر (الشكك)
- * أو الدفعات المسددة للموردين
+ * جدول سندات القبض والصرف (Payment & Receipt Vouchers Table)
  */
 @Entity(
     tableName = "payment_vouchers",
@@ -22,30 +16,33 @@ enum class VoucherType(val labelArabic: String) {
             entity = PartyEntity::class,
             parentColumns = ["id"],
             childColumns = ["partyId"],
-            onDelete = ForeignKey.CASCADE
+            onDelete = ForeignKey.SET_NULL
         )
     ],
     indices = [
         Index(value = ["voucherNumber"], unique = true),
         Index(value = ["partyId"]),
-        Index(value = ["date"])
+        Index(value = ["voucherType"]),
+        Index(value = ["date"]),
+        Index(value = ["cost_center_id"])
     ]
 )
 data class PaymentVoucherEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val voucherNumber: String,                  // رقم السند التسلسلي (مثل: RCV-2026-0001 أو PAY-2026-0001)
-    val partyId: Long,                          // العميل أو المورد
-    val amount: Double,                         // المبلغ المسدد
-    val voucherType: VoucherType = VoucherType.RECEIPT, // نوع السند (سند قبض / سند صرف)
-    val paymentMethod: PaymentMethod = PaymentMethod.CASH, // طريقة السداد: نقداً، شبكة، تحويل بنكي، محفظة
-    val paymentAccountId: Long? = null,         // معرّف الحساب المالي (بنك/محفظة/شبكة)
-    val transactionRef: String = "",             // رقم العملية / المرجع / رقم الحوالة
-    val receiptImagePath: String? = null,        // مسار/رابط صورة إشعار السداد أو الحوالة
-    val date: Long = System.currentTimeMillis(),// تاريخ ووقت السداد
-    val receivedBy: String = "كاشير 1",         // المستلم / الكاشير
-    val notes: String = ""                      // ملاحظات وبيان السند
+    val voucherNumber: String,                            // رقم السند
+    val partyId: Long? = null,                            // معرف العميل أو المورد
+    val amount: Double,                                   // مبلغ السند
+    val voucherType: VoucherType,                          // نوع السند (سند قبض RECEIPT أو سند صرف PAYMENT)
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH,// طريقة السداد (كاش، شبكة، محفظة...)
+    val transactionRef: String = "",                       // رقم المرجع / رقم الحوالة / رقم الإشعار
+    val receiptImagePath: String? = null,                 // صورة الإشعار
+    val date: Long = System.currentTimeMillis(),         // تاريخ وساعة السند
+    val receivedBy: String = "كاشير 1",                    // اسم مستلم/صارف السند
+    val notes: String = "",                               // ملاحظات وتفاصيل
+    @ColumnInfo(name = "cost_center_id")
+    val costCenterId: Long = 1                            // معرف مركز التكلفة
 ) {
     val isPayment: Boolean
-        get() = voucherType == VoucherType.PAYMENT || voucherNumber.startsWith("PAY")
+        get() = voucherType == VoucherType.PAYMENT
 }

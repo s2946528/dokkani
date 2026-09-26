@@ -44,4 +44,7 @@ interface ExpenseDao {
 
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses")
     suspend fun getTotalExpensesAmount(): Double
+
+    @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE (:costCenterId IS NULL OR cost_center_id = :costCenterId)")
+    suspend fun getTotalExpensesForCostCenter(costCenterId: Long?): Double
 }

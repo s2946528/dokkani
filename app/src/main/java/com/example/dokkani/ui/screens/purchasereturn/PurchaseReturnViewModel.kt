@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.entities.CashShiftEntity
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceStatus
@@ -58,6 +59,8 @@ data class PurchaseReturnItem(
 data class PurchaseReturnUiState(
     val purchaseInvoices: List<InvoiceEntity> = emptyList(),
     val searchQuery: String = "",
+    val costCenters: List<CostCenterEntity> = emptyList(),
+    val selectedCostCenterId: Long = 1L,
     val selectedInvoice: InvoiceEntity? = null,
     val supplier: PartyEntity? = null,
     val returnItems: List<PurchaseReturnItem> = emptyList(),
@@ -131,6 +134,29 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
     init {
         loadPurchaseInvoices()
         loadCurrencySymbol()
+        observeCostCenters()
+    }
+
+    private fun observeCostCenters() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.costCenterDao().getAllActiveCostCenters().collect { centers ->
+                _uiState.update { state ->
+                    val defaultId = if (centers.any { it.centerId == state.selectedCostCenterId }) {
+                        state.selectedCostCenterId
+                    } else {
+                        state.selectedInvoice?.costCenterId ?: centers.firstOrNull { it.isGeneral }?.centerId ?: 1L
+                    }
+                    state.copy(
+                        costCenters = centers,
+                        selectedCostCenterId = defaultId
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectCostCenter(costCenterId: Long) {
+        _uiState.update { it.copy(selectedCostCenterId = costCenterId) }
     }
 
     private fun loadCurrencySymbol() {
@@ -482,7 +508,8 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                         transactionRef = state.transactionRef.ifBlank { originalInvoice.invoiceNumber },
                         receiptImagePath = state.receiptImagePath,
                         notes = state.returnNotes.ifBlank { "مردود مشتريات عن الفاتورة الأصلية: ${originalInvoice.invoiceNumber}" },
-                        date = timeNow
+                        date = timeNow,
+                        costCenterId = state.selectedCostCenterId
                     )
                     val insertedReturnId = invoiceDao.insertInvoice(returnInvoice)
 
@@ -518,7 +545,8 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                                 unitCostPriceBase = item.returnCostPrice / item.conversionFactor,
                                 timestamp = timeNow,
                                 referenceNumber = returnInvoiceNumber,
-                                notes = "مردود مشتريات عن فاتورة: ${originalInvoice.invoiceNumber}"
+                                notes = "مردود مشتريات عن فاتورة: ${originalInvoice.invoiceNumber}",
+                                costCenterId = state.selectedCostCenterId
                             )
                         )
                     }

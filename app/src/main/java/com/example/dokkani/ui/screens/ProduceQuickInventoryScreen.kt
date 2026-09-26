@@ -3,6 +3,7 @@ package com.example.dokkani.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import com.example.dokkani.ui.components.NumericOutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -359,19 +361,17 @@ private fun DailyProduceAuditView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditBeginningQty,
                             onValueChange = { onAuditInputsChanged(it, null, null, null, null, null, null, null) },
                             label = { Text("كمية أول المدة (كجم)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditBeginningCost,
                             onValueChange = { onAuditInputsChanged(null, it, null, null, null, null, null, null) },
                             label = { Text("تكلفة أول المدة (${currencySymbol})") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
@@ -383,19 +383,17 @@ private fun DailyProduceAuditView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditPurchasesQty,
                             onValueChange = { onAuditInputsChanged(null, null, it, null, null, null, null, null) },
                             label = { Text("مشتريات اليوم (كجم)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditPurchasesCost,
                             onValueChange = { onAuditInputsChanged(null, null, null, it, null, null, null, null) },
                             label = { Text("تكلفة المشتريات (${currencySymbol})") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
@@ -410,24 +408,22 @@ private fun DailyProduceAuditView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditEndingQty,
                             onValueChange = { onAuditInputsChanged(null, null, null, null, it, null, null, null) },
                             label = { Text("التقديري على الرف (كجم)") },
                             placeholder = { Text("مخزون آخر المدة") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("audit_shelf_qty_input"),
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null, tint = Color(0xFF2E7D32)) }
                         )
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditWasteQty,
                             onValueChange = { onAuditInputsChanged(null, null, null, null, null, it, null, null) },
                             label = { Text("الهالك والتالف (كجم)") },
                             placeholder = { Text("توالف اليوم") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("audit_waste_qty_input"),
@@ -442,19 +438,17 @@ private fun DailyProduceAuditView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditPosSoldQty,
                             onValueChange = { onAuditInputsChanged(null, null, null, null, null, null, it, null) },
                             label = { Text("مبيعات الكاشير (كجم)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = auditPosRevenue,
                             onValueChange = { onAuditInputsChanged(null, null, null, null, null, null, null, it) },
                             label = { Text("إيراد الكاشير (${currencySymbol})") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
@@ -819,19 +813,17 @@ private fun MixedProduceCrateCalculatorView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = grossWeightInput,
                             onValueChange = { onInputsChanged(it, null, null, null, null, null) },
                             label = { Text("الوزن الإجمالي (كجم)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = costInput,
                             onValueChange = { onInputsChanged(null, it, null, null, null, null) },
                             label = { Text("سعر الشراء (${currencySymbol})") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
@@ -842,30 +834,27 @@ private fun MixedProduceCrateCalculatorView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = expenseInput,
                             onValueChange = { onInputsChanged(null, null, it, null, null, null) },
                             label = { Text("مصاريف النقل (${currencySymbol})") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
-                        OutlinedTextField(
+                        NumericOutlinedTextField(
                             value = wasteInput,
                             onValueChange = { onInputsChanged(null, null, null, it, null, null) },
                             label = { Text("وزن التالف والهالك (كجم)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
                     }
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    OutlinedTextField(
+                    NumericOutlinedTextField(
                         value = marginInput,
                         onValueChange = { onInputsChanged(null, null, null, null, it, null) },
                         label = { Text("هامش الربح المستهدف (%)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -876,17 +865,20 @@ private fun MixedProduceCrateCalculatorView(
         // النتائج المحاسبية لفرز السحارة
         if (calcSummary != null) {
             item {
+                val isDark = isSystemInDarkTheme()
                 Card(
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8E9)),
-                    border = BorderStroke(1.dp, Color(0xFF81C784)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDark) Color(0xFF122C1F) else Color(0xFFF1F8E9)
+                    ),
+                    border = BorderStroke(1.dp, if (isDark) Color(0xFF23583C) else Color(0xFF81C784)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
                             text = "نتائج الفرز وتوزيع تكلفة الهالك:",
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1B5E20),
+                            color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20),
                             style = MaterialTheme.typography.titleSmall
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -896,21 +888,21 @@ private fun MixedProduceCrateCalculatorView(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text("إجمالي التكلفة مع النقل", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.2f %s".format(calcSummary.totalEffectiveInvestedCost, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text("إجمالي التكلفة مع النقل", style = MaterialTheme.typography.labelSmall, color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569))
+                                Text("%.2f %s".format(calcSummary.totalEffectiveInvestedCost, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
                             }
                             Column {
-                                Text("الوزن الصافي القابل للبيع", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.2f كجم".format(calcSummary.netSalableWeightKg), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF2E7D32))
+                                Text("الوزن الصافي القابل للبيع", style = MaterialTheme.typography.labelSmall, color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569))
+                                Text("%.2f كجم".format(calcSummary.netSalableWeightKg), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF2E7D32))
                             }
                             Column {
-                                Text("نسبة الهدر والتالف", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.1f%%".format(calcSummary.wastePercentage), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Red)
+                                Text("نسبة الهدر والتالف", style = MaterialTheme.typography.labelSmall, color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569))
+                                Text("%.1f%%".format(calcSummary.wastePercentage), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDark) Color(0xFFF87171) else Color.Red)
                             }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = Color(0xFFC8E6C9))
+                        HorizontalDivider(color = if (isDark) Color(0xFF23583C) else Color(0xFFC8E6C9))
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Row(
@@ -919,16 +911,16 @@ private fun MixedProduceCrateCalculatorView(
                         ) {
                             val initialCostPerKg = if (calcSummary.grossWeightKg > 0) calcSummary.totalCrateCost / calcSummary.grossWeightKg else 0.0
                             Column {
-                                Text("تكلفة الكيلو الإجمالي القديمة", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("%.2f %s / كجم".format(initialCostPerKg, currencySymbol), fontWeight = FontWeight.Medium, color = Color.Gray)
+                                Text("تكلفة الكيلو الإجمالي القديمة", style = MaterialTheme.typography.labelSmall, color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569))
+                                Text("%.2f %s / كجم".format(initialCostPerKg, currencySymbol), fontWeight = FontWeight.Medium, color = if (isDark) Color(0xFFCBD5E1) else Color.Gray)
                             }
                             Column {
-                                Text("تكلفة الكيلو الصافي بعد الهدر", style = MaterialTheme.typography.labelSmall, color = Color.Black)
-                                Text("%.2f %s / كجم".format(calcSummary.effectiveCostPerSalableKg, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFD32F2F))
+                                Text("تكلفة الكيلو الصافي بعد الهدر", style = MaterialTheme.typography.labelSmall, color = if (isDark) Color.White else Color.Black)
+                                Text("%.2f %s / كجم".format(calcSummary.effectiveCostPerSalableKg, currencySymbol), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (isDark) Color(0xFFF87171) else Color(0xFFD32F2F))
                             }
                             Column {
-                                Text("سعر البيع المقترح للكيلو", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1B5E20))
-                                Text("%.2f %s / كجم".format(calcSummary.suggestedSalePricePerKg, currencySymbol), fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color(0xFF1B5E20))
+                                Text("سعر البيع المقترح للكيلو", style = MaterialTheme.typography.labelSmall, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
+                                Text("%.2f %s / كجم".format(calcSummary.suggestedSalePricePerKg, currencySymbol), fontWeight = FontWeight.Black, fontSize = 18.sp, color = if (isDark) Color(0xFF4ADE80) else Color(0xFF1B5E20))
                             }
                         }
 
@@ -937,18 +929,18 @@ private fun MixedProduceCrateCalculatorView(
                         Button(
                             onClick = { onSaveBatch() },
                             enabled = !isSaving && calcSummary.netSalableWeightKg > 0,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF16A34A) else Color(0xFF1B5E20)),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             if (isSaving) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("جارٍ حفظ الدفعة...")
+                                Text("جارٍ حفظ الدفعة...", color = Color.White)
                             } else {
-                                Icon(Icons.Default.Save, contentDescription = null)
+                                Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("اعتماد وحفظ دفعة السحارة في قاعدة البيانات")
+                                Text("اعتماد وحفظ دفعة السحارة في قاعدة البيانات", color = Color.White)
                             }
                         }
                     }

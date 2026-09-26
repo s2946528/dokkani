@@ -1,5 +1,6 @@
 package com.example.dokkani.data.local.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -33,7 +34,8 @@ import androidx.room.PrimaryKey
         Index(value = ["productId"]),
         Index(value = ["invoiceId"]),
         Index(value = ["timestamp"]),
-        Index(value = ["movementType"])
+        Index(value = ["movementType"]),
+        Index(value = ["cost_center_id"])
     ]
 )
 data class StockMovementEntity(
@@ -48,5 +50,7 @@ data class StockMovementEntity(
     val unitCostPriceBase: Double,        // تكلفة الوحدة الأساسية لهذه الطبقة بالعملة الرئيسية
     val timestamp: Long = System.currentTimeMillis(), // وقت وتاريخ الحركة
     val referenceNumber: String? = null,  // رقم السند أو الدفعة المرجعية
-    val notes: String = ""                // ملاحظات
+    val notes: String = "",                // ملاحظات
+    @ColumnInfo(name = "cost_center_id")
+    val costCenterId: Long = 1            // معرف مركز التكلفة المرتبط (1: العام افتراضياً)
 )

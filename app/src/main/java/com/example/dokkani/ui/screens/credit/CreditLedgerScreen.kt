@@ -70,6 +70,7 @@ fun CreditLedgerScreen(
     onDismissPaymentVoucherDialog: () -> Unit,
     onVoucherInputsChanged: (String, String, PaymentMethod) -> Unit,
     onVoucherReceiptImagePathChanged: (String?) -> Unit = {},
+    onVoucherCostCenterSelected: (Long) -> Unit = {},
     onSubmitPaymentVoucher: () -> Unit,
     onSaveParty: (PartyEntity) -> Unit = {},
     onDeleteParty: (PartyEntity) -> Unit = {},
@@ -481,6 +482,9 @@ fun CreditLedgerScreen(
             selectedMethod = uiState.voucherPaymentMethod,
             receiptImagePath = uiState.voucherReceiptImagePath,
             onReceiptImageChanged = onVoucherReceiptImagePathChanged,
+            costCenters = uiState.costCenters,
+            selectedCostCenterId = uiState.voucherCostCenterId,
+            onCostCenterSelected = onVoucherCostCenterSelected,
             isSubmitting = uiState.isSubmittingVoucher,
             onInputsChanged = onVoucherInputsChanged,
             onDismiss = onDismissPaymentVoucherDialog,
@@ -1137,6 +1141,7 @@ private fun StatementRowCard(
 /**
  * نافذة حوار إضافة سند قبض وسند صرف تسديد
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PaymentVoucherDialog(
     party: PartyEntity?,
@@ -1145,6 +1150,9 @@ private fun PaymentVoucherDialog(
     selectedMethod: PaymentMethod,
     receiptImagePath: String?,
     onReceiptImageChanged: (String?) -> Unit,
+    costCenters: List<com.example.dokkani.data.local.entities.CostCenterEntity> = emptyList(),
+    selectedCostCenterId: Long = 1L,
+    onCostCenterSelected: (Long) -> Unit = {},
     isSubmitting: Boolean,
     onInputsChanged: (String, String, PaymentMethod) -> Unit,
     onDismiss: () -> Unit,
@@ -1209,6 +1217,47 @@ private fun PaymentVoucherDialog(
                         }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                // اختيار مركز التكلفة للسند
+                if (costCenters.isNotEmpty()) {
+                    var ccExpanded by remember { mutableStateOf(false) }
+                    val activeCc = costCenters.firstOrNull { it.centerId == selectedCostCenterId }
+
+                    ExposedDropdownMenuBox(
+                        expanded = ccExpanded,
+                        onExpandedChange = { ccExpanded = !ccExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = activeCc?.centerName ?: "مركز التكلفة العام",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("مركز التكلفة المخصص للسند *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ccExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("voucher_cost_center_dropdown"),
+                            singleLine = true
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = ccExpanded,
+                            onDismissRequest = { ccExpanded = false }
+                        ) {
+                            costCenters.forEach { cc ->
+                                DropdownMenuItem(
+                                    text = { Text(cc.centerName, fontWeight = FontWeight.SemiBold) },
+                                    onClick = {
+                                        onCostCenterSelected(cc.centerId)
+                                        ccExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 OutlinedTextField(

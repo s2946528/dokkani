@@ -142,6 +142,47 @@ data class TrialBalanceReport(
     val items: List<TrialBalanceItem>,
     val totalDebit: Double,
     val totalCredit: Double,
-    val isBalanced: Boolean
+    val isBalanced: Boolean,
+    val differenceAmount: Double = kotlin.math.abs(totalDebit - totalCredit),
+    val unbalancedAccounts: List<TrialBalanceItem> = emptyList(),
+    val auditCheckMessage: String = if (isBalanced) "ميزان المراجعة متوازن ومطابق تماماً مع معايير القيد المزدوج." else "تنبيه وجود عدم توازن بين إجمالي المدين والدائن بقيمة $differenceAmount"
 )
+
+/**
+ * بند تفاصيل حركة المخزون للصنف والمجموعة المخزنية (Product Stock Movement Summary)
+ */
+data class ProductStockMovementItem(
+    val productId: Long,
+    val productCode: String,
+    val productName: String,
+    val category: String,
+    val baseUnitName: String,
+    val openingStockQty: Double,          // رصيد أول المدة
+    val purchasesQty: Double,             // إجمالي المشتريات والوارد
+    val purchaseReturnsQty: Double,       // مردودات المشتريات الصادرة
+    val salesQty: Double,                 // إجمالي المبيعات الصادرة
+    val saleReturnsQty: Double,           // مردودات المبيعات الواردة
+    val wastageAndShortageQty: Double,    // التالف والعجز الناتج عن الجرد الدوري
+    val closingStockQty: Double,          // رصيد آخر المدة الفعلي
+    val unitCostPrice: Double,            // سعر تكلفة الوحدة حسب طريقة التقييم
+    val closingStockValue: Double,        // تقييم رصيد آخر المدة بسعر التكلفة
+    val calculatedCogs: Double            // تكلفة البضاعة المباعة (COGS) لهذا الصنف
+)
+
+/**
+ * تقرير حركة المخزون الشامل (Stock Movement Report)
+ */
+data class StockMovementReport(
+    val valuationMethodUsed: CostValuationMethod,
+    val items: List<ProductStockMovementItem>,
+    val totalOpeningStockQty: Double,
+    val totalPurchasesQty: Double,
+    val totalSalesQty: Double,
+    val totalWastageAndShortageQty: Double,
+    val totalClosingStockQty: Double,
+    val totalClosingStockValue: Double,
+    val totalCogsValue: Double,
+    val selectedCostCenterName: String = "جميع مراكز التكلفة"
+)
+
 

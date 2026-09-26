@@ -54,4 +54,7 @@ interface ProductWastageDao {
 
     @Query("SELECT SUM(quantity) FROM product_wastage WHERE productId = :productId AND unit = :unitName")
     suspend fun getTotalWasteQuantityForProductAndUnit(productId: Long, unitName: String): Double?
+
+    @Query("SELECT COALESCE(SUM(totalCost), 0.0) FROM product_wastage WHERE (:costCenterId IS NULL OR cost_center_id = :costCenterId)")
+    suspend fun getTotalWastageCostForCostCenter(costCenterId: Long?): Double
 }

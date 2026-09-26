@@ -176,4 +176,14 @@ class Converters {
     } catch (e: Exception) {
         com.example.dokkani.data.local.entities.PayrollStatus.UNPAID
     }
+
+    @TypeConverter
+    fun fromFinancialAccountType(value: com.example.dokkani.data.local.entities.FinancialAccountType): String = value.name
+
+    @TypeConverter
+    fun toFinancialAccountType(value: String): com.example.dokkani.data.local.entities.FinancialAccountType = try {
+        com.example.dokkani.data.local.entities.FinancialAccountType.valueOf(value)
+    } catch (e: Exception) {
+        com.example.dokkani.data.local.entities.FinancialAccountType.BANK
+    }
 }

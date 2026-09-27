@@ -27,6 +27,9 @@ interface OwnerTransactionDao {
     @Query("SELECT SUM(amount) FROM owner_transactions WHERE type = 'CAPITAL_DEPOSIT'")
     fun getTotalCapitalDeposits(): Flow<Double?>
 
+    @Query("DELETE FROM owner_transactions WHERE transactionNumber LIKE 'CAP-OPEN%'")
+    suspend fun deleteOpeningCapitalTransactions()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: OwnerTransactionEntity): Long
 

@@ -78,7 +78,7 @@ object AssetsAndEquityEngine {
             .sumOf { it.amount }
 
         val totalDeposits = ownerTransactions
-            .filter { it.type == OwnerTransactionType.CAPITAL_DEPOSIT }
+            .filter { it.type == OwnerTransactionType.CAPITAL_DEPOSIT && !it.transactionNumber.startsWith("CAP-OPEN") }
             .sumOf { it.amount }
 
         // 8. صافي حقوق الملكية الإجمالي السليم محاسبياً:

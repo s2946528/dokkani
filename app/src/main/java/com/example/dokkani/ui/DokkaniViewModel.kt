@@ -2019,6 +2019,60 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
+                // 8.b حساب رأس المال الافتتاحي آلياً بناءً على الأصول والالتزامات الفعلية عند التهيئة
+                val inventoryValuation = if (!isNewGrocery) openingItems.sumOf { it.quantity * it.costPrice } else 0.0
+                val fixedAssetsTotal = fixedAssets.sumOf { it.purchaseCost }
+                val leaseholdTotal = if (leaseholdAmount > 0.0) leaseholdAmount else 0.0
+                val prepaidRentTotal = if (propertyStatus == PropertyStatus.RENTED && monthlyRent * prepaidMonths > 0.0) (monthlyRent * prepaidMonths) else 0.0
+                val customersTotal = if (!isNewGrocery) openingCustomers.sumOf { it.openingBalance } else 0.0
+                val suppliersTotal = if (!isNewGrocery) openingSuppliers.sumOf { it.openingPayable } else 0.0
+
+                val totalActualAssets = effectiveOpeningCash + bankBalance + inventoryValuation + fixedAssetsTotal + leaseholdTotal + prepaidRentTotal + customersTotal
+                val totalActualLiabilities = suppliersTotal
+                val autoCalculatedCapital = (totalActualAssets - totalActualLiabilities).coerceAtLeast(0.0)
+
+                val finalCapital = if (initialCapital > 0.0) initialCapital else autoCalculatedCapital
+
+                // تحديث رأس المال الافتتاحي في إعدادات النظام وتوليد القيد الافتتاحي في الدليل وحركات المالك
+                val settingsWithCapital = updatedSettings.copy(initialCapital = finalCapital)
+                db.systemSettingsDao().insertOrUpdateSettings(settingsWithCapital)
+
+                var initCapitalAccount = db.financialAccountDao().getAccountByCode("30100")
+                if (initCapitalAccount == null) {
+                    initCapitalAccount = FinancialAccountEntity(
+                        code = "30100",
+                        name = "30100 - رأس المال الافتتاحي الثابت",
+                        accountType = FinancialAccountType.CHART_ACCOUNT,
+                        parentAccountCode = "301",
+                        parentAccountName = "301 - حقوق الملكية ورأس المال",
+                        openingBalance = finalCapital,
+                        currentBalance = finalCapital,
+                        currency = selectedBaseCurrency?.code ?: "YER",
+                        isActive = true
+                    )
+                    db.financialAccountDao().insertAccount(initCapitalAccount)
+                } else {
+                    db.financialAccountDao().updateAccount(
+                        initCapitalAccount.copy(
+                            openingBalance = finalCapital,
+                            currentBalance = finalCapital
+                        )
+                    )
+                }
+
+                db.ownerTransactionDao().deleteOpeningCapitalTransactions()
+                db.ownerTransactionDao().insertTransaction(
+                    OwnerTransactionEntity(
+                        transactionNumber = "CAP-OPEN-INIT",
+                        type = OwnerTransactionType.CAPITAL_DEPOSIT,
+                        amount = finalCapital,
+                        paymentMethod = PaymentMethod.CASH,
+                        date = now,
+                        details = "القيد الافتتاحي المعتمد آلياً عند تهيئة وتأسيس النظام",
+                        recordedBy = "مدير النظام"
+                    )
+                )
+
                 // 9. حفظ اكتمال التهيئة في تفضيلات الجلسة
                 sessionManager.setOnboardingCompleted(true)
             }
@@ -2165,7 +2219,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
 
-                // 3. توثيق حركة القيد الافتتاحي في حركات الملكية
+                // 3. حذف القيود الافتتاحية السابقة وتوثيق حركة القيد الافتتاحي المحدثة
+                db.ownerTransactionDao().deleteOpeningCapitalTransactions()
                 val openingEntry = OwnerTransactionEntity(
                     transactionNumber = "CAP-OPEN-$now",
                     type = OwnerTransactionType.CAPITAL_DEPOSIT,

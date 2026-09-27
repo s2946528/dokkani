@@ -9,6 +9,7 @@ import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.FinancialAccountEntity
+import com.example.dokkani.data.local.entities.FinancialAccountType
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.domain.assets.EquityCalculationResult
@@ -272,78 +273,126 @@ object FinancialReportsEngine {
         equityResult: EquityCalculationResult?,
         costCenterId: Long? = null
     ): TrialBalanceReport {
-        val items = mutableListOf<TrialBalanceItem>()
+        val rawItems = mutableListOf<TrialBalanceItem>()
 
         val eq = equityResult ?: EquityCalculationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-        // 1. الحسابات المالية (البنوك، الصناديق، المحافظ)
+        // 1. الحسابات المالية (البنوك، الصناديق، المحافظ، وحسابات حقوق الملكية بالدليل)
         financialAccounts.forEach { acc ->
+            // استثناء حساب 30100 ليتم إدراجه موحداً مع رأس المال الافتتاحي لمنع التكرار والإدخالات المزدوجة
+            if (acc.code == "30100") return@forEach
+
             val bal = acc.currentBalance
             if (abs(bal) > 0.001) {
-                if (bal >= 0) {
-                    items.add(TrialBalanceItem(acc.code, acc.name, acc.accountType.labelArabic, debit = bal, credit = 0.0))
+                val isCreditNatural = acc.code.startsWith("2") || acc.code.startsWith("3") || acc.code.startsWith("4") || acc.accountType == FinancialAccountType.LIABILITY
+                if (isCreditNatural) {
+                    if (bal >= 0) {
+                        rawItems.add(TrialBalanceItem(acc.code, acc.name, acc.accountType.labelArabic, debit = 0.0, credit = bal))
+                    } else {
+                        rawItems.add(TrialBalanceItem(acc.code, acc.name, acc.accountType.labelArabic, debit = abs(bal), credit = 0.0))
+                    }
                 } else {
-                    items.add(TrialBalanceItem(acc.code, acc.name, acc.accountType.labelArabic, debit = 0.0, credit = abs(bal)))
+                    if (bal >= 0) {
+                        rawItems.add(TrialBalanceItem(acc.code, acc.name, acc.accountType.labelArabic, debit = bal, credit = 0.0))
+                    } else {
+                        rawItems.add(TrialBalanceItem(acc.code, acc.name, acc.accountType.labelArabic, debit = 0.0, credit = abs(bal)))
+                    }
                 }
             }
         }
 
-        // 2. العملاء (أرصدة مدينة)
+        // 2. العملاء (أرصدة مدينة - أصل متداول)
         val customerReceivables = parties.filter { it.type == PartyType.CUSTOMER || it.type == PartyType.BOTH }.sumOf { if (it.currentBalance > 0) it.currentBalance else 0.0 }
         if (customerReceivables > 0.001) {
-            items.add(TrialBalanceItem("10300", "حسابات العملاء (ديون الشكك)", "أصل متداول", debit = customerReceivables, credit = 0.0))
+            rawItems.add(TrialBalanceItem("10300", "10300 - حسابات العملاء (ديون الشكك)", "أصل متداول", debit = customerReceivables, credit = 0.0))
         }
 
-        // 3. الموردين (أرصدة دائنة)
+        // 3. الموردين (أرصدة دائنة - التزام متداول)
         val supplierPayables = parties.filter { it.type == PartyType.SUPPLIER || it.type == PartyType.BOTH }.sumOf { if (it.currentBalance < 0) abs(it.currentBalance) else 0.0 }
         if (supplierPayables > 0.001) {
-            items.add(TrialBalanceItem("20100", "حسابات الموردين والالتزامات", "التزام متداول", debit = 0.0, credit = supplierPayables))
+            rawItems.add(TrialBalanceItem("20100", "20100 - حسابات الموردين والالتزامات", "التزام متداول", debit = 0.0, credit = supplierPayables))
         }
 
-        // 4. تقييم المخزون (بضاعة آخر المدة)
+        // 4. تقييم المخزون (بضاعة آخر المدة - أصل متداول)
         if (eq.inventoryValuationAtCost > 0.001) {
-            items.add(TrialBalanceItem("10400", "تقييم مخزون البضاعة بسعر التكلفة", "أصل متداول", debit = eq.inventoryValuationAtCost, credit = 0.0))
+            rawItems.add(TrialBalanceItem("10400", "10400 - تقييم مخزون البضاعة بسعر التكلفة", "أصل متداول", debit = eq.inventoryValuationAtCost, credit = 0.0))
         }
 
-        // 5. الأصول الثابتة ونقل القدم
+        // 5. الأصول الثابتة ونقل القدم (أصول غير متداولة)
         if (eq.totalFixedAssetsValue > 0.001) {
-            items.add(TrialBalanceItem("10500", "إجمالي قيمة الأصول الثابتة", "أصل غير متداول", debit = eq.totalFixedAssetsValue, credit = 0.0))
+            rawItems.add(TrialBalanceItem("10500", "10500 - إجمالي قيمة الأصول الثابتة", "أصل غير متداول", debit = eq.totalFixedAssetsValue, credit = 0.0))
         }
         if (eq.totalLeaseholdGoodwillValue > 0.001) {
-            items.add(TrialBalanceItem("10600", "حقوق الخلو ونقل القدم (أصل غير ملموس)", "أصل غير متداول", debit = eq.totalLeaseholdGoodwillValue, credit = 0.0))
+            rawItems.add(TrialBalanceItem("10600", "10600 - حقوق الخلو ونقل القدم (أصل غير ملموس)", "أصل غير متداول", debit = eq.totalLeaseholdGoodwillValue, credit = 0.0))
         }
 
         // 6. المبيعات والتكلفة والمصروفات
         if (pnlReport != null) {
             if (pnlReport.netSalesRevenue > 0.001) {
-                items.add(TrialBalanceItem("40100", "إيرادات المبيعات المحققة", "إيرادات", debit = 0.0, credit = pnlReport.netSalesRevenue))
+                rawItems.add(TrialBalanceItem("40100", "40100 - إيرادات المبيعات المحققة", "إيرادات", debit = 0.0, credit = pnlReport.netSalesRevenue))
             }
             if (pnlReport.cogs > 0.001) {
-                items.add(TrialBalanceItem("50100", "تكلفة البضاعة المباعة (COGS)", "تكاليف", debit = pnlReport.cogs, credit = 0.0))
+                rawItems.add(TrialBalanceItem("50100", "50100 - تكلفة البضاعة المباعة (COGS)", "تكاليف", debit = pnlReport.cogs, credit = 0.0))
             }
             if (pnlReport.totalOperatingExpenses > 0.001) {
-                items.add(TrialBalanceItem("50200", "إجمالي المصروفات والنثريات التشغيلية", "مصروفات", debit = pnlReport.totalOperatingExpenses, credit = 0.0))
+                rawItems.add(TrialBalanceItem("50200", "50200 - إجمالي المصروفات والنثريات التشغيلية", "مصروفات", debit = pnlReport.totalOperatingExpenses, credit = 0.0))
             }
         }
 
-        // 7. رأس المال الافتتاحي وحركات المالك
+        // 7. حقوق الملكية ورأس المال الافتتاحي (دائنة حصرياً بحسب طبيعتها المحاسبية)
         if (eq.fixedOpeningCapital > 0.001) {
-            items.add(TrialBalanceItem("30100", "رأس المال الافتتاحي الثابت", "حقوق ملكية", debit = 0.0, credit = eq.fixedOpeningCapital))
+            rawItems.add(TrialBalanceItem("30100", "30100 - رأس المال الافتتاحي الثابت", "حقوق ملكية", debit = 0.0, credit = eq.fixedOpeningCapital))
         }
         if (eq.totalAdditionalCapitalDeposits > 0.001) {
-            items.add(TrialBalanceItem("30200", "إيداعات رأس المال الإضافية", "حقوق ملكية", debit = 0.0, credit = eq.totalAdditionalCapitalDeposits))
+            rawItems.add(TrialBalanceItem("30200", "30200 - إيداعات رأس المال الإضافية", "حقوق ملكية", debit = 0.0, credit = eq.totalAdditionalCapitalDeposits))
         }
         if (eq.totalOwnerDrawings > 0.001) {
-            items.add(TrialBalanceItem("30300", "مسحوبات المالك الشخصية", "حقوق ملكية", debit = eq.totalOwnerDrawings, credit = 0.0))
+            rawItems.add(TrialBalanceItem("30300", "30300 - مسحوبات المالك الشخصية", "حقوق ملكية", debit = eq.totalOwnerDrawings, credit = 0.0))
         }
 
-        val totalDebit = items.sumOf { it.debit }
-        val totalCredit = items.sumOf { it.credit }
+        // --- التجميع الآلي بالحساب الواحد (GROUP BY account_code) لمنع التكرار أو ظهور الحساب في المدين والدائن معاً ---
+        val aggregatedMap = LinkedHashMap<String, TrialBalanceItem>()
+        rawItems.forEach { item ->
+            val existing = aggregatedMap[item.accountCode]
+            if (existing == null) {
+                aggregatedMap[item.accountCode] = item
+            } else {
+                aggregatedMap[item.accountCode] = existing.copy(
+                    debit = existing.debit + item.debit,
+                    credit = existing.credit + item.credit
+                )
+            }
+        }
+
+        // تسوية كل حساب ليكون إما دائن فقط أو مدين فقط بالجانب الطبيعي حصرياً
+        val finalItems = aggregatedMap.values.map { item ->
+            val code = item.accountCode
+            val isCreditNatural = code.startsWith("2") || code.startsWith("3") || code.startsWith("4") || item.categoryLabel.contains("حقوق") || item.categoryLabel.contains("التزام") || item.categoryLabel.contains("إيراد")
+
+            if (isCreditNatural) {
+                val netCredit = item.credit - item.debit
+                if (netCredit >= 0) {
+                    item.copy(debit = 0.0, credit = netCredit)
+                } else {
+                    item.copy(debit = abs(netCredit), credit = 0.0)
+                }
+            } else {
+                val netDebit = item.debit - item.credit
+                if (netDebit >= 0) {
+                    item.copy(debit = netDebit, credit = 0.0)
+                } else {
+                    item.copy(debit = 0.0, credit = abs(netDebit))
+                }
+            }
+        }.sortedBy { it.accountCode }
+
+        val totalDebit = finalItems.sumOf { it.debit }
+        val totalCredit = finalItems.sumOf { it.credit }
         val diff = abs(totalDebit - totalCredit)
         val isBalanced = diff < 1.0
 
         val unbalanced = if (!isBalanced) {
-            items.filter { abs(it.debit - it.credit) > 0.01 }
+            finalItems.filter { abs(it.debit - it.credit) > 0.01 }
         } else emptyList()
 
         val auditMessage = if (isBalanced) {
@@ -353,7 +402,7 @@ object FinancialReportsEngine {
         }
 
         return TrialBalanceReport(
-            items = items,
+            items = finalItems,
             totalDebit = totalDebit,
             totalCredit = totalCredit,
             isBalanced = isBalanced,

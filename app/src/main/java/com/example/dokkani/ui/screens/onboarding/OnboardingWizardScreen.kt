@@ -118,7 +118,7 @@ fun OnboardingWizardScreen(
         var cashierPin by remember { mutableStateOf("1234") }
 
         // رأس المال والنقدية
-        var initialCapital by remember { mutableStateOf("15000") }
+        var initialCapital by remember { mutableStateOf("") }
         var openingCash by remember { mutableStateOf("500") }
         var bankBalance by remember { mutableStateOf("0") }
         var valuationMethod by remember { mutableStateOf(CostValuationMethod.WAC) }

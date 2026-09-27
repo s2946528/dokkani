@@ -202,6 +202,7 @@ fun DokkaniApp(
                 activeTabTitle = activeTabTitle,
                 allDepartments = allDepartments,
                 onSelectTabByTitle = { selectedTitle ->
+                    showValueSellingManagementScreen = false
                     val index = allowedTabs.indexOfFirst {
                         it.title == selectedTitle || (selectedTitle == "المنتجات والأصناف" && it.title == "المنتجات والوحدات")
                     }
@@ -509,7 +510,19 @@ fun DokkaniApp(
                                     onDismissSellLeaseholdDialog = viewModel::dismissSellLeaseholdDialog,
                                     onSellLeaseholdInputsChanged = viewModel::updateSellLeaseholdInputs,
                                     onSubmitSellLeasehold = viewModel::submitSellLeasehold,
-                                    onDeleteLeasehold = viewModel::deleteLeasehold
+                                    onDeleteLeasehold = viewModel::deleteLeasehold,
+                                    showOpeningCapitalDialog = uiState.showOpeningCapitalDialog,
+                                    openingCapitalAmountInput = uiState.openingCapitalAmountInput,
+                                    openingCapitalCurrencyInput = uiState.openingCapitalCurrencyInput,
+                                    openingCapitalAccountCodeInput = uiState.openingCapitalAccountCodeInput,
+                                    openingCapitalNotesInput = uiState.openingCapitalNotesInput,
+                                    currentSettings = uiState.settings,
+                                    financialAccounts = uiState.financialAccounts,
+                                    currencies = uiState.currencies,
+                                    onOpenOpeningCapitalDialog = viewModel::openOpeningCapitalDialog,
+                                    onDismissOpeningCapitalDialog = viewModel::dismissOpeningCapitalDialog,
+                                    onOpeningCapitalInputsChanged = viewModel::updateOpeningCapitalInputs,
+                                    onSaveOpeningCapital = viewModel::saveOpeningCapital
                                 )
                             }
                             "التقارير" -> {

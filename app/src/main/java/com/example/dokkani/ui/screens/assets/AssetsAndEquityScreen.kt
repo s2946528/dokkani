@@ -63,7 +63,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.ui.platform.testTag
+import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
 import com.example.dokkani.data.local.entities.FixedAssetEntity
+import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.local.entities.LeaseholdRightEntity
 import com.example.dokkani.data.local.entities.OwnerTransactionEntity
 import com.example.dokkani.data.local.entities.OwnerTransactionType
@@ -140,6 +145,19 @@ fun AssetsAndEquityScreen(
     onSellLeaseholdInputsChanged: (String, PaymentMethod) -> Unit = { _, _ -> },
     onSubmitSellLeasehold: () -> Unit = {},
     onDeleteLeasehold: (Long) -> Unit = {},
+    // Opening Capital parameters
+    showOpeningCapitalDialog: Boolean = false,
+    openingCapitalAmountInput: String = "",
+    openingCapitalCurrencyInput: String = "YER",
+    openingCapitalAccountCodeInput: String = "30100",
+    openingCapitalNotesInput: String = "",
+    currentSettings: SystemSettingsEntity? = null,
+    financialAccounts: List<FinancialAccountEntity> = emptyList(),
+    currencies: List<CurrencyEntity> = emptyList(),
+    onOpenOpeningCapitalDialog: () -> Unit = {},
+    onDismissOpeningCapitalDialog: () -> Unit = {},
+    onOpeningCapitalInputsChanged: (String, String, String, String) -> Unit = { _, _, _, _ -> },
+    onSaveOpeningCapital: () -> Unit = {},
     currencySymbol: String = "ر.ي"
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
@@ -207,6 +225,7 @@ fun AssetsAndEquityScreen(
             0 -> CapitalAndEquityTabContent(
                 equityResult = equityResult,
                 onOpenOwnerTransDialog = onOpenOwnerTransDialog,
+                onOpenOpeningCapitalDialog = onOpenOpeningCapitalDialog,
                 currencySymbol = currencySymbol
             )
             1 -> FixedAssetsTabContent(
@@ -304,12 +323,29 @@ fun AssetsAndEquityScreen(
             currencySymbol = currencySymbol
         )
     }
+
+    if (showOpeningCapitalDialog) {
+        OpeningCapitalManagementDialog(
+            currentSettings = currentSettings,
+            equityResult = equityResult,
+            availableAccounts = financialAccounts,
+            availableCurrencies = currencies,
+            amountInput = openingCapitalAmountInput,
+            currencyInput = openingCapitalCurrencyInput,
+            accountCodeInput = openingCapitalAccountCodeInput,
+            notesInput = openingCapitalNotesInput,
+            onInputsChanged = onOpeningCapitalInputsChanged,
+            onSaveOpeningCapital = onSaveOpeningCapital,
+            onDismiss = onDismissOpeningCapitalDialog
+        )
+    }
 }
 
 @Composable
 private fun CapitalAndEquityTabContent(
     equityResult: EquityCalculationResult?,
     onOpenOwnerTransDialog: (OwnerTransactionType) -> Unit,
+    onOpenOpeningCapitalDialog: () -> Unit = {},
     currencySymbol: String = "ر.ي"
 ) {
     val eq = equityResult ?: EquityCalculationResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
@@ -537,6 +573,21 @@ private fun CapitalAndEquityTabContent(
                                 fontSize = 16.sp,
                                 color = Color(0xFF1E3A8A)
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = onOpenOpeningCapitalDialog,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_manage_opening_capital")
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("تعديل وإدارة رأس المال الافتتاحي والقيد الافتتاحي", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }

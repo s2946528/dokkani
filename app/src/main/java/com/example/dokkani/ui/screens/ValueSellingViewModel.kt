@@ -84,6 +84,7 @@ data class ValueSellingUiState(
     val groupInvoiceSummaries: List<GroupInvoiceSummary> = emptyList(),
     val lastAuditTimestamp: Long? = null,
     val auditCostMethod: CostValuationMethod = CostValuationMethod.WAC,
+    val selectedAuditCostCenterId: Long? = null,
     val auditRecordedSalesRevenueInput: String = "0.0",
     val cogsCalculatedQty: Double = 0.0,
     val cogsCalculatedCost: Double = 0.0,
@@ -159,7 +160,7 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
     private fun loadAuditRowsForSelectedGroup() {
         viewModelScope.launch(Dispatchers.IO) {
             val groupDetails = uiState.value.selectedGroupDetails ?: return@launch
-            val costCenterId = groupDetails.group.costCenterId
+            val costCenterId = uiState.value.selectedAuditCostCenterId
             val valuationMethod = uiState.value.auditCostMethod
 
             val groupProductIds = groupDetails.items.mapNotNull { it.productId }
@@ -226,7 +227,8 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
                 val invoices = db.invoiceDao().getValueSaleInvoicesForGroupInDateRange(
                     productIds = valueProductIdsInGroup,
                     startDate = lastAuditTime,
-                    endDate = currentTime
+                    endDate = currentTime,
+                    costCenterId = costCenterId
                 )
                 for (invDetails in invoices) {
                     // تفحص بنود الفاتورة الداخلية وتجاهل أي أصناف بالوزن أو تنتمي لمجموعات أخرى
@@ -407,6 +409,11 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun selectAuditCostCenter(costCenterId: Long?) {
+        _uiState.update { it.copy(selectedAuditCostCenterId = costCenterId) }
+        loadAuditRowsForSelectedGroup()
+    }
+
     fun updateAuditInputs(recordedSalesRevenue: String? = null, costMethod: CostValuationMethod? = null) {
         _uiState.update { state ->
             state.copy(
@@ -431,7 +438,7 @@ class ValueSellingViewModel(application: Application) : AndroidViewModel(applica
         val state = _uiState.value
         val step3TotalInvoices = state.groupInvoiceSummaries.sumOf { it.groupItemsTotal }
         val recordedSales = if (state.groupInvoiceSummaries.isNotEmpty()) step3TotalInvoices else (state.auditRecordedSalesRevenueInput.toDoubleOrNull() ?: 0.0)
-        val costCenterId = state.selectedGroupDetails?.group?.costCenterId
+        val costCenterId = state.selectedAuditCostCenterId
 
         viewModelScope.launch(Dispatchers.IO) {
             var totalStockAll = 0.0

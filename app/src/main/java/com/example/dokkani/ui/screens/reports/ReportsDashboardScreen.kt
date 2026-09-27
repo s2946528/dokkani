@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Category
@@ -79,6 +80,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.CostValuationMethod
@@ -161,30 +163,34 @@ fun ReportsDashboardScreen(
                     fontSize = 10.sp
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // محدد مركز التكلفة الموحد (Cost Center Filter Dropdown)
-                Row(
+                // 1. الجزء العلوي: تمركز زر اختيار "مركز التكلفة" في الأعلى وبمحاذاة المنتصف (Center Aligned)
+                Box(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    contentAlignment = Alignment.Center
                 ) {
                     Box {
                         OutlinedButton(
                             onClick = { costCenterDropdownExpanded = true },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            border = BorderStroke(1.dp, Color(0xFF0F5132)),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                            border = BorderStroke(1.5.dp, Color(0xFF0F5132)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = Color(0xFFE8F5E9).copy(alpha = 0.5f)
+                            ),
                             modifier = Modifier.testTag("btn_cost_center_filter")
                         ) {
-                            Icon(Icons.Default.Store, contentDescription = null, tint = Color(0xFF0F5132), modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.Store, contentDescription = null, tint = Color(0xFF0F5132), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "مركز التكلفة: $activeCostCenterName",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0F5132)
                             )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color(0xFF0F5132), modifier = Modifier.size(16.dp))
                         }
 
                         DropdownMenu(
@@ -192,7 +198,7 @@ fun ReportsDashboardScreen(
                             onDismissRequest = { costCenterDropdownExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("جميع مراكز التكلفة (عام)", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                                text = { Text("جميع مراكز التكلفة (عام)", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                                 onClick = {
                                     onSelectCostCenter(null)
                                     costCenterDropdownExpanded = false
@@ -200,7 +206,7 @@ fun ReportsDashboardScreen(
                             )
                             uiState.costCenters.forEach { cc ->
                                 DropdownMenuItem(
-                                    text = { Text(cc.centerName, fontSize = 11.sp) },
+                                    text = { Text(cc.centerName, fontSize = 12.sp) },
                                     onClick = {
                                         onSelectCostCenter(cc.centerId)
                                         costCenterDropdownExpanded = false
@@ -209,7 +215,16 @@ fun ReportsDashboardScreen(
                             }
                         }
                     }
+                }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 2. الجزء السفلي: باقي عناصر التحكم (إخفاء الحسابات الصفرية، الطباعة، التصدير، التحديث) مصطوفة بانتظام أسفله
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     // مفتاح تصفية الحسابات الصفرية
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -218,7 +233,7 @@ fun ReportsDashboardScreen(
                                 color = if (hideZeroAccounts) Color(0xFFE8F5E9) else Color(0xFFF1F5F9),
                                 shape = RoundedCornerShape(6.dp)
                             )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                             .clickable { hideZeroAccounts = !hideZeroAccounts }
                             .testTag("switch_hide_zero_accounts")
                     ) {
@@ -249,8 +264,11 @@ fun ReportsDashboardScreen(
                         )
                     }
 
-                    // أزرار الإجراءات السريعة (طباعة مباشرة + تصدير PDF)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // أزرار الإجراءات والطباعة المباشرة والتصدير
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         // زر الطباعة المباشرة
                         Button(
                             onClick = {
@@ -262,13 +280,13 @@ fun ReportsDashboardScreen(
                                 )
                             },
                             shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132)),
                             modifier = Modifier.testTag("btn_direct_print")
                         ) {
                             Icon(Icons.Default.Print, contentDescription = "طباعة", modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("طباعة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("طباعة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
 
                         // زر تصدير/مشاركة PDF
@@ -282,24 +300,24 @@ fun ReportsDashboardScreen(
                                 )
                             },
                             shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             border = BorderStroke(1.dp, Color(0xFF0F5132)),
                             modifier = Modifier.testTag("btn_export_pdf_share")
                         ) {
                             Icon(Icons.Default.Share, contentDescription = "تصدير PDF", tint = Color(0xFF0F5132), modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("تصدير PDF", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F5132))
+                            Text("تصدير PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F5132))
                         }
 
                         // زر التحديث
                         IconButton(
                             onClick = onRefreshReports,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             if (uiState.isLoadingReports) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Refresh, contentDescription = "تحديث البيانات", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                             }
                         }
                     }

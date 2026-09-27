@@ -38,6 +38,7 @@ import com.example.dokkani.ui.components.NumericOutlinedTextField
 import com.example.dokkani.util.safeToDouble
 import com.example.dokkani.data.local.entities.ShortageSettlementEntity
 import com.example.dokkani.data.local.entities.CostCenterEntity
+import androidx.activity.compose.BackHandler
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -52,6 +53,10 @@ fun ValueSellingManagementScreen(
     val uiState by viewModel.uiState.collectAsState()
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     val isDark = isSystemInDarkTheme()
+
+    BackHandler {
+        onNavigateBack()
+    }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Scaffold(
@@ -518,6 +523,7 @@ private fun GroupsAndItemsView(
 /**
  * التبويب الثاني: الجرد الدوري لمجموعات الأصناف ومحرك حساب التكلفة (COGS Engine)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GroupAuditCogsView(
     uiState: ValueSellingUiState,
@@ -613,6 +619,85 @@ private fun GroupAuditCogsView(
                                     { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp)) }
                                 } else null
                             )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = if (isDark) Color(0xFF23583C) else MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // القائمة المنسدلة لاختيار مركز التكلفة المستهدف بالجرد الدوري
+                    var costCenterDropdownExpanded by remember { mutableStateOf(false) }
+                    val activeCostCenterText = remember(uiState.selectedAuditCostCenterId, uiState.costCenters) {
+                        if (uiState.selectedAuditCostCenterId == null) {
+                            "المركز العام (بدون مركز تكلفة / الكل)"
+                        } else {
+                            uiState.costCenters.find { it.centerId == uiState.selectedAuditCostCenterId }?.centerName
+                                ?: "مركز تكلفة #${uiState.selectedAuditCostCenterId}"
+                        }
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = costCenterDropdownExpanded,
+                        onExpandedChange = { costCenterDropdownExpanded = !costCenterDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = activeCostCenterText,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("مركز التكلفة للجرد الدوري", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Store, contentDescription = null, tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF0F5132))
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = costCenterDropdownExpanded)
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = if (isDark) Color(0xFF4ADE80) else Color(0xFF0F5132),
+                                unfocusedBorderColor = if (isDark) Color(0xFF23583C) else Color(0xFF81C784),
+                                focusedContainerColor = if (isDark) Color(0xFF0F291E) else Color(0xFFF1F8E9),
+                                unfocusedContainerColor = if (isDark) Color(0xFF0F291E) else Color(0xFFF1F8E9)
+                            ),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = costCenterDropdownExpanded,
+                            onDismissRequest = { costCenterDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F5132))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("المركز العام (بدون مركز تكلفة / الكل)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.selectAuditCostCenter(null)
+                                    costCenterDropdownExpanded = false
+                                }
+                            )
+                            HorizontalDivider()
+                            uiState.costCenters.forEach { center ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Store, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(center.centerName, fontSize = 12.sp)
+                                        }
+                                    },
+                                    onClick = {
+                                        viewModel.selectAuditCostCenter(center.centerId)
+                                        costCenterDropdownExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }

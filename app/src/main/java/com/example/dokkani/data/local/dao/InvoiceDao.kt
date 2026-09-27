@@ -79,18 +79,20 @@ interface InvoiceDao {
     suspend fun searchInvoicesByType(type: InvoiceType, query: String): List<InvoiceEntity>
 
     @Transaction
-    @Query("SELECT DISTINCT i.* FROM invoices i INNER JOIN invoice_items ii ON i.id = ii.invoiceId INNER JOIN products p ON ii.productId = p.id WHERE i.type = 'SALE' AND i.date > :startDate AND i.date <= :endDate AND ii.productId IN (:productIds) AND p.isWeighted = 0 ORDER BY i.date DESC")
+    @Query("SELECT DISTINCT i.* FROM invoices i INNER JOIN invoice_items ii ON i.id = ii.invoiceId INNER JOIN products p ON ii.productId = p.id WHERE i.type = 'SALE' AND i.date > :startDate AND i.date <= :endDate AND ii.productId IN (:productIds) AND p.isWeighted = 0 AND (:costCenterId IS NULL OR i.cost_center_id = :costCenterId) ORDER BY i.date DESC")
     suspend fun getGroupSaleInvoicesInDateRange(
         productIds: List<Long>,
         startDate: Long,
-        endDate: Long
+        endDate: Long,
+        costCenterId: Long? = null
     ): List<InvoiceWithDetails>
 
     @Transaction
-    @Query("SELECT DISTINCT i.* FROM invoices i INNER JOIN invoice_items ii ON i.id = ii.invoiceId INNER JOIN products p ON ii.productId = p.id WHERE i.type = 'SALE' AND i.date > :startDate AND i.date <= :endDate AND ii.productId IN (:productIds) AND p.isWeighted = 0 ORDER BY i.date DESC")
+    @Query("SELECT DISTINCT i.* FROM invoices i INNER JOIN invoice_items ii ON i.id = ii.invoiceId INNER JOIN products p ON ii.productId = p.id WHERE i.type = 'SALE' AND i.date > :startDate AND i.date <= :endDate AND ii.productId IN (:productIds) AND p.isWeighted = 0 AND (:costCenterId IS NULL OR i.cost_center_id = :costCenterId) ORDER BY i.date DESC")
     suspend fun getValueSaleInvoicesForGroupInDateRange(
         productIds: List<Long>,
         startDate: Long,
-        endDate: Long
+        endDate: Long,
+        costCenterId: Long? = null
     ): List<InvoiceWithDetails>
 }

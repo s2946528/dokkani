@@ -8,6 +8,7 @@ import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.SessionManager
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.repository.DokkaniRepository
+import com.example.dokkani.data.local.entities.AuditLogEntity
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.CostValuationMethod
@@ -238,6 +239,13 @@ data class DokkaniUiState(
     val ownerTransQuantityInput: String = "",
     val ownerTransDetailsInput: String = "",
     val ownerTransPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+
+    // Opening Capital Management (إدارة ورصد رأس المال الافتتاحي والقيد الافتتاحي)
+    val showOpeningCapitalDialog: Boolean = false,
+    val openingCapitalAmountInput: String = "",
+    val openingCapitalCurrencyInput: String = "YER",
+    val openingCapitalAccountCodeInput: String = "30100",
+    val openingCapitalNotesInput: String = "القيد الافتتاحي المعتمد لتأسيس ورصد رأس المال الافتتاحي",
 
     // Leasehold & Goodwill
     val showAddLeaseholdDialog: Boolean = false,
@@ -2069,6 +2077,126 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         )
 
         _uiState.update { it.copy(equityResult = result) }
+    }
+
+    // --- إدارة وتعديل رأس المال الافتتاحي والقيد الافتتاحي ---
+    fun openOpeningCapitalDialog() {
+        val currentCapital = _uiState.value.settings?.initialCapital
+            ?: _uiState.value.equityResult?.fixedOpeningCapital
+            ?: 0.0
+        val baseCurrency = _uiState.value.currencySymbol
+        _uiState.update {
+            it.copy(
+                showOpeningCapitalDialog = true,
+                openingCapitalAmountInput = if (currentCapital > 0) "%.2f".format(Locale.US, currentCapital) else "",
+                openingCapitalCurrencyInput = baseCurrency,
+                openingCapitalAccountCodeInput = "30100",
+                openingCapitalNotesInput = "القيد الافتتاحي المعتمد لتأسيس ورصد رأس المال الافتتاحي"
+            )
+        }
+    }
+
+    fun dismissOpeningCapitalDialog() {
+        _uiState.update { it.copy(showOpeningCapitalDialog = false) }
+    }
+
+    fun updateOpeningCapitalInputs(
+        amount: String,
+        currency: String,
+        accountCode: String,
+        notes: String
+    ) {
+        val sanitizedAmount = amount.filter { it.isDigit() || it == '.' }
+        _uiState.update {
+            it.copy(
+                openingCapitalAmountInput = sanitizedAmount,
+                openingCapitalCurrencyInput = currency,
+                openingCapitalAccountCodeInput = accountCode,
+                openingCapitalNotesInput = notes
+            )
+        }
+    }
+
+    fun saveOpeningCapital() {
+        val state = _uiState.value
+        val amount = state.openingCapitalAmountInput.toDoubleOrNull() ?: 0.0
+        val currency = state.openingCapitalCurrencyInput.ifBlank { "YER" }
+        val accountCode = state.openingCapitalAccountCodeInput.ifBlank { "30100" }
+        val notes = state.openingCapitalNotesInput.ifBlank { "القيد الافتتاحي المعتمد لتأسيس ورصد رأس المال الافتتاحي" }
+
+        if (amount <= 0.0) {
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.withTransaction {
+                val now = System.currentTimeMillis()
+                // 1. تحديث إعدادات النظام وتوثيق رأس المال الافتتاحي
+                val currentSettings = db.systemSettingsDao().getSettingsSync() ?: SystemSettingsEntity()
+                val updatedSettings = currentSettings.copy(
+                    initialCapital = amount,
+                    defaultCurrencyCode = currency,
+                    lastUpdated = now
+                )
+                db.systemSettingsDao().insertOrUpdateSettings(updatedSettings)
+
+                // 2. تحديث / إدراج حساب رأس المال الافتتاحي في دليل الحسابات (حقوق الملكية)
+                var capitalAccount = db.financialAccountDao().getAccountByCode(accountCode)
+                if (capitalAccount == null) {
+                    capitalAccount = FinancialAccountEntity(
+                        code = accountCode,
+                        name = "30100 - رأس المال الافتتاحي الثابت",
+                        accountType = FinancialAccountType.CHART_ACCOUNT,
+                        parentAccountCode = "301",
+                        parentAccountName = "301 - حقوق الملكية ورأس المال",
+                        openingBalance = amount,
+                        currentBalance = amount,
+                        currency = currency,
+                        isActive = true
+                    )
+                    db.financialAccountDao().insertAccount(capitalAccount)
+                } else {
+                    db.financialAccountDao().updateAccount(
+                        capitalAccount.copy(
+                            openingBalance = amount,
+                            currentBalance = amount,
+                            currency = currency
+                        )
+                    )
+                }
+
+                // 3. توثيق حركة القيد الافتتاحي في حركات الملكية
+                val openingEntry = OwnerTransactionEntity(
+                    transactionNumber = "CAP-OPEN-$now",
+                    type = OwnerTransactionType.CAPITAL_DEPOSIT,
+                    amount = amount,
+                    paymentMethod = PaymentMethod.CASH,
+                    date = now,
+                    details = "القيد الافتتاحي - $notes",
+                    recordedBy = "مدير النظام"
+                )
+                db.ownerTransactionDao().insertTransaction(openingEntry)
+
+                // 4. توثيق سجل التدقيق المحاسبي (Audit Log)
+                val currentUser = db.userDao().getAllUsersList().firstOrNull()
+                val auditLog = AuditLogEntity(
+                    userId = currentUser?.id ?: 1,
+                    userName = currentUser?.fullName ?: "مدير النظام",
+                    userRole = currentUser?.role?.name ?: "ADMIN",
+                    action = "OPENING_CAPITAL_UPDATE",
+                    details = "تم تعديل رأس المال الافتتاحي وتوليد القيد الافتتاحي بمبلغ $amount $currency للحساب $accountCode"
+                )
+                db.auditLogDao().insertLog(auditLog)
+            }
+
+            recalculateEquity()
+
+            _uiState.update {
+                it.copy(
+                    showOpeningCapitalDialog = false
+                )
+            }
+        }
     }
 
     fun openAddAssetDialog() {

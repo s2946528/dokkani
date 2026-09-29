@@ -31,6 +31,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.ui.components.PaymentMethodSelector
 import com.example.dokkani.data.local.entities.InvoiceEntity
+import com.example.dokkani.ui.components.AppSearchBar
+import com.example.dokkani.ui.components.isItemMatchQuery
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -210,6 +212,23 @@ private fun ActivePurchaseReturnContent(
     viewModel: PurchaseReturnViewModel
 ) {
     val originalInvoice = uiState.selectedInvoice ?: return
+    var itemSearchQuery by remember { mutableStateOf("") }
+
+    val filteredReturnItems = remember(uiState.returnItems, itemSearchQuery) {
+        if (itemSearchQuery.isBlank()) {
+            uiState.returnItems
+        } else {
+            uiState.returnItems.filter { item ->
+                isItemMatchQuery(
+                    itemName = item.productName,
+                    itemCode = item.productCode,
+                    barcode = "",
+                    category = "",
+                    searchQuery = itemSearchQuery
+                )
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -333,6 +352,16 @@ private fun ActivePurchaseReturnContent(
             }
         }
 
+        // شريط البحث المخصص لبنود مردود الشراء
+        AppSearchBar(
+            value = itemSearchQuery,
+            onValueChange = { itemSearchQuery = it },
+            placeholder = "ابحث بالصوت أو النص في بنود الفاتورة للإرجاع...",
+            label = "بحث أصناف المردود (صوتي / نصي / باركود)",
+            onBarcodeScanned = { itemSearchQuery = it },
+            modifier = Modifier.fillMaxWidth()
+        )
+
         // قائمة البنود المتاحة للإرجاع
         LazyColumn(
             modifier = Modifier
@@ -340,7 +369,7 @@ private fun ActivePurchaseReturnContent(
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(uiState.returnItems, key = { "${it.productId}_${it.unitId}" }) { item ->
+            items(filteredReturnItems, key = { "${it.productId}_${it.unitId}" }) { item ->
                 PurchaseReturnItemCard(
                     item = item,
                     currencySymbol = uiState.currencySymbol,
@@ -361,6 +390,9 @@ private fun ActivePurchaseReturnContent(
                 PaymentMethodSelector(
                     selectedMethod = uiState.paymentMethod,
                     onMethodSelected = { viewModel.setPaymentMethod(it) },
+                    financialAccounts = uiState.financialAccounts,
+                    selectedAccountId = uiState.selectedPaymentAccountId,
+                    onAccountSelected = { viewModel.setPaymentAccountId(it) },
                     transactionRef = uiState.transactionRef,
                     onTransactionRefChange = { viewModel.setTransactionRef(it) },
                     receiptImagePath = uiState.receiptImagePath,
@@ -634,12 +666,11 @@ private fun SelectPurchaseInvoiceDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
-                OutlinedTextField(
+                AppSearchBar(
                     value = searchQuery,
                     onValueChange = onSearchChange,
-                    placeholder = { Text("بحث برقم الفاتورة...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
+                    placeholder = "بحث صوتی أو نصي برقم الفاتورة أو اسم الصنف...",
+                    label = "بحث فواتير الشراء",
                     modifier = Modifier.fillMaxWidth()
                 )
 

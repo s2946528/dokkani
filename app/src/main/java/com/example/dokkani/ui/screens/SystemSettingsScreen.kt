@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.CurrencyEntity
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceWithDetails
 import com.example.dokkani.data.local.entities.PartyEntity
@@ -54,6 +55,7 @@ fun SystemSettingsScreen(
     currencies: List<CurrencyEntity> = emptyList(),
     parties: List<PartyEntity> = emptyList(),
     invoices: List<InvoiceEntity> = emptyList(),
+    financialAccounts: List<FinancialAccountEntity> = emptyList(),
     currentUserRole: UserRole = UserRole.ADMIN,
     onUpdateValuationMethod: (CostValuationMethod) -> Unit = {},
     onUpdateEnableNegativeStock: (Boolean) -> Unit = {},
@@ -65,7 +67,7 @@ fun SystemSettingsScreen(
     onSaveParty: (PartyEntity) -> Unit = {},
     onDeleteParty: (PartyEntity) -> Unit = {},
     onDeleteInvoice: (Long) -> Unit = {},
-    onUpdateInvoice: (Long, Double, Double, Double, PaymentMethod, String, String, String?) -> Unit = { _, _, _, _, _, _, _, _ -> },
+    onUpdateInvoice: (Long, Double, Double, Double, PaymentMethod, String, String, String?, Long?) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
     onUpdateStoreProfile: (storeName: String, storeAddress: String, storePhone: String, taxNumber: String, invoiceFooterText: String, showPreviousBalance: Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onUpdateShowPreviousBalance: (Boolean) -> Unit = {},
     onUpdateShowDecimals: (Boolean) -> Unit = {},
@@ -1621,10 +1623,11 @@ fun SystemSettingsScreen(
         if (inv != null) {
             DirectEditInvoiceDialog(
                 invoice = inv,
+                financialAccounts = financialAccounts,
                 isAdmin = currentUserRole == UserRole.ADMIN,
                 onDismiss = { editingInvoiceId = null },
-                onSave = { newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg ->
-                    onUpdateInvoice(inv.id, newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg)
+                onSave = { newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg, newAcc ->
+                    onUpdateInvoice(inv.id, newTotal, newPaid, newDisc, newMethod, newRef, newNotes, newImg, newAcc)
                     editingInvoiceId = null
                 }
             )

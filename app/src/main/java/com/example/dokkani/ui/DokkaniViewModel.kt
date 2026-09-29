@@ -188,6 +188,7 @@ data class DokkaniUiState(
     val voucherAmountInput: String = "",
     val voucherNotesInput: String = "",
     val voucherPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val voucherAccountId: Long? = null,
     val voucherReceiptImagePath: String? = null,
     val isSubmittingVoucher: Boolean = false,
 
@@ -199,8 +200,12 @@ data class DokkaniUiState(
     val balanceSheetReport: BalanceSheetReport? = null,
     val trialBalanceReport: TrialBalanceReport? = null,
     val stockMovementReport: com.example.dokkani.domain.reports.StockMovementReport? = null,
+    val selectedItemLedgerReport: com.example.dokkani.domain.reports.ProductItemLedgerReport? = null,
+    val isLoadingItemLedger: Boolean = false,
+    val showItemLedgerDialog: Boolean = false,
     val selectedReportCostCenterId: Long? = null, // null = جميع مراكز التكلفة
     val selectedReportValuationMethod: CostValuationMethod = CostValuationMethod.WAC,
+    val hideZeroBalances: Boolean = true,
     val topProductsReport: TopProductsReport? = null,
     val inventoryHealthReport: InventoryHealthReport? = null,
 
@@ -889,6 +894,10 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(voucherCostCenterId = costCenterId) }
     }
 
+    fun setVoucherAccountId(accountId: Long?) {
+        _uiState.update { it.copy(voucherAccountId = accountId) }
+    }
+
     fun submitPaymentVoucher() {
         val state = _uiState.value
         val partyId = state.voucherPartyId ?: return
@@ -909,6 +918,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 amount = amount,
                 voucherType = vType,
                 paymentMethod = state.voucherPaymentMethod,
+                paymentAccountId = state.voucherAccountId,
                 transactionRef = state.voucherNotesInput,
                 receiptImagePath = state.voucherReceiptImagePath,
                 notes = state.voucherNotesInput,
@@ -925,9 +935,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             if (state.voucherPaymentMethod == PaymentMethod.CASH) {
                 val openShift = getOrCreateOpenShift(db.cashShiftDao())
                 if (isSupplier) {
-                    // سند صرف للمورد -> يضاف لمصاريف الشفت ويخصم من النقدية المتوقعة بالدرج
-                    val newExpenses = openShift.totalCashExpenses + amount
-                    db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
+                    // سند صرف للمورد -> يضاف لمدفوعات الموردين بالشفت ويخصم من النقدية المتوقعة بالدرج
+                    val newSupplierPayments = openShift.totalSupplierPayments + amount
+                    db.cashShiftDao().updateSupplierPayments(openShift.id, newSupplierPayments)
                 } else {
                     // سند قبض من عميل -> يضاف لمقبوضات الشفت ويزيد النقدية المتوقعة بالدرج
                     val newCollections = openShift.totalCashCollections + amount
@@ -935,12 +945,16 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
 
-            // 3. تحديث رصيد الحساب المالي (الصندوق / البنك)
-            val accountType = when (state.voucherPaymentMethod) {
-                PaymentMethod.CASH -> FinancialAccountType.CASH_DRAWER
-                else -> FinancialAccountType.BANK
+            // 3. تحديث رصيد الحساب المالي المختار من قاعدة البيانات
+            val targetAccount = if (state.voucherAccountId != null) {
+                db.financialAccountDao().getAccountById(state.voucherAccountId)
+            } else {
+                val accountType = when (state.voucherPaymentMethod) {
+                    PaymentMethod.CASH -> FinancialAccountType.CASH_DRAWER
+                    else -> FinancialAccountType.BANK
+                }
+                db.financialAccountDao().getAllAccountsSync().firstOrNull { it.accountType == accountType && it.isActive }
             }
-            val targetAccount = db.financialAccountDao().getAllAccountsSync().firstOrNull { it.accountType == accountType && it.isActive }
             if (targetAccount != null) {
                 val accountDiff = if (isSupplier) -amount else +amount
                 db.financialAccountDao().updateAccount(targetAccount.copy(currentBalance = targetAccount.currentBalance + accountDiff))
@@ -979,6 +993,10 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         refreshReports()
     }
 
+    fun toggleHideZeroBalances(hide: Boolean) {
+        _uiState.update { it.copy(hideZeroBalances = hide) }
+    }
+
     fun refreshReports() {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isLoadingReports = true) }
@@ -1008,7 +1026,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             val topProds = FinancialReportsEngine.generateTopProductsReport(
                 productsWithUnits = products,
                 invoiceItems = invoiceItems,
-                productUnitCosts = productUnitCosts
+                productUnitCosts = productUnitCosts,
+                invoices = invoices
             )
             val inventoryHealth = FinancialReportsEngine.generateInventoryHealthReport(
                 productsWithUnits = products,
@@ -1041,6 +1060,54 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     isLoadingReports = false
                 )
             }
+        }
+    }
+
+    /**
+     * جلب وبناء الحركة التفصيلية للصنف مع العملة
+     */
+    fun openProductItemLedger(
+        item: com.example.dokkani.domain.reports.ProductStockMovementItem,
+        costCenterId: Long? = null,
+        currencySymbol: String = "ر.ي"
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingItemLedger = true, showItemLedgerDialog = true) }
+            val ccName = if (costCenterId != null && costCenterId > 0) {
+                _uiState.value.costCenters.find { it.centerId == costCenterId }?.centerName ?: "مركز التكلفة $costCenterId"
+            } else {
+                "جميع مراكز التكلفة"
+            }
+
+            val movements = db.stockMovementDao().getDetailedMovementsForProduct(item.productId, costCenterId)
+            val ledgerReport = FinancialReportsEngine.generateProductItemLedgerReport(
+                productId = item.productId,
+                productCode = item.productCode,
+                productName = item.productName,
+                category = item.category,
+                unitName = item.baseUnitName,
+                currencySymbol = currencySymbol,
+                unitCost = item.unitCostPrice,
+                costCenterName = ccName,
+                movements = movements
+            )
+
+            _uiState.update {
+                it.copy(
+                    selectedItemLedgerReport = ledgerReport,
+                    isLoadingItemLedger = false
+                )
+            }
+        }
+    }
+
+    fun closeProductItemLedger() {
+        _uiState.update {
+            it.copy(
+                selectedItemLedgerReport = null,
+                showItemLedgerDialog = false,
+                isLoadingItemLedger = false
+            )
         }
     }
 
@@ -1132,18 +1199,41 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     // --- CRUD Management Actions ---
     fun saveProduct(product: ProductEntity, baseUnitName: String = "حبة", cost: Double = 0.0, sell: Double = 0.0, barcode: String = "", isBaseUnit: Boolean = true) {
         viewModelScope.launch(Dispatchers.IO) {
-            val prodId = db.productDao().insertProduct(product)
-            if (product.id == 0L) {
-                val baseUnit = ProductUnitEntity(
-                    productId = prodId,
-                    unitName = baseUnitName.ifBlank { "حبة" },
-                    conversionFactor = 1.0,
-                    barcode = barcode,
-                    costPrice = cost,
-                    sellingPrice = sell,
-                    isBaseUnit = isBaseUnit
-                )
-                db.productDao().insertUnit(baseUnit)
+            db.withTransaction {
+                val cleanUnitName = baseUnitName.ifBlank { "حبة" }.trim()
+                val cleanBarcode = barcode.trim()
+
+                val targetProdId = if (product.id == 0L) {
+                    db.productDao().insertProduct(product)
+                } else {
+                    db.productDao().updateProduct(product)
+                    product.id
+                }
+
+                val existingUnits = db.productDao().getUnitsForProductSync(targetProdId)
+                val baseUnit = existingUnits.find { it.isBaseUnit } ?: existingUnits.firstOrNull()
+
+                if (baseUnit != null) {
+                    val updatedUnit = baseUnit.copy(
+                        unitName = cleanUnitName,
+                        costPrice = cost,
+                        sellingPrice = sell,
+                        barcode = if (cleanBarcode.isNotBlank()) cleanBarcode else baseUnit.barcode,
+                        isBaseUnit = true
+                    )
+                    db.productDao().updateUnit(updatedUnit)
+                } else {
+                    val newBaseUnit = ProductUnitEntity(
+                        productId = targetProdId,
+                        unitName = cleanUnitName,
+                        conversionFactor = 1.0,
+                        barcode = cleanBarcode,
+                        costPrice = cost,
+                        sellingPrice = sell,
+                        isBaseUnit = true
+                    )
+                    db.productDao().insertUnit(newBaseUnit)
+                }
             }
         }
     }
@@ -1209,7 +1299,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         totalCost: Double,
         adminUser: String,
         wasteId: Long = 0L,
-        notes: String = ""
+        notes: String = "",
+        costCenterId: Long = 1L
     ) {
         if (productId <= 0 || quantity <= 0 || totalCost <= 0) return
         viewModelScope.launch(Dispatchers.IO) {
@@ -1225,7 +1316,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     totalCost = totalCost,
                     adminUser = adminUser.ifBlank { "مدير النظام" },
                     timestamp = now,
-                    notes = notes
+                    notes = notes,
+                    costCenterId = costCenterId
                 )
 
                 val insertedId = if (wasteId > 0) {
@@ -1254,7 +1346,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                         unitCostPriceBase = baseUnitCost,
                         timestamp = now,
                         referenceNumber = "WASTE-$insertedId",
-                        notes = "إتلاف وهادر: $reason (اعتماد: $adminUser)"
+                        notes = "إتلاف وهادر: $reason (اعتماد: $adminUser)",
+                        costCenterId = costCenterId
                     )
                 )
             }
@@ -1532,8 +1625,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                                     db.cashShiftDao().updateSales(currentShift.id, newSales)
                                 }
                                 InvoiceType.PURCHASE -> {
-                                    val newExp = (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
-                                    db.cashShiftDao().updateExpenses(currentShift.id, newExp)
+                                    val newPurchases = (currentShift.totalCashPurchases - inv.total).coerceAtLeast(0.0)
+                                    db.cashShiftDao().updateCashPurchases(currentShift.id, newPurchases)
                                 }
                                 InvoiceType.SALE_RETURN -> {
                                     val newSales = currentShift.totalCashSales + inv.total
@@ -1569,8 +1662,13 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     if (v.paymentMethod == PaymentMethod.CASH) {
                         val openShift = getOrCreateOpenShift(db.cashShiftDao())
                         if (isPay) {
-                            val newExp = (openShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
-                            db.cashShiftDao().updateExpenses(openShift.id, newExp)
+                            if (party?.type == PartyType.SUPPLIER) {
+                                val newSupp = (openShift.totalSupplierPayments - v.amount).coerceAtLeast(0.0)
+                                db.cashShiftDao().updateSupplierPayments(openShift.id, newSupp)
+                            } else {
+                                val newExp = (openShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                                db.cashShiftDao().updateExpenses(openShift.id, newExp)
+                            }
                         } else {
                             val newCollections = (openShift.totalCashCollections - v.amount).coerceAtLeast(0.0)
                             db.cashShiftDao().updateCollections(openShift.id, newCollections)
@@ -1599,7 +1697,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         newPaymentMethod: PaymentMethod,
         newTransactionRef: String,
         newNotes: String,
-        newReceiptImagePath: String?
+        newReceiptImagePath: String?,
+        newPaymentAccountId: Long? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {
@@ -1613,6 +1712,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     paidAmount = newPaidAmount,
                     discount = newDiscount,
                     paymentMethod = newPaymentMethod,
+                    paymentAccountId = newPaymentAccountId ?: oldInv.paymentAccountId,
                     transactionRef = newTransactionRef,
                     notes = newNotes,
                     receiptImagePath = newReceiptImagePath
@@ -1654,14 +1754,14 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                         if (oldMethod == PaymentMethod.CASH && newPaymentMethod != PaymentMethod.CASH) {
                             when (oldInv.type) {
                                 InvoiceType.SALE -> db.cashShiftDao().updateSales(currentShift.id, (currentShift.totalCashSales - oldPaid).coerceAtLeast(0.0))
-                                InvoiceType.PURCHASE -> db.cashShiftDao().updateExpenses(currentShift.id, (currentShift.totalCashExpenses - oldPaid).coerceAtLeast(0.0))
+                                InvoiceType.PURCHASE -> db.cashShiftDao().updateCashPurchases(currentShift.id, (currentShift.totalCashPurchases - oldPaid).coerceAtLeast(0.0))
                                 InvoiceType.SALE_RETURN -> db.cashShiftDao().updateSales(currentShift.id, currentShift.totalCashSales + oldPaid)
                                 InvoiceType.PURCHASE_RETURN -> db.cashShiftDao().updateCollections(currentShift.id, (currentShift.totalCashCollections - oldPaid).coerceAtLeast(0.0))
                             }
                         } else if (oldMethod != PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
                             when (oldInv.type) {
                                 InvoiceType.SALE -> db.cashShiftDao().updateSales(currentShift.id, currentShift.totalCashSales + newPaidAmount)
-                                InvoiceType.PURCHASE -> db.cashShiftDao().updateExpenses(currentShift.id, currentShift.totalCashExpenses + newPaidAmount)
+                                InvoiceType.PURCHASE -> db.cashShiftDao().updateCashPurchases(currentShift.id, currentShift.totalCashPurchases + newPaidAmount)
                                 InvoiceType.SALE_RETURN -> db.cashShiftDao().updateSales(currentShift.id, (currentShift.totalCashSales - newPaidAmount))
                                 InvoiceType.PURCHASE_RETURN -> db.cashShiftDao().updateCollections(currentShift.id, currentShift.totalCashCollections + newPaidAmount)
                             }
@@ -1669,12 +1769,32 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                             val diff = newPaidAmount - oldPaid
                             when (oldInv.type) {
                                 InvoiceType.SALE -> db.cashShiftDao().updateSales(currentShift.id, (currentShift.totalCashSales + diff).coerceAtLeast(0.0))
-                                InvoiceType.PURCHASE -> db.cashShiftDao().updateExpenses(currentShift.id, (currentShift.totalCashExpenses + diff).coerceAtLeast(0.0))
+                                InvoiceType.PURCHASE -> db.cashShiftDao().updateCashPurchases(currentShift.id, (currentShift.totalCashPurchases + diff).coerceAtLeast(0.0))
                                 InvoiceType.SALE_RETURN -> db.cashShiftDao().updateSales(currentShift.id, currentShift.totalCashSales - diff)
                                 InvoiceType.PURCHASE_RETURN -> db.cashShiftDao().updateCollections(currentShift.id, (currentShift.totalCashCollections + diff).coerceAtLeast(0.0))
                             }
                         }
                     }
+                }
+
+                // 3. انعكاس القيود المحاسبية وتعديل أثر الرصيد على الحساب المالي المحدد
+                if (oldInv.paymentAccountId != null && oldInv.paymentAccountId != 0L) {
+                    val reverseDelta = when (oldInv.type) {
+                        InvoiceType.SALE, InvoiceType.PURCHASE_RETURN -> -oldPaid
+                        InvoiceType.PURCHASE, InvoiceType.SALE_RETURN -> +oldPaid
+                    }
+                    db.financialAccountDao().updateBalance(oldInv.paymentAccountId, reverseDelta)
+                }
+
+                val targetAccId = updatedInv.paymentAccountId
+                if (targetAccId != null && targetAccId != 0L &&
+                    (newPaymentMethod.isElectronic || newPaymentMethod == PaymentMethod.MULTI)
+                ) {
+                    val applyDelta = when (oldInv.type) {
+                        InvoiceType.SALE, InvoiceType.PURCHASE_RETURN -> +newPaidAmount
+                        InvoiceType.PURCHASE, InvoiceType.SALE_RETURN -> -newPaidAmount
+                    }
+                    db.financialAccountDao().updateBalance(targetAccId, applyDelta)
                 }
             }
             val selectedPartyId = _uiState.value.selectedPartyForStatement
@@ -1690,7 +1810,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         newPaymentMethod: PaymentMethod,
         newTransactionRef: String,
         newNotes: String,
-        newReceiptImagePath: String?
+        newReceiptImagePath: String?,
+        newPaymentAccountId: Long? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {
@@ -1702,6 +1823,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 val updatedV = oldV.copy(
                     amount = newAmount,
                     paymentMethod = newPaymentMethod,
+                    paymentAccountId = newPaymentAccountId ?: oldV.paymentAccountId,
                     transactionRef = newTransactionRef,
                     notes = newNotes,
                     receiptImagePath = newReceiptImagePath
@@ -1721,14 +1843,26 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     val openShift = getOrCreateOpenShift(db.cashShiftDao())
                     val diff = newAmount - oldAmount
                     if (isPay) {
-                        val exp = if (oldMethod == PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
-                            (openShift.totalCashExpenses + diff).coerceAtLeast(0.0)
-                        } else if (newPaymentMethod == PaymentMethod.CASH) {
-                            openShift.totalCashExpenses + newAmount
+                        val isSupplierVoucher = party?.type == PartyType.SUPPLIER
+                        if (isSupplierVoucher) {
+                            val supp = if (oldMethod == PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
+                                (openShift.totalSupplierPayments + diff).coerceAtLeast(0.0)
+                            } else if (newPaymentMethod == PaymentMethod.CASH) {
+                                openShift.totalSupplierPayments + newAmount
+                            } else {
+                                (openShift.totalSupplierPayments - oldAmount).coerceAtLeast(0.0)
+                            }
+                            db.cashShiftDao().updateSupplierPayments(openShift.id, supp)
                         } else {
-                            (openShift.totalCashExpenses - oldAmount).coerceAtLeast(0.0)
+                            val exp = if (oldMethod == PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
+                                (openShift.totalCashExpenses + diff).coerceAtLeast(0.0)
+                            } else if (newPaymentMethod == PaymentMethod.CASH) {
+                                openShift.totalCashExpenses + newAmount
+                            } else {
+                                (openShift.totalCashExpenses - oldAmount).coerceAtLeast(0.0)
+                            }
+                            db.cashShiftDao().updateExpenses(openShift.id, exp)
                         }
-                        db.cashShiftDao().updateExpenses(openShift.id, exp)
                     } else {
                         val coll = if (oldMethod == PaymentMethod.CASH && newPaymentMethod == PaymentMethod.CASH) {
                             (openShift.totalCashCollections + diff).coerceAtLeast(0.0)
@@ -1739,6 +1873,20 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                         }
                         db.cashShiftDao().updateCollections(openShift.id, coll)
                     }
+                }
+
+                // 3. انعكاس القيود المحاسبية وتعديل أثر الرصيد على الحساب المالي المحدد للسندات
+                if (oldV.paymentAccountId != null && oldV.paymentAccountId != 0L) {
+                    val reverseDelta = if (isPay) +oldAmount else -oldAmount
+                    db.financialAccountDao().updateBalance(oldV.paymentAccountId, reverseDelta)
+                }
+
+                val targetAccId = updatedV.paymentAccountId
+                if (targetAccId != null && targetAccId != 0L &&
+                    (newPaymentMethod.isElectronic || newPaymentMethod == PaymentMethod.MULTI)
+                ) {
+                    val applyDelta = if (isPay) -newAmount else +newAmount
+                    db.financialAccountDao().updateBalance(targetAccId, applyDelta)
                 }
             }
             val selectedPartyId = _uiState.value.selectedPartyForStatement

@@ -728,7 +728,7 @@ private fun ShiftReconciliationContent(
                                 isOutflow = true
                             )
                             InflowOutflowRow(
-                                label = "المشتريات النقدية من الدرج",
+                                label = "المشتريات النقدية المباشرة",
                                 amount = recon?.totalCashPurchases ?: 0.0,
                                 currencySymbol = uiState.currencySymbol,
                                 count = recon?.cashPurchasesCount ?: 0,

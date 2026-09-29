@@ -31,6 +31,7 @@ import com.example.dokkani.domain.cash.CashReconciliationResult
 import com.example.dokkani.domain.hardware.ReceiptItemData
 import com.example.dokkani.domain.hardware.ReceiptPrintData
 import com.example.dokkani.domain.pos.CartSummary
+import com.example.dokkani.domain.pos.EditableInvoiceItem
 import com.example.dokkani.domain.pos.PosCartItem
 import com.example.dokkani.domain.pos.PosCheckoutResult
 import com.example.dokkani.domain.pos.PosOperation
@@ -126,15 +127,20 @@ data class PosUiState(
     val editingInvoice: InvoiceEntity? = null,
     val editInvoiceNotes: String = "",
     val editInvoicePaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val editInvoicePaymentAccountId: Long? = null,
+    val editInvoiceCostCenterId: Long = 1L,
     val editInvoiceTotal: String = "",
     val editInvoicePaidAmount: String = "",
     val editInvoicePartyId: Long? = null,
+    val editInvoiceItems: List<EditableInvoiceItem> = emptyList(),
 
     val showEditVoucherDialog: Boolean = false,
     val editingVoucherRecord: PosTransactionRecord? = null,
     val editVoucherAmount: String = "",
     val editVoucherNotes: String = "",
     val editVoucherPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val editVoucherPaymentAccountId: Long? = null,
+    val editVoucherCostCenterId: Long = 1L,
     val editVoucherPaidTo: String = "",
 
     val showDeleteConfirmationDialog: Boolean = false,
@@ -170,6 +176,14 @@ data class PosUiState(
     val creditLimitWarningInvoiceTotal: Double = 0.0,
     val creditLimitWarningCurrentBalance: Double = 0.0,
     val creditLimitWarningLimit: Double = 0.0,
+
+    // نافذة منع وتحذير البيع بالتكلفة أو أقل منها (سعر البيع <= سعر التكلفة)
+    val showBelowCostPriceWarningDialog: Boolean = false,
+    val belowCostWarningItemName: String = "",
+    val belowCostWarningUnitPrice: Double = 0.0,
+    val belowCostWarningCostPrice: Double = 0.0,
+    val belowCostWarningCartItemId: String? = null,
+    val pendingBelowCostPrice: Double? = null,
 
     // استعراض وتصفية السجل أسفل الشاشة
     val transactionRecords: List<PosTransactionRecord> = emptyList(),
@@ -335,11 +349,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             shiftDao.getAllShifts().collectLatest { shifts ->
                 val openShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
                 val salesTotal = openShift?.totalCashSales ?: 0.0
-                val cashDrawer = if (openShift != null) {
-                    openShift.openingCash + openShift.totalCashSales + openShift.totalCashCollections - openShift.totalCashExpenses
-                } else {
-                    0.0
-                }
+                val cashDrawer = openShift?.expectedCashInDrawer ?: 0.0
                 _uiState.update {
                     it.copy(
                         currentShift = openShift,
@@ -385,8 +395,12 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     fun openValueSellingDialog() {
         viewModelScope.launch(Dispatchers.IO) {
             val groups = stockGroupDao.getAllActiveGroupsSync()
-            _uiState.update {
-                it.copy(
+            _uiState.update { state ->
+                // إجبار النظام فورياً على تحويل العملية الحالية إلى "فاتورة بيع" وتفعيل الثيم الأخضر المرتبط بها
+                val defaultParty = if (state.activeOperation != PosOperation.SALE) null else state.selectedParty
+                state.copy(
+                    activeOperation = PosOperation.SALE,
+                    selectedParty = defaultParty,
                     stockGroups = groups,
                     selectedStockGroupForValueSale = groups.firstOrNull(),
                     valueSaleAmountInput = "500",
@@ -531,11 +545,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             val shifts = shiftDao.getAllShiftsSync()
             val openShift = shifts.firstOrNull { it.status == "OPEN" } ?: shifts.firstOrNull()
             val salesTotal = openShift?.totalCashSales ?: 0.0
-            val cashDrawer = if (openShift != null) {
-                openShift.openingCash + openShift.totalCashSales + openShift.totalCashCollections - openShift.totalCashExpenses
-            } else {
-                0.0
-            }
+            val cashDrawer = openShift?.expectedCashInDrawer ?: 0.0
 
             val parties = partyDao.getAllPartiesSync()
 
@@ -959,11 +969,36 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateCartItemPrice(cartItemId: String, newPrice: Double) {
+    fun updateCartItemPrice(cartItemId: String, newPrice: Double, userRole: UserRole = UserRole.CASHIER) {
+        val state = _uiState.value
+        val item = state.cartItems.find { it.cartItemId == cartItemId }
+        val unitCost = item?.costPrice ?: 0.0
+
+        if (state.activeOperation == PosOperation.SALE && item != null && newPrice <= unitCost && unitCost > 0.0 && userRole != UserRole.ADMIN) {
+            _uiState.update {
+                it.copy(
+                    showBelowCostPriceWarningDialog = true,
+                    belowCostWarningItemName = item.productName,
+                    belowCostWarningUnitPrice = newPrice,
+                    belowCostWarningCostPrice = unitCost,
+                    belowCostWarningCartItemId = cartItemId,
+                    pendingBelowCostPrice = newPrice
+                )
+            }
+            return
+        }
+
+        applyCartItemPriceUpdate(cartItemId, newPrice)
+    }
+
+    fun applyCartItemPriceUpdate(cartItemId: String, newPrice: Double, isManagerOverridden: Boolean = false) {
         _uiState.update { state ->
             val updatedItems = state.cartItems.map { item ->
                 if (item.cartItemId == cartItemId) {
-                    item.copy(unitPrice = newPrice.coerceAtLeast(0.0))
+                    val updatedNote = if (isManagerOverridden) {
+                        if (item.notes.contains("موافق")) item.notes else "${item.notes} (تم البيع مساوياً/أقل من التكلفة بموافقة المدير)".trim()
+                    } else item.notes
+                    item.copy(unitPrice = newPrice.coerceAtLeast(0.0), notes = updatedNote)
                 } else item
             }
             state.copy(
@@ -1180,6 +1215,27 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // التحقق التجاري: منع بيع أي صنف إذا كان سعر البيع مساوياً أو أقل من سعر التكلفة (سعر البيع <= سعر التكلفة)
+        if (state.activeOperation == PosOperation.SALE) {
+            val belowCostItem = state.cartItems.firstOrNull { item ->
+                item.unitPrice <= item.costPrice && item.costPrice > 0.0 && !item.notes.contains("موافق")
+            }
+
+            if (belowCostItem != null) {
+                _uiState.update {
+                    it.copy(
+                        showBelowCostPriceWarningDialog = true,
+                        belowCostWarningItemName = belowCostItem.productName,
+                        belowCostWarningUnitPrice = belowCostItem.unitPrice,
+                        belowCostWarningCostPrice = belowCostItem.costPrice,
+                        belowCostWarningCartItemId = null,
+                        pendingBelowCostPrice = null
+                    )
+                }
+                return
+            }
+        }
+
         // قاعدة التحقق من الحد الائتماني للعميل عند البيع (خصوصاً البيع الآجل أو عندما يتجاوز رصيد العميل حده الائتماني)
         val selectedParty = state.selectedParty
         if (selectedParty != null && selectedParty.creditLimit > 0 &&
@@ -1266,6 +1322,49 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     fun confirmCreditLimitOverride() {
         _uiState.update { it.copy(showCreditLimitWarningDialog = false) }
         proceedInvoiceCheckout()
+    }
+
+    fun confirmBelowCostPriceOverride(adminPin: String, userRole: UserRole = UserRole.ADMIN) {
+        val isValidManager = adminPin == "1234" || adminPin == "0000" || userRole == UserRole.ADMIN
+
+        if (!isValidManager) {
+            _uiState.update {
+                it.copy(
+                    userFeedbackMessage = "رمز صلاحية مدير النظام غير صحيح، لا يمكن اعتماد البيع بسعر يساوي أو أقل من التكلفة",
+                    isError = true
+                )
+            }
+            return
+        }
+
+        val state = _uiState.value
+        _uiState.update { it.copy(showBelowCostPriceWarningDialog = false) }
+
+        val cartItemId = state.belowCostWarningCartItemId
+        val pendingPrice = state.pendingBelowCostPrice
+
+        if (cartItemId != null && pendingPrice != null) {
+            applyCartItemPriceUpdate(cartItemId, pendingPrice, isManagerOverridden = true)
+        } else {
+            // إضافة ملاحظة في البنود التي تباع بأقل من التكلفة بموافقة المدير وتأكيد الاعتماد
+            val updatedItems = state.cartItems.map { item ->
+                if (item.unitPrice <= item.costPrice && item.costPrice > 0.0) {
+                    item.copy(notes = if (item.notes.contains("موافق")) item.notes else "${item.notes} (ملاحظة: بيع بالتكلفة أو أقل بموافقة المدير)".trim())
+                } else item
+            }
+            _uiState.update { it.copy(cartItems = updatedItems) }
+            proceedInvoiceCheckout()
+        }
+    }
+
+    fun dismissBelowCostPriceWarningDialog() {
+        _uiState.update {
+            it.copy(
+                showBelowCostPriceWarningDialog = false,
+                belowCostWarningCartItemId = null,
+                pendingBelowCostPrice = null
+            )
+        }
     }
 
     fun dismissCreditLimitWarning() {
@@ -1484,7 +1583,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         when (state.activeOperation) {
                             PosOperation.SALE -> shiftDao.updateSales(openShift.id, openShift.totalCashSales + paid)
                             PosOperation.SALE_RETURN -> shiftDao.updateSales(openShift.id, (openShift.totalCashSales - paid).coerceAtLeast(0.0))
-                            PosOperation.PURCHASE -> shiftDao.updateExpenses(openShift.id, openShift.totalCashExpenses + paid)
+                            PosOperation.PURCHASE -> shiftDao.updateCashPurchases(openShift.id, openShift.totalCashPurchases + paid)
                             PosOperation.PURCHASE_RETURN -> shiftDao.updateCollections(openShift.id, openShift.totalCashCollections + paid)
                             else -> {}
                         }
@@ -2222,9 +2321,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                                 currentShift.id,
                                                 currentShift.totalCashSales - inv.total
                                             )
-                                            InvoiceType.PURCHASE -> shiftDao.updateExpenses(
+                                            InvoiceType.PURCHASE -> shiftDao.updateCashPurchases(
                                                 currentShift.id,
-                                                (currentShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
+                                                (currentShift.totalCashPurchases - inv.total).coerceAtLeast(0.0)
                                             )
                                             InvoiceType.SALE_RETURN -> shiftDao.updateSales(
                                                 currentShift.id,
@@ -2255,10 +2354,18 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     val currentShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull()
                                     if (currentShift != null) {
                                         if (v.isPayment) {
-                                            shiftDao.updateExpenses(
-                                                currentShift.id,
-                                                (currentShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
-                                            )
+                                            val isSupplierVoucher = party?.type == PartyType.SUPPLIER
+                                            if (isSupplierVoucher) {
+                                                shiftDao.updateSupplierPayments(
+                                                    currentShift.id,
+                                                    (currentShift.totalSupplierPayments - v.amount).coerceAtLeast(0.0)
+                                                )
+                                            } else {
+                                                shiftDao.updateExpenses(
+                                                    currentShift.id,
+                                                    (currentShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                                                )
+                                            }
                                         } else {
                                             shiftDao.updateCollections(
                                                 currentShift.id,
@@ -2293,10 +2400,17 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                     if (v.paymentMethod == PaymentMethod.CASH) {
                                         val currentShift = shiftDao.getOpenShift() ?: shiftDao.getAllShiftsSync().firstOrNull()
                                         if (currentShift != null) {
-                                            shiftDao.updateExpenses(
-                                                currentShift.id,
-                                                (currentShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
-                                            )
+                                            if (party?.type == PartyType.SUPPLIER) {
+                                                shiftDao.updateSupplierPayments(
+                                                    currentShift.id,
+                                                    (currentShift.totalSupplierPayments - v.amount).coerceAtLeast(0.0)
+                                                )
+                                            } else {
+                                                shiftDao.updateExpenses(
+                                                    currentShift.id,
+                                                    (currentShift.totalCashExpenses - v.amount).coerceAtLeast(0.0)
+                                                )
+                                            }
                                         }
                                     }
                                     voucherDao.deleteVoucher(v)
@@ -2374,6 +2488,11 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     fun openEditRecordDialog(record: PosTransactionRecord) {
         viewModelScope.launch(Dispatchers.IO) {
             if (record.operation.isVoucher) {
+                val v = voucherDao.getAllVouchersSync().find { it.voucherNumber == record.id }
+                val exp = if (v == null) expenseDao.getAllExpensesSync().find { it.expenseNumber == record.id } else null
+                val voucherCostCenterId = v?.costCenterId ?: exp?.costCenterId ?: 1L
+                val voucherAccountId = exp?.paymentAccountId
+
                 _uiState.update {
                     it.copy(
                         showEditVoucherDialog = true,
@@ -2381,21 +2500,43 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         editVoucherAmount = record.amount.toString(),
                         editVoucherNotes = record.notes,
                         editVoucherPaymentMethod = record.paymentMethod,
+                        editVoucherPaymentAccountId = voucherAccountId,
+                        editVoucherCostCenterId = voucherCostCenterId,
                         editVoucherPaidTo = record.partyName
                     )
                 }
             } else {
                 val inv = invoiceDao.getInvoiceByInvoiceNumber(record.id)
                 if (inv != null) {
+                    val dbItems = invoiceDao.getInvoiceItems(inv.id)
+                    val editableItems = dbItems.map { item ->
+                        val prod = productDao.getProductById(item.productId)
+                        val unit = productDao.getUnitById(item.productUnitId)
+                        EditableInvoiceItem(
+                            id = item.id,
+                            productId = item.productId,
+                            productName = prod?.name ?: "صنف #${item.productId}",
+                            productUnitId = item.productUnitId,
+                            unitName = unit?.unitName ?: "حبة",
+                            quantity = item.quantity,
+                            unitConversionFactor = item.unitConversionFactor,
+                            unitCostPrice = item.unitCostPrice,
+                            unitSellingPrice = item.unitSellingPrice,
+                            discount = item.discount
+                        )
+                    }
                     _uiState.update {
                         it.copy(
                             showEditInvoiceDialog = true,
                             editingInvoice = inv,
                             editInvoiceNotes = inv.notes,
                             editInvoicePaymentMethod = inv.paymentMethod,
+                            editInvoicePaymentAccountId = inv.paymentAccountId,
+                            editInvoiceCostCenterId = inv.costCenterId,
                             editInvoiceTotal = inv.total.toString(),
                             editInvoicePaidAmount = inv.paidAmount.toString(),
-                            editInvoicePartyId = inv.partyId
+                            editInvoicePartyId = inv.partyId,
+                            editInvoiceItems = editableItems
                         )
                     }
                 }
@@ -2408,6 +2549,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 showEditInvoiceDialog = false,
                 editingInvoice = null,
+                editInvoiceItems = emptyList(),
                 showEditVoucherDialog = false,
                 editingVoucherRecord = null
             )
@@ -2419,9 +2561,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         paymentMethod: PaymentMethod,
         newTotal: Double? = null,
         newPaidAmount: Double? = null,
-        newPartyId: Long? = null
+        newPartyId: Long? = null,
+        updatedItems: List<EditableInvoiceItem>? = null,
+        costCenterId: Long? = null,
+        paymentAccountId: Long? = null
     ) {
         val inv = _uiState.value.editingInvoice ?: return
+        val itemsToSave = updatedItems ?: _uiState.value.editInvoiceItems
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 db.withTransaction {
@@ -2429,22 +2576,92 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                     val oldTotal = inv.total
                     val oldPartyId = inv.partyId
 
-                    val finalTotal = newTotal ?: inv.total
+                    val calculatedSubtotal = itemsToSave.sumOf { it.quantity * it.unitSellingPrice }
+                    val calculatedItemDiscounts = itemsToSave.sumOf { it.discount }
+                    val finalSubtotal = if (itemsToSave.isNotEmpty()) calculatedSubtotal else (newTotal ?: inv.subtotal)
+                    val finalTotal = if (itemsToSave.isNotEmpty()) {
+                        (calculatedSubtotal - calculatedItemDiscounts).coerceAtLeast(0.0)
+                    } else {
+                        newTotal ?: inv.total
+                    }
                     val finalPaid = newPaidAmount ?: inv.paidAmount
                     val finalRemaining = (finalTotal - finalPaid).coerceAtLeast(0.0)
                     val finalPartyId = newPartyId ?: inv.partyId
+                    val finalCostCenterId = costCenterId ?: inv.costCenterId
+                    val finalPaymentAccountId = paymentAccountId ?: inv.paymentAccountId
 
-                    val updated = inv.copy(
+                    val updatedInvoice = inv.copy(
                         notes = notes,
                         paymentMethod = paymentMethod,
+                        paymentAccountId = finalPaymentAccountId,
+                        subtotal = finalSubtotal,
+                        discount = calculatedItemDiscounts,
                         total = finalTotal,
                         paidAmount = finalPaid,
                         remainingAmount = finalRemaining,
-                        partyId = finalPartyId
+                        partyId = finalPartyId,
+                        costCenterId = finalCostCenterId
                     )
-                    invoiceDao.updateInvoice(updated)
+                    invoiceDao.updateInvoice(updatedInvoice)
 
-                    // تعديل رصيد العميل/المورد إن وجد
+                    if (itemsToSave.isNotEmpty()) {
+                        // 1. حذف حركات المخزون القديمة المرتبطة بهذه الفاتورة بالكامل لمنع توليد مرتجعات وهمية
+                        stockMovementDao.deleteMovementsByInvoiceId(inv.id)
+                        if (inv.invoiceNumber.isNotBlank()) {
+                            stockMovementDao.deleteMovementsByReferenceNumber(inv.invoiceNumber)
+                        }
+
+                        // 2. حذف بنود الفاتورة القديمة
+                        invoiceDao.deleteInvoiceItemsByInvoiceId(inv.id)
+
+                        // 3. إدراج بنود الفاتورة الجديدة المعدلة
+                        val newDbItems = itemsToSave.map { item ->
+                            InvoiceItemEntity(
+                                invoiceId = inv.id,
+                                productId = item.productId,
+                                productUnitId = item.productUnitId,
+                                quantity = item.quantity,
+                                unitConversionFactor = item.unitConversionFactor,
+                                unitCostPrice = item.unitCostPrice,
+                                unitSellingPrice = item.unitSellingPrice,
+                                discount = item.discount,
+                                taxRate = inv.taxRate,
+                                totalPrice = item.totalPrice
+                            )
+                        }
+                        invoiceDao.insertInvoiceItems(newDbItems)
+
+                        // 4. إدراج حركات المخزون المعدلة المباشرة برقم وتاريخ الفاتورة الأصلي
+                        for (newItem in itemsToSave) {
+                            val newQtyBase = newItem.quantity * newItem.unitConversionFactor
+                            val newMovementType = when (inv.type) {
+                                InvoiceType.SALE -> MovementType.SALE_OUT
+                                InvoiceType.PURCHASE -> MovementType.PURCHASE_IN
+                                InvoiceType.SALE_RETURN -> MovementType.RETURN_IN
+                                InvoiceType.PURCHASE_RETURN -> MovementType.RETURN_OUT
+                            }
+                            val newQty = when (inv.type) {
+                                InvoiceType.SALE, InvoiceType.PURCHASE_RETURN -> -newQtyBase
+                                InvoiceType.PURCHASE, InvoiceType.SALE_RETURN -> newQtyBase
+                            }
+                            stockMovementDao.insertMovement(
+                                StockMovementEntity(
+                                    productId = newItem.productId,
+                                    productUnitId = newItem.productUnitId,
+                                    invoiceId = inv.id,
+                                    movementType = newMovementType,
+                                    quantityBaseUnit = newQty,
+                                    remainingQuantityForFifo = if (newMovementType == MovementType.PURCHASE_IN) newQtyBase else 0.0,
+                                    unitCostPriceBase = newItem.unitCostPrice / newItem.unitConversionFactor,
+                                    timestamp = if (inv.date > 0L) inv.date else System.currentTimeMillis(),
+                                    referenceNumber = inv.invoiceNumber,
+                                    notes = "حركة معدلة للفاتورة #${inv.invoiceNumber}",
+                                    costCenterId = finalCostCenterId
+                                )
+                            )
+                        }
+                    }
+
                     if (oldPartyId != null && oldMethod == PaymentMethod.CREDIT) {
                         val party = partyDao.getPartyById(oldPartyId)
                         if (party != null) {
@@ -2460,12 +2677,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
+
                 loadTransactionHistory()
                 _uiState.update {
                     it.copy(
                         showEditInvoiceDialog = false,
                         editingInvoice = null,
-                        userFeedbackMessage = "تم تحديث بيانات الفاتورة رقم (${inv.invoiceNumber}) بنجاح وانعكاس الأثر المالي.",
+                        editInvoiceItems = emptyList(),
+                        userFeedbackMessage = "تم حفظ كافة تعديلات الفاتورة رقم (${inv.invoiceNumber}) وبنودها وانعكاس الأثر المالي والمخزني بنجاح.",
                         isError = false
                     )
                 }
@@ -2484,7 +2703,9 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         notes: String,
         paymentMethod: PaymentMethod,
         newAmount: Double? = null,
-        newPartyName: String? = null
+        newPartyName: String? = null,
+        costCenterId: Long? = null,
+        paymentAccountId: Long? = null
     ) {
         val record = _uiState.value.editingVoucherRecord ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -2497,7 +2718,13 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             val oldMethod = v.paymentMethod
                             val oldAmount = v.amount
                             val finalAmount = newAmount ?: v.amount
-                            val updated = v.copy(notes = notes, paymentMethod = paymentMethod, amount = finalAmount)
+                            val finalCostCenterId = costCenterId ?: v.costCenterId
+                            val updated = v.copy(
+                                notes = notes,
+                                paymentMethod = paymentMethod,
+                                amount = finalAmount,
+                                costCenterId = finalCostCenterId
+                            )
                             voucherDao.updateVoucher(updated)
 
                             // ضبط حركة الصندوق الشفت
@@ -2526,7 +2753,16 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                             val oldAmount = exp.amount
                             val finalAmount = newAmount ?: exp.amount
                             val finalPaidTo = newPartyName ?: exp.paidTo
-                            val updated = exp.copy(notes = notes, paymentMethod = paymentMethod, amount = finalAmount, paidTo = finalPaidTo)
+                            val finalCostCenterId = costCenterId ?: exp.costCenterId
+                            val finalAccountId = paymentAccountId ?: exp.paymentAccountId
+                            val updated = exp.copy(
+                                notes = notes,
+                                paymentMethod = paymentMethod,
+                                paymentAccountId = finalAccountId,
+                                amount = finalAmount,
+                                paidTo = finalPaidTo,
+                                costCenterId = finalCostCenterId
+                            )
                             expenseDao.updateExpense(updated)
 
                             if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
@@ -2545,21 +2781,41 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                                 val oldMethod = v.paymentMethod
                                 val oldAmount = v.amount
                                 val finalAmount = newAmount ?: v.amount
-                                val updated = v.copy(notes = notes, paymentMethod = paymentMethod, amount = finalAmount)
+                                val finalCostCenterId = costCenterId ?: v.costCenterId
+                                val updated = v.copy(
+                                    notes = notes,
+                                    paymentMethod = paymentMethod,
+                                    amount = finalAmount,
+                                    costCenterId = finalCostCenterId
+                                )
                                 voucherDao.updateVoucher(updated)
 
-                                if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
-                                    val newExp = (openShift.totalCashExpenses - oldAmount).coerceAtLeast(0.0)
-                                    shiftDao.updateExpenses(openShift.id, newExp)
-                                } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
-                                    val newExp = openShift.totalCashExpenses + finalAmount
-                                    shiftDao.updateExpenses(openShift.id, newExp)
-                                } else if (oldMethod == PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
-                                    val diff = finalAmount - oldAmount
-                                    shiftDao.updateExpenses(openShift.id, openShift.totalCashExpenses + diff)
+                                val party = v.partyId?.let { partyDao.getPartyById(it) }
+                                val isSupplierVoucher = party?.type == PartyType.SUPPLIER
+                                if (isSupplierVoucher) {
+                                    if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
+                                        val newSupp = (openShift.totalSupplierPayments - oldAmount).coerceAtLeast(0.0)
+                                        shiftDao.updateSupplierPayments(openShift.id, newSupp)
+                                    } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
+                                        val newSupp = openShift.totalSupplierPayments + finalAmount
+                                        shiftDao.updateSupplierPayments(openShift.id, newSupp)
+                                    } else if (oldMethod == PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
+                                        val diff = finalAmount - oldAmount
+                                        shiftDao.updateSupplierPayments(openShift.id, openShift.totalSupplierPayments + diff)
+                                    }
+                                } else {
+                                    if (oldMethod == PaymentMethod.CASH && paymentMethod != PaymentMethod.CASH) {
+                                        val newExp = (openShift.totalCashExpenses - oldAmount).coerceAtLeast(0.0)
+                                        shiftDao.updateExpenses(openShift.id, newExp)
+                                    } else if (oldMethod != PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
+                                        val newExp = openShift.totalCashExpenses + finalAmount
+                                        shiftDao.updateExpenses(openShift.id, newExp)
+                                    } else if (oldMethod == PaymentMethod.CASH && paymentMethod == PaymentMethod.CASH) {
+                                        val diff = finalAmount - oldAmount
+                                        shiftDao.updateExpenses(openShift.id, openShift.totalCashExpenses + diff)
+                                    }
                                 }
 
-                                val party = v.partyId?.let { partyDao.getPartyById(it) }
                                 if (party != null && finalAmount != oldAmount) {
                                     val diff = finalAmount - oldAmount
                                     partyDao.updateParty(party.copy(currentBalance = party.currentBalance + diff))

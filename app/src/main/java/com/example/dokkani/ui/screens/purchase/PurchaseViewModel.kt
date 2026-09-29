@@ -8,6 +8,8 @@ import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostCenterEntity
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
+import com.example.dokkani.data.local.entities.FinancialAccountType
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
@@ -83,6 +85,8 @@ data class PurchaseUiState(
     val selectedCostCenterId: Long = 1L,
     val supplierInvoiceNumber: String = "",
     val paymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val financialAccounts: List<FinancialAccountEntity> = emptyList(),
+    val selectedPaymentAccountId: Long? = null,
     val productsWithUnits: List<ProductWithUnits> = emptyList(),
     val searchQuery: String = "",
     val categories: List<String> = listOf("الكل"),
@@ -129,7 +133,12 @@ data class PurchaseUiState(
     // حماية وصلاحيات مدير النظام
     val showAdminPinDialog: Boolean = false,
     val pendingAdminAction: PendingAdminAction? = null,
-    val adminPinError: String? = null
+    val adminPinError: String? = null,
+
+    // تنبيه كفاية رصيد الصندوق عند الشراء النقدي
+    val showInsufficientCashDialog: Boolean = false,
+    val insufficientCashCurrentBalance: Double = 0.0,
+    val insufficientCashRequiredAmount: Double = 0.0
 ) {
     val subtotal: Double get() = items.sumOf { it.totalCost }
     val taxableAmount: Double get() = (subtotal - discount).coerceAtLeast(0.0)
@@ -197,6 +206,12 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         ?: suppliers.firstOrNull()
                     state.copy(suppliers = suppliers, selectedSupplier = updatedSel)
                 }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.financialAccountDao().getAllAccounts().collectLatest { accounts ->
+                _uiState.update { it.copy(financialAccounts = accounts) }
             }
         }
 
@@ -339,6 +354,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(paymentMethod = method) }
     }
 
+    fun setSelectedPaymentAccount(accountId: Long?) {
+        _uiState.update { it.copy(selectedPaymentAccountId = accountId) }
+    }
+
     fun setSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
     }
@@ -454,6 +473,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(feedbackMessage = null) }
     }
 
+    fun dismissInsufficientCashDialog() {
+        _uiState.update { it.copy(showInsufficientCashDialog = false) }
+    }
+
     /**
      * تنفيذ واعتماد فاتورة الشراء وتطبيق دالة WAC لحساب التكلفة الجديدة بالعملة المحلية وتحويلات الصرف
      */
@@ -474,6 +497,34 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val finalTotalLocal = state.finalTotalBaseCurrency
+
+                // 1. التحقق من كفاية رصيد الصندوق عند الشراء النقدي قبل البدء بحفظ الفاتورة
+                // المعيار المحاسبي: يجب أن يكون رصيد الصندوق الحالي >= إجمالي قيمة فاتورة الشراء النقدي
+                if (state.paymentMethod == PaymentMethod.CASH) {
+                    val cashAccount = if (state.selectedPaymentAccountId != null && state.selectedPaymentAccountId != 0L) {
+                        db.financialAccountDao().getAccountById(state.selectedPaymentAccountId)
+                    } else {
+                        db.financialAccountDao().getAllAccountsSync()
+                            .firstOrNull { it.accountType == FinancialAccountType.CASH_DRAWER && it.isActive }
+                    }
+
+                    val openShift = shiftDao.getOpenShift()
+                    val availableCash = cashAccount?.currentBalance ?: openShift?.expectedCashInDrawer ?: 0.0
+
+                    if (availableCash < finalTotalLocal - 0.0001) {
+                        _uiState.update {
+                            it.copy(
+                                isProcessing = false,
+                                showInsufficientCashDialog = true,
+                                insufficientCashCurrentBalance = availableCash,
+                                insufficientCashRequiredAmount = finalTotalLocal
+                            )
+                        }
+                        return@launch
+                    }
+                }
+
                 db.withTransaction {
                     val timestamp = System.currentTimeMillis()
                     val totalCount = invoiceDao.countInvoices() + 1
@@ -483,11 +534,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                     val selectedCurrencyId = state.selectedCurrency?.id ?: state.baseCurrencyId
 
                     val isCredit = state.paymentMethod == PaymentMethod.CREDIT
-                    val finalTotalLocal = state.finalTotalBaseCurrency
                     val paidLocal = if (isCredit) 0.0 else finalTotalLocal
                     val remainingLocal = if (isCredit) finalTotalLocal else 0.0
 
-                    // 1. إدخال فاتورة الشراء بالقيم المترجمة للعملة الأساسية
+                    // 2. إدخال فاتورة الشراء بالقيم المترجمة للعملة الأساسية
                     val invoiceId = invoiceDao.insertInvoice(
                         InvoiceEntity(
                             invoiceNumber = invoiceNumber,
@@ -504,13 +554,14 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                             paidAmount = paidLocal,
                             remainingAmount = remainingLocal,
                             paymentMethod = state.paymentMethod,
+                            paymentAccountId = state.selectedPaymentAccountId,
                             status = InvoiceStatus.COMPLETED,
                             notes = "فاتورة شراء مورد رقم: ${state.supplierInvoiceNumber.ifEmpty { "غير محدد" }} - ${state.notes}",
                             costCenterId = state.selectedCostCenterId
                         )
                     )
 
-                    // 2. بنود الفاتورة وحركات المخزون وحساب WAC بالعملة المحلية
+                    // 3. بنود الفاتورة وحركات المخزون وحساب WAC بالعملة المحلية
                     val itemsToInsert = mutableListOf<InvoiceItemEntity>()
                     val movementsToInsert = mutableListOf<StockMovementEntity>()
                     val wacSummaries = mutableListOf<WacCalculationSummary>()
@@ -552,7 +603,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                             )
                         )
 
-                        // 3. تطبيق دالة المتوسط المرجح WAC:
+                        // تطبيق دالة المتوسط المرجح WAC
                         val existingStockBase = stockMovementDao.getTotalStockQuantity(item.productId)
                         val oldUnitCostBaseLocal = item.oldCostPrice / item.conversionFactor
 
@@ -597,11 +648,23 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         partyDao.updateBalance(state.selectedSupplier.id, -finalTotalLocal)
                     }
 
-                    // 5. خصم المبلغ من الصندوق إذا كان الشراء نقداً
+                    // 5. الأثر المالي لعملية الشراء النقدي/الإلكتروني وتخفيض رصيد الصندوق النقدي (CREDIT / Outflow)
+                    // المعادلة الحسابية: رصيد الصندوق الجديد = رصيد الصندوق الحالي - إجمالي الفاتورة
+                    val targetAccountId = state.selectedPaymentAccountId ?: db.financialAccountDao()
+                        .getAllAccountsSync()
+                        .firstOrNull { it.accountType == FinancialAccountType.CASH_DRAWER && it.isActive }?.id
+
                     if (state.paymentMethod == PaymentMethod.CASH) {
                         val openShift = getOrCreateOpenShift(shiftDao)
-                        val newExp = openShift.totalCashExpenses + finalTotalLocal
-                        shiftDao.updateExpenses(openShift.id, newExp)
+                        val newPurchases = openShift.totalCashPurchases + finalTotalLocal
+                        shiftDao.updateCashPurchases(openShift.id, newPurchases)
+
+                        if (targetAccountId != null && targetAccountId != 0L) {
+                            // تطبيق المعادلة: رصيد الصندوق الجديد = رصيد الصندوق الحالي - إجمالي الفاتورة
+                            db.financialAccountDao().updateBalance(targetAccountId, -finalTotalLocal)
+                        }
+                    } else if (!isCredit && targetAccountId != null && targetAccountId != 0L) {
+                        db.financialAccountDao().updateBalance(targetAccountId, -finalTotalLocal)
                     }
 
                     val updatedSupplier = state.selectedSupplier?.id?.let { partyDao.getPartyById(it) }
@@ -794,8 +857,8 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                     // 4. عكس نقدية الصندوق للشفت المفتوح إذا كان الدفع نقداً
                     if (inv.paymentMethod == PaymentMethod.CASH) {
                         val openShift = getOrCreateOpenShift(shiftDao)
-                        val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
-                        shiftDao.updateExpenses(openShift.id, newExp)
+                        val newPurchases = (openShift.totalCashPurchases - inv.total).coerceAtLeast(0.0)
+                        shiftDao.updateCashPurchases(openShift.id, newPurchases)
                     }
 
                     // 5. حذف بنود الفاتورة والفاتورة نفسها
@@ -969,11 +1032,11 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
 
-                    // 4. عكس منصرفات الصندوق القديمة
+                    // 4. عكس مشتريات الصندوق القديمة
                     if (inv.paymentMethod == PaymentMethod.CASH) {
                         val openShift = getOrCreateOpenShift(shiftDao)
-                        val newExp = (openShift.totalCashExpenses - inv.total).coerceAtLeast(0.0)
-                        shiftDao.updateExpenses(openShift.id, newExp)
+                        val newPurchases = (openShift.totalCashPurchases - inv.total).coerceAtLeast(0.0)
+                        shiftDao.updateCashPurchases(openShift.id, newPurchases)
                     }
 
                     // 5. بناء التعديلات الجديدة وتطبيق سعر الصرف
@@ -1007,6 +1070,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                     invoiceDao.updateInvoice(updatedInv)
                     invoiceDao.deleteInvoiceItemsByInvoiceId(inv.id)
+                    stockMovementDao.deleteMovementsByInvoiceId(inv.id)
+                    if (inv.invoiceNumber.isNotBlank()) {
+                        stockMovementDao.deleteMovementsByReferenceNumber(inv.invoiceNumber)
+                    }
 
                     val newItemsToInsert = mutableListOf<InvoiceItemEntity>()
                     val newMovementsToInsert = mutableListOf<StockMovementEntity>()
@@ -1037,6 +1104,7 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                             StockMovementEntity(
                                 productId = item.productId,
                                 productUnitId = item.unitId,
+                                invoiceId = inv.id,
                                 movementType = MovementType.PURCHASE_IN,
                                 quantityBaseUnit = baseQtyPurchased,
                                 remainingQuantityForFifo = baseQtyPurchased,
@@ -1062,11 +1130,11 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         partyDao.updateBalance(supplier.id, -totalLocal)
                     }
 
-                    // 8. تطبيق منصرفات الصندوق الجديدة
+                    // 8. تطبيق مشتريات الصندوق الجديدة
                     if (method == PaymentMethod.CASH) {
                         val openShift = getOrCreateOpenShift(shiftDao)
-                        val newExp = openShift.totalCashExpenses + totalLocal
-                        shiftDao.updateExpenses(openShift.id, newExp)
+                        val newPurchases = openShift.totalCashPurchases + totalLocal
+                        shiftDao.updateCashPurchases(openShift.id, newPurchases)
                     }
                 }
 

@@ -8,6 +8,7 @@ import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.dao.CashShiftDao
 import com.example.dokkani.data.local.entities.CashShiftEntity
 import com.example.dokkani.data.local.entities.CostCenterEntity
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.InvoiceStatus
@@ -65,6 +66,8 @@ data class PurchaseReturnUiState(
     val supplier: PartyEntity? = null,
     val returnItems: List<PurchaseReturnItem> = emptyList(),
     val paymentMethod: PaymentMethod = PaymentMethod.CREDIT,
+    val financialAccounts: List<FinancialAccountEntity> = emptyList(),
+    val selectedPaymentAccountId: Long? = null,
     val transactionRef: String = "",
     val receiptImagePath: String? = null,
     val returnNotes: String = "",
@@ -135,6 +138,19 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
         loadPurchaseInvoices()
         loadCurrencySymbol()
         observeCostCenters()
+        observeFinancialAccounts()
+    }
+
+    private fun observeFinancialAccounts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.financialAccountDao().getActiveAccounts().collect { accounts ->
+                _uiState.update { it.copy(financialAccounts = accounts) }
+            }
+        }
+    }
+
+    fun setPaymentAccountId(accountId: Long?) {
+        _uiState.update { it.copy(selectedPaymentAccountId = accountId) }
     }
 
     private fun observeCostCenters() {
@@ -503,7 +519,8 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                         taxAmount = 0.0,
                         total = totalReturnAmount,
                         paymentMethod = state.paymentMethod,
-                        paidAmount = if (state.paymentMethod == PaymentMethod.CASH) totalReturnAmount else 0.0,
+                        paymentAccountId = state.selectedPaymentAccountId,
+                        paidAmount = if (state.paymentMethod != PaymentMethod.CREDIT) totalReturnAmount else 0.0,
                         remainingAmount = if (state.paymentMethod == PaymentMethod.CREDIT) totalReturnAmount else 0.0,
                         transactionRef = state.transactionRef.ifBlank { originalInvoice.invoiceNumber },
                         receiptImagePath = state.receiptImagePath,
@@ -563,6 +580,9 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                         val openShift = getOrCreateOpenShift(shiftDao)
                         val newColl = openShift.totalCashCollections + totalReturnAmount
                         shiftDao.updateCollections(openShift.id, newColl)
+                    } else if (state.selectedPaymentAccountId != null && (state.paymentMethod.isElectronic || state.paymentMethod == PaymentMethod.MULTI)) {
+                        // استرداد النقدية وحفظها بالرصيد البنكي/المحفظة/الشبكة المسترجعة من قاعدة البيانات
+                        db.financialAccountDao().updateBalance(state.selectedPaymentAccountId, +totalReturnAmount)
                     }
                 }
 

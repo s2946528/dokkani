@@ -5,10 +5,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,12 +28,14 @@ import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.FinancialAccountEntity
 import com.example.dokkani.data.local.entities.FinancialAccountType
 import com.example.dokkani.ui.DokkaniUiState
+import com.example.dokkani.ui.components.AppSearchBar
+import com.example.dokkani.ui.components.normalizeArabicItemSearch
 import java.util.Locale
 import kotlin.math.abs
 
 /**
  * واجهة تحكم متكاملة لإدارة الحسابات (بنوك، محافظ إلكترونية، صناديق، وحسابات الدليل المحاسبي)
- * تتيح الإضافة، التعديل، والحذف مع تفعيل شرط الأمان المحاسبي وحماية الحسابات المرتبطة بسجلات.
+ * مع إعادة هيكلة التصميم لإزالة التكدس البصري، تنظيم المساحات البيضاء، وتفعيل البحث الصوتي باللغة العربية.
  */
 @Composable
 fun AccountsManagementScreen(
@@ -54,18 +57,19 @@ fun AccountsManagementScreen(
     val filterType = uiState.accountsFilterType
     val currencySymbol = uiState.currencySymbol
 
-    // تسيير وإخفاء الحسابات الصفرية وفق القواعد المحاسبية (مخفية افتراضياً حتى حدوث حركة أو رصيد)
+    // تسيير وإخفاء الحسابات الصفرية وفق القواعد المحاسبية
     var showZeroAccounts by remember { mutableStateOf(false) }
 
-    // تصفية الحسابات حسب البحث والنوع وبشكل خاص تسيير وإخفاء الحسابات الصفرية
+    // تصفية الحسابات مرناً مع دعم البحث المكتوب والمنطوق صوتاً
     val filteredAccounts = remember(accounts, searchQuery, filterType, showZeroAccounts) {
+        val cleanQuery = normalizeArabicItemSearch(searchQuery)
         accounts.filter { acc ->
             val matchesFilter = filterType == null || acc.accountType == filterType
             val matchesSearch = searchQuery.isBlank() ||
-                    acc.name.contains(searchQuery, ignoreCase = true) ||
-                    acc.code.contains(searchQuery, ignoreCase = true) ||
-                    acc.accountNumber.contains(searchQuery, ignoreCase = true) ||
-                    acc.parentAccountName.contains(searchQuery, ignoreCase = true)
+                    normalizeArabicItemSearch(acc.name).contains(cleanQuery) ||
+                    normalizeArabicItemSearch(acc.code).contains(cleanQuery) ||
+                    normalizeArabicItemSearch(acc.accountNumber).contains(cleanQuery) ||
+                    normalizeArabicItemSearch(acc.parentAccountName).contains(cleanQuery)
 
             val isNonZero = abs(acc.currentBalance) > 0.001 || abs(acc.openingBalance) > 0.001
             val satisfiesZeroRule = showZeroAccounts || isNonZero || searchQuery.isNotBlank()
@@ -85,10 +89,10 @@ fun AccountsManagementScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(14.dp)
+            .padding(16.dp)
             .testTag("accounts_management_screen")
     ) {
-        // بطاقة الترويسة الرئيسية مع زر الإضافة
+        // 1. بطاقة الترويسة الرئيسية مع زر إضافة حساب جديد
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -102,10 +106,13 @@ fun AccountsManagementScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(44.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
@@ -117,14 +124,15 @@ fun AccountsManagementScreen(
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "إدارة الحسابات والدليل المحاسبي",
+                                text = "دليل الحسابات والبنوك",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "تحكم كامل بالبنوك، المحافظ، والصناديق مع حماية الأمان المحاسبي",
                                 style = MaterialTheme.typography.bodySmall,
@@ -134,10 +142,13 @@ fun AccountsManagementScreen(
                         }
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Button(
                         onClick = onOpenAddDialog,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                         modifier = Modifier.testTag("btn_add_new_account")
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -145,75 +156,78 @@ fun AccountsManagementScreen(
                         Text("إضافة حساب", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // مؤشرات ملخصة سريعة (KPIs)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AccountKpiCard(
-                        title = "حسابات نشطة",
-                        value = "$activeAccounts من $totalAccounts",
-                        color = Color(0xFF2E7D32),
-                        modifier = Modifier.weight(1f)
-                    )
-                    AccountKpiCard(
-                        title = "أرصدة البنوك",
-                        value = "${String.format(Locale.US, "%.0f", bankBalances)} $currencySymbol",
-                        color = Color(0xFF1565C0),
-                        modifier = Modifier.weight(1f)
-                    )
-                    AccountKpiCard(
-                        title = "المحافظ الإلكترونية",
-                        value = "${String.format(Locale.US, "%.0f", walletBalances)} $currencySymbol",
-                        color = Color(0xFF7B1FA2),
-                        modifier = Modifier.weight(1f)
-                    )
-                    AccountKpiCard(
-                        title = "النقدية بالصناديق",
-                        value = "${String.format(Locale.US, "%.0f", cashBalances)} $currencySymbol",
-                        color = Color(0xFFC25E00),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // شريط البحث والتصفية
+        // 2. بطاقات المؤشرات المالية والنشطة (Financial & Active Stats Cards)
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp)
+        ) {
+            item {
+                AccountKpiCard(
+                    title = "حسابات نشطة",
+                    value = "$activeAccounts من $totalAccounts",
+                    icon = Icons.Default.CheckCircle,
+                    color = Color(0xFF2E7D32)
+                )
+            }
+            item {
+                AccountKpiCard(
+                    title = "أرصدة البنوك",
+                    value = "${String.format(Locale.US, "%,.0f", bankBalances)} $currencySymbol",
+                    icon = Icons.Default.AccountBalance,
+                    color = Color(0xFF1565C0)
+                )
+            }
+            item {
+                AccountKpiCard(
+                    title = "المحافظ الإلكترونية",
+                    value = "${String.format(Locale.US, "%,.0f", walletBalances)} $currencySymbol",
+                    icon = Icons.Default.Smartphone,
+                    color = Color(0xFF7B1FA2)
+                )
+            }
+            item {
+                AccountKpiCard(
+                    title = "النقدية بالصناديق",
+                    value = "${String.format(Locale.US, "%,.0f", cashBalances)} $currencySymbol",
+                    icon = Icons.Default.PointOfSale,
+                    color = Color(0xFFC25E00)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 3. شريط أزرار التصفية وحقل البحث مع دمج البحث الصوتي
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-                OutlinedTextField(
+            Column(modifier = Modifier.padding(14.dp)) {
+                // حقل البحث الذكي المدمج بالبحث الصوتي
+                AppSearchBar(
                     value = searchQuery,
                     onValueChange = onSearchChanged,
-                    placeholder = { Text("بحث برمز الحساب، الاسم، رقم الحساب أو الآيبان...", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingIcon = {
-                        if (searchQuery.isNotBlank()) {
-                            IconButton(onClick = { onSearchChanged("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "مسح")
-                            }
-                        }
-                    },
+                    placeholder = "بحث برمز الحساب، الاسم، رقم الحساب أو الآيبان...",
+                    label = "بحث دليل الحسابات (صوتي / نصي)",
+                    enableVoiceSearch = true,
+                    enableBarcodeScanner = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("accounts_search_field"),
-                    shape = RoundedCornerShape(10.dp),
-                    singleLine = true
+                        .testTag("accounts_search_field")
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // رقائق التصفية حسب النوع مع إمكانية التمرير الأفقي لمنع التكدس والتداخل
+                // أزرار التصفية والأرصدة الصفرية
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -225,6 +239,7 @@ fun AccountsManagementScreen(
                         selected = filterType == null,
                         onClick = { onFilterTypeChanged(null) },
                         label = { Text("الكل (${accounts.size})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        leadingIcon = { Icon(Icons.Default.Apps, null, Modifier.size(14.dp)) },
                         modifier = Modifier.testTag("filter_all_accounts")
                     )
                     FilterChip(
@@ -248,41 +263,66 @@ fun AccountsManagementScreen(
                         leadingIcon = { Icon(Icons.Default.PointOfSale, null, Modifier.size(14.dp)) }
                     )
                     FilterChip(
+                        selected = filterType == FinancialAccountType.CHART_ACCOUNT,
+                        onClick = { onFilterTypeChanged(FinancialAccountType.CHART_ACCOUNT) },
+                        label = { Text("دليل الحسابات", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        leadingIcon = { Icon(Icons.Default.AccountTree, null, Modifier.size(14.dp)) }
+                    )
+                    FilterChip(
                         selected = showZeroAccounts,
                         onClick = { showZeroAccounts = !showZeroAccounts },
                         label = { Text(if (showZeroAccounts) "إخفاء الصفرية" else "إظهار الصفرية", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = { Icon(if (showZeroAccounts) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, Modifier.size(14.dp)) }
                     )
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
             }
         }
 
-        // مسافة فاصلة عمودية تمنع تداخل الكروت مع أزرار الفلترة
+        // مسافة فاصلة مريحة تمنع تداخل الكروت مع شريط البحث والتحكم
         Spacer(modifier = Modifier.height(16.dp))
 
-        // قائمة كروت الحسابات
+        // 4. قائمة بطاقات الحسابات
         if (filteredAccounts.isEmpty()) {
             Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.SearchOff,
-                            contentDescription = null,
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(48.dp)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SearchOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "لا توجد حسابات مطابقة للبحث",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("لا توجد حسابات مطابقة للبحث", color = Color(0xFF64748B), fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("يمكنك إضافة حساب جديد عبر زر 'إضافة حساب'", fontSize = 12.sp, color = Color(0xFF94A3B8))
+                        Text(
+                            text = "جرّب تغيير عبارة البحث، تفعيل الخيار الصفري، أو إضافة حساب جديد",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -292,11 +332,10 @@ fun AccountsManagementScreen(
                     .fillMaxWidth()
                     .weight(1f)
                     .testTag("accounts_list"),
-                contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(filteredAccounts, key = { it.id }) { account ->
-                    // حساب ما إذا كان الحساب مرتبطاً بحركات مالية للعرض المرئي
                     val hasRecords = remember(account, uiState.invoices, uiState.vouchers, uiState.expenses) {
                         abs(account.currentBalance) > 0.001 ||
                         abs(account.openingBalance) > 0.001 ||
@@ -339,7 +378,7 @@ fun AccountsManagementScreen(
         )
     }
 
-    // حوار تأكيد الحذف للحسابات الفارغة والخالية من السجلات
+    // حوار تأكيد الحذف للحسابات الخالية من السجلات
     uiState.accountToDelete?.let { cleanAccount ->
         ConfirmDeleteAccountDialog(
             account = cleanAccount,
@@ -350,7 +389,62 @@ fun AccountsManagementScreen(
 }
 
 /**
- * بطاقة عرض حساب مالي فردي في القائمة
+ * بطاقة عرض مؤشر إحصائي فردي بمسافات مريحة وتنسيق متناسق
+ */
+@Composable
+private fun AccountKpiCard(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.18f)),
+        modifier = modifier.widthIn(min = 145.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    color = color,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+/**
+ * بطاقة عرض حساب مالي فردي في القائمة بتصميم متناسق وفق معايير Material 3
  */
 @Composable
 private fun AccountCardItem(
@@ -371,7 +465,7 @@ private fun AccountCardItem(
     }
 
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -379,7 +473,7 @@ private fun AccountCardItem(
             .fillMaxWidth()
             .testTag("account_card_${account.code}")
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             // السطر العلوي: أيقونة النوع، الاسم، الكود، وحالة الحساب
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -392,7 +486,7 @@ private fun AccountCardItem(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .background(typeBg),
                         contentAlignment = Alignment.Center
@@ -410,7 +504,7 @@ private fun AccountCardItem(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Text(
@@ -422,6 +516,7 @@ private fun AccountCardItem(
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "الحساب الرئيسي: ${account.parentAccountName}",
                             fontSize = 11.sp,
@@ -430,14 +525,16 @@ private fun AccountCardItem(
                     }
                 }
 
+                Spacer(modifier = Modifier.width(8.dp))
+
                 // راية الحالة نشط / معطل
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = if (account.isActive) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Box(
                             modifier = Modifier
@@ -445,7 +542,7 @@ private fun AccountCardItem(
                                 .clip(CircleShape)
                                 .background(if (account.isActive) Color(0xFF2E7D32) else Color(0xFFC62828))
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (account.isActive) "نشط" else "معطل",
                             fontSize = 11.sp,
@@ -456,7 +553,7 @@ private fun AccountCardItem(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // معلومات إضافية ورقم الحساب والرصيد
             Row(
@@ -464,21 +561,22 @@ private fun AccountCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     if (account.accountNumber.isNotBlank()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Pin, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF94A3B8))
+                            Icon(Icons.Default.Pin, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = account.accountNumber,
                                 fontSize = 11.sp,
-                                color = Color(0xFF64748B)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Spacer(modifier = Modifier.height(2.dp))
                     }
 
                     // راية الأمان المحاسبي
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = if (hasRecords) Icons.Default.Shield else Icons.Default.CheckCircle,
                             contentDescription = null,
@@ -497,9 +595,9 @@ private fun AccountCardItem(
 
                 // الرصيد الحالي
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("الرصيد الحالي", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                    Text("الرصيد الحالي", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        text = "${String.format(Locale.US, "%.2f", account.currentBalance)} $currencySymbol",
+                        text = "${String.format(Locale.US, "%,.2f", account.currentBalance)} $currencySymbol",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (account.currentBalance >= 0) Color(0xFF0F5132) else Color(0xFFC62828)
@@ -507,7 +605,7 @@ private fun AccountCardItem(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color(0xFFF1F5F9))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
             // أزرار العمليات (تعديل، حذف، تفعيل/تعطيل)
             Row(
@@ -529,18 +627,18 @@ private fun AccountCardItem(
                     Text(
                         text = if (account.isActive) "تعطيل الحساب" else "تفعيل الحساب",
                         fontSize = 11.sp,
-                        color = Color(0xFF64748B)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // زر التعديل
                     OutlinedButton(
                         onClick = onEdit,
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         modifier = Modifier
-                            .height(32.dp)
+                            .height(34.dp)
                             .testTag("btn_edit_account_${account.code}")
                     ) {
                         Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -556,9 +654,9 @@ private fun AccountCardItem(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.error
                         ),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         modifier = Modifier
-                            .height(32.dp)
+                            .height(34.dp)
                             .testTag("btn_delete_account_${account.code}")
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -571,22 +669,3 @@ private fun AccountCardItem(
     }
 }
 
-@Composable
-private fun AccountKpiCard(
-    title: String,
-    value: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = color.copy(alpha = 0.08f),
-        modifier = modifier
-    ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Text(text = title, fontSize = 10.sp, color = color, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = color)
-        }
-    }
-}

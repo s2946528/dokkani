@@ -151,3 +151,22 @@ data class TransactionItemDetail(
     val totalPrice: Double
 )
 
+/**
+ * بند قابل للتعديل في نافذة تعديل الفاتورة والمردود الشاملة
+ */
+data class EditableInvoiceItem(
+    val id: Long = 0,
+    val productId: Long,
+    val productName: String,
+    val productUnitId: Long,
+    val unitName: String,
+    val quantity: Double,
+    val unitConversionFactor: Double = 1.0,
+    val unitCostPrice: Double,
+    val unitSellingPrice: Double,
+    val discount: Double = 0.0
+) {
+    val totalPrice: Double
+        get() = ((quantity * unitSellingPrice) - discount).coerceAtLeast(0.0)
+}
+

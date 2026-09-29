@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -39,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import com.example.dokkani.ui.components.AppSearchBar
+import com.example.dokkani.ui.components.isItemMatchQuery
 import com.example.dokkani.ui.components.BarcodeTextField
 import com.example.dokkani.ui.components.PaymentMethodSelector
 import com.example.dokkani.ui.components.ReadOnlyReceiptAttachmentView
@@ -54,8 +57,10 @@ import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
 import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.UserRole
+import com.example.dokkani.domain.pos.EditableInvoiceItem
 import com.example.dokkani.domain.pos.PosOperation
 import com.example.dokkani.domain.pos.PosTransactionRecord
 
@@ -118,6 +123,7 @@ fun PosScreen(
                     // 1. شريط ترويسة علوي مدمج وأنيق مع سحب أفقي لتوفير المساحة وتفادي التكدس البصري
                     var showShiftSummaryModal by remember { mutableStateOf(false) }
                     val topToolbarScrollState = rememberScrollState()
+                    val activeOpTheme = PosOperationTheme.getColors(uiState.activeOperation)
 
                     Row(
                         modifier = Modifier
@@ -127,19 +133,13 @@ fun PosScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // محدد نوع العملية الحالية (افتراضياً: فاتورة بيع)
+                        // محدد نوع العملية الحالية بدعم الألوان المتميزة للـ 6 عمليات
                         var opMenuExpanded by remember { mutableStateOf(false) }
                         Box {
                             Surface(
                                 onClick = { opMenuExpanded = true },
                                 shape = RoundedCornerShape(8.dp),
-                                color = when (uiState.activeOperation) {
-                                    PosOperation.SALE -> Color(0xFF1B5E20)
-                                    PosOperation.PURCHASE -> Color(0xFF1976D2)
-                                    PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
-                                    PosOperation.RECEIPT -> Color(0xFF00796B)
-                                    PosOperation.EXPENSE -> Color(0xFFE65100)
-                                }
+                                color = activeOpTheme.primary
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -155,13 +155,13 @@ fun PosScreen(
                                             PosOperation.EXPENSE -> Icons.Default.ArrowUpward
                                         },
                                         contentDescription = null,
-                                        tint = Color.White,
+                                        tint = activeOpTheme.onPrimary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = uiState.activeOperation.titleArabic,
-                                        color = Color.White,
+                                        color = activeOpTheme.onPrimary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
@@ -169,7 +169,7 @@ fun PosScreen(
                                     Icon(
                                         imageVector = Icons.Default.ArrowDropDown,
                                         contentDescription = "تغيير نوع العملية",
-                                        tint = Color.White,
+                                        tint = activeOpTheme.onPrimary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -180,9 +180,16 @@ fun PosScreen(
                                 onDismissRequest = { opMenuExpanded = false }
                             ) {
                                 PosOperation.entries.forEach { op ->
+                                    val opTheme = PosOperationTheme.getColors(op)
                                     DropdownMenuItem(
                                         text = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = opTheme.primary,
+                                                    modifier = Modifier.size(12.dp)
+                                                ) {}
+                                                Spacer(modifier = Modifier.width(8.dp))
                                                 Icon(
                                                     imageVector = when (op) {
                                                         PosOperation.SALE -> Icons.Default.PointOfSale
@@ -194,19 +201,14 @@ fun PosScreen(
                                                     },
                                                     contentDescription = null,
                                                     modifier = Modifier.size(18.dp),
-                                                    tint = when (op) {
-                                                        PosOperation.SALE -> Color(0xFF1B5E20)
-                                                        PosOperation.PURCHASE -> Color(0xFF1976D2)
-                                                        PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
-                                                        PosOperation.RECEIPT -> Color(0xFF00796B)
-                                                        PosOperation.EXPENSE -> Color(0xFFE65100)
-                                                    }
+                                                    tint = opTheme.primary
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
                                                     op.titleArabic,
                                                     fontWeight = if (uiState.activeOperation == op) FontWeight.Bold else FontWeight.Normal,
-                                                    fontSize = 13.sp
+                                                    fontSize = 13.sp,
+                                                    color = if (uiState.activeOperation == op) opTheme.primary else MaterialTheme.colorScheme.onSurface
                                                 )
                                             }
                                         },
@@ -219,13 +221,18 @@ fun PosScreen(
                             }
                         }
 
-                        // زر بيع بالقيمة السريع (للخضار والأصناف المشكلة)
+                        // زر بيع بالقيمة السريع - يجبر النظام فورياً وإلزامياً على التحويل لـ "فاتورة بيع" وتفعيل الثيم الأخضر
                         Button(
-                            onClick = { viewModel.openValueSellingDialog() },
+                            onClick = {
+                                viewModel.selectOperation(PosOperation.SALE)
+                                viewModel.openValueSellingDialog()
+                            },
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             modifier = Modifier.height(36.dp),
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00695C))
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PosOperationTheme.getColors(PosOperation.SALE).primary
+                            )
                         ) {
                             Icon(Icons.Default.MonetizationOn, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -238,8 +245,8 @@ fun PosScreen(
                             modifier = Modifier.size(36.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = Color(0xFF00695C).copy(alpha = 0.12f),
-                                contentColor = Color(0xFF00695C)
+                                containerColor = PosOperationTheme.getColors(PosOperation.SALE).primary.copy(alpha = 0.12f),
+                                contentColor = PosOperationTheme.getColors(PosOperation.SALE).primary
                             )
                         ) {
                             Icon(
@@ -249,14 +256,14 @@ fun PosScreen(
                             )
                         }
 
-                        // زر فاتورة جديدة السريع (مدمج في أيقونة + أنيقة مسطحة/دائرية لتوفير المساحة)
+                        // زر فاتورة جديدة السريع
                         FilledIconButton(
                             onClick = { viewModel.startNewInvoice() },
                             modifier = Modifier.size(36.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = Color(0xFF1B5E20),
-                                contentColor = Color.White
+                                containerColor = activeOpTheme.primary,
+                                contentColor = activeOpTheme.onPrimary
                             )
                         ) {
                             Icon(
@@ -272,8 +279,8 @@ fun PosScreen(
                             modifier = Modifier.size(36.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.primary
+                                containerColor = activeOpTheme.primaryContainer,
+                                contentColor = activeOpTheme.onPrimaryContainer
                             )
                         ) {
                             Icon(
@@ -289,8 +296,8 @@ fun PosScreen(
                             modifier = Modifier.size(36.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.primary
+                                containerColor = activeOpTheme.primaryContainer,
+                                contentColor = activeOpTheme.onPrimaryContainer
                             )
                         ) {
                             Icon(
@@ -298,6 +305,93 @@ fun PosScreen(
                                 contentDescription = "سجل الحركات",
                                 modifier = Modifier.size(20.dp)
                             )
+                        }
+                    }
+
+                    // مؤشر بصري علوي بارز ومستقل لتأكيد نوع المعاملة الحالية ومنع الأخطاء البشرية
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = activeOpTheme.primaryContainer,
+                        border = BorderStroke(1.dp, activeOpTheme.borderAccent.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = activeOpTheme.primary,
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = when (uiState.activeOperation) {
+                                                PosOperation.SALE -> Icons.Default.PointOfSale
+                                                PosOperation.PURCHASE -> Icons.Default.ShoppingBag
+                                                PosOperation.SALE_RETURN -> Icons.Default.AssignmentReturn
+                                                PosOperation.PURCHASE_RETURN -> Icons.Default.RemoveShoppingCart
+                                                PosOperation.RECEIPT -> Icons.Default.ArrowDownward
+                                                PosOperation.EXPENSE -> Icons.Default.ArrowUpward
+                                            },
+                                            contentDescription = null,
+                                            tint = activeOpTheme.onPrimary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                }
+
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "العملية النشطة:",
+                                            fontSize = 10.sp,
+                                            color = activeOpTheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = uiState.activeOperation.titleArabic,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = activeOpTheme.onPrimaryContainer
+                                        )
+                                    }
+                                    Text(
+                                        text = when (uiState.activeOperation) {
+                                            PosOperation.SALE -> "فاتورة بيع وقبض مبيعات نقدية/آجلة (ثيم أخضر)"
+                                            PosOperation.PURCHASE -> "فاتورة توريد ومشتريات مخزنية (ثيم أزرق)"
+                                            PosOperation.SALE_RETURN -> "مرتجع مبيعات للعميل وإعادة للمخزن (ثيم أحمر داكن)"
+                                            PosOperation.PURCHASE_RETURN -> "مرتجع مشتريات للمورد وخصم من المخزن (ثيم برتقالي)"
+                                            PosOperation.RECEIPT -> "سند قبض نقدية وسداد ديون العملاء (ثيم تركواز/سماوي)"
+                                            PosOperation.EXPENSE -> "سند صرف نقدية ومصروفات/سداد الموردين (ثيم بنفسجي)"
+                                        },
+                                        fontSize = 10.sp,
+                                        color = activeOpTheme.onPrimaryContainer.copy(alpha = 0.85f)
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = activeOpTheme.badgeContainer
+                            ) {
+                                Text(
+                                    text = uiState.activeOperation.code,
+                                    color = activeOpTheme.onBadgeContainer,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
 
@@ -367,8 +461,8 @@ fun PosScreen(
                 invoice = uiState.editingInvoice!!,
                 uiState = uiState,
                 onDismiss = { viewModel.dismissEditDialogs() },
-                onSave = { notes, method, total, paid, partyId ->
-                    viewModel.saveEditedInvoice(notes, method, total, paid, partyId)
+                onSave = { notes, method, total, paid, partyId, items, costCenterId, paymentAccountId ->
+                    viewModel.saveEditedInvoice(notes, method, total, paid, partyId, items, costCenterId, paymentAccountId)
                 }
             )
         }
@@ -379,8 +473,8 @@ fun PosScreen(
                 record = uiState.editingVoucherRecord!!,
                 uiState = uiState,
                 onDismiss = { viewModel.dismissEditDialogs() },
-                onSave = { notes, method, amount, partyName ->
-                    viewModel.saveEditedVoucher(notes, method, amount, partyName)
+                onSave = { notes, method, amount, partyName, costCenterId, paymentAccountId ->
+                    viewModel.saveEditedVoucher(notes, method, amount, partyName, costCenterId, paymentAccountId)
                 }
             )
         }
@@ -464,6 +558,115 @@ fun PosScreen(
                 viewModel = viewModel,
                 onDismiss = { viewModel.dismissCreditLimitWarning() },
                 onConfirm = { viewModel.confirmCreditLimitOverride() }
+            )
+        }
+
+        // نافذة المنع والتحذير عند محاولة البيع بسعر يساوي أو أقل من سعر التكلفة (سعر البيع <= سعر التكلفة)
+        if (uiState.showBelowCostPriceWarningDialog) {
+            var managerPinInput by remember { mutableStateOf("") }
+            var pinError by remember { mutableStateOf<String?>(null) }
+
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissBelowCostPriceWarningDialog() },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "سعر البيع لا يمكن أن يكون مساوياً أو أقل من سعر التكلفة",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 15.sp
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (uiState.belowCostWarningItemName.isNotBlank()) {
+                            Text(
+                                text = "الصنف: ${uiState.belowCostWarningItemName}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "سعر البيع المقترح: %.2f %s".format(
+                                        uiState.belowCostWarningUnitPrice,
+                                        uiState.currencySymbol
+                                    ),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = "سعر التكلفة والشراء: %.2f %s".format(
+                                        uiState.belowCostWarningCostPrice,
+                                        uiState.currencySymbol
+                                    ),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                        Text(
+                            text = "تنبيه التجارة والمبيعات: سعر البيع يجب أن يكون أعلى من سعر التكلفة. لتجاوز هذا المنع واعتماد البيع، يلزم إدخال رمز صلاحية مدير النظام:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = managerPinInput,
+                            onValueChange = {
+                                managerPinInput = it
+                                pinError = null
+                            },
+                            label = { Text("رمز صلاحية مدير النظام *") },
+                            placeholder = { Text("أدخل رمز المدير (1234)...") },
+                            isError = pinError != null,
+                            supportingText = pinError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val pin = managerPinInput.trim()
+                            if (pin == "1234" || pin == "0000" || currentUserRole == UserRole.ADMIN) {
+                                viewModel.confirmBelowCostPriceOverride(pin, currentUserRole)
+                            } else {
+                                pinError = "رمز مدير النظام غير صحيح، لا يمكن إتمام البيع بالتكلفة أو أقل منها"
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("موافق (اعتماد الصلاحية والتجاوز)", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { viewModel.dismissBelowCostPriceWarningDialog() }) {
+                        Text("إلغاء ومنع العملية")
+                    }
+                }
             )
         }
 
@@ -874,13 +1077,13 @@ private fun PosProductsPanel(
                 .fillMaxSize()
                 .padding(if (isCompact) 8.dp else 10.dp)
         ) {
-            // شريط البحث والباركود بالكاميرا
-            BarcodeTextField(
+            // شريط البحث المخصص للأصناف بالصوت والنص والباركود
+            AppSearchBar(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = "ابحث بالاسم أو امسح الباركود...",
-                label = "البحث أو مسح الباركود",
+                placeholder = "انطق اسم الصنف بالميكروفون، أو اكتب الاسم/الباركود...",
+                label = "بحث الأصناف (صوتي / نصي / باركود)",
                 onBarcodeScanned = { scannedCode ->
                     viewModel.setSearchQuery(scannedCode)
                     val matchedProduct = uiState.productsWithUnits.find { prod ->
@@ -893,8 +1096,7 @@ private fun PosProductsPanel(
                             viewModel.addToCart(matchedProduct.product, matchedUnit, 1.0)
                         }
                     }
-                },
-                singleLine = true
+                }
             )
 
             // شريط ربط المردود بفاتورة سابقة والبحث برقم الفاتورة
@@ -1045,11 +1247,10 @@ private fun PosProductsPanel(
 
             // شبكة الأصناف المتجاوبة مع حماية التباين WCAG AAA
             val filtered = uiState.productsWithUnits.filter { p ->
-                val query = uiState.searchQuery.trim().lowercase()
-                val matchesQuery = query.isEmpty() ||
-                        p.product.name.lowercase().contains(query) ||
-                        p.product.code.lowercase().contains(query) ||
-                        p.units.any { it.barcode.lowercase().contains(query) }
+                val query = uiState.searchQuery
+                val matchesQuery = query.isBlank() ||
+                        isItemMatchQuery(p.product.name, p.product.code, p.units.firstOrNull()?.barcode ?: "", p.product.category, query) ||
+                        p.units.any { u -> isItemMatchQuery(p.product.name, p.product.code, u.barcode, p.product.category, query) }
                 val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                 matchesQuery && matchesCat
             }.sortProducts(uiState.sortOption, uiState.productStockMap)
@@ -1807,13 +2008,13 @@ private fun PosInvoiceSectionOld(
                     .fillMaxSize()
                     .padding(10.dp)
             ) {
-                // شريط البحث والباركود بالكاميرا
-                BarcodeTextField(
+                // شريط البحث المخصص للأصناف بالصوت والنص والباركود
+                AppSearchBar(
                     value = uiState.searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = "ابحث بالاسم أو امسح الباركود...",
-                    label = "البحث أو مسح الباركود",
+                    placeholder = "انطق اسم الصنف بالميكروفون، أو اكتب الاسم/الباركود...",
+                    label = "بحث الأصناف (صوتي / نصي / باركود)",
                     onBarcodeScanned = { scannedCode ->
                         viewModel.setSearchQuery(scannedCode)
                         val matchedProduct = uiState.productsWithUnits.find { prod ->
@@ -1826,8 +2027,7 @@ private fun PosInvoiceSectionOld(
                                 viewModel.addToCart(matchedProduct.product, matchedUnit, 1.0)
                             }
                         }
-                    },
-                    singleLine = true
+                    }
                 )
 
                 // شريط ربط المردود بفاتورة سابقة والبحث برقم الفاتورة
@@ -1959,11 +2159,10 @@ private fun PosInvoiceSectionOld(
 
                 // شبكة الأصناف
                 val filtered = uiState.productsWithUnits.filter { p ->
-                    val query = uiState.searchQuery.trim().lowercase()
-                    val matchesQuery = query.isEmpty() ||
-                            p.product.name.lowercase().contains(query) ||
-                            p.product.code.lowercase().contains(query) ||
-                            p.units.any { it.barcode.lowercase().contains(query) }
+                    val query = uiState.searchQuery
+                    val matchesQuery = query.isBlank() ||
+                            isItemMatchQuery(p.product.name, p.product.code, p.units.firstOrNull()?.barcode ?: "", p.product.category, query) ||
+                            p.units.any { u -> isItemMatchQuery(p.product.name, p.product.code, u.barcode, p.product.category, query) }
                     val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                     matchesQuery && matchesCat
                 }.sortProducts(uiState.sortOption, uiState.productStockMap)
@@ -3337,18 +3536,81 @@ private fun SelectInvoiceForReturnDialog(
 /**
  * نافذة تعديل الفاتورة المباشرة لمدير النظام
  */
+/**
+ * نافذة تعديل الفاتورة والمردود المباشرة لمدير النظام
+ * تعرض كافة التفاصيل بما فيها جدول البنود، الكميات، الأسعار، الخصومات مع إمكانية تعديل البنود أو إضافتها أو حذفها
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditInvoiceDialog(
     invoice: InvoiceEntity,
     uiState: PosUiState,
     onDismiss: () -> Unit,
-    onSave: (notes: String, method: PaymentMethod, total: Double?, paid: Double?, partyId: Long?) -> Unit
+    onSave: (notes: String, method: PaymentMethod, total: Double?, paid: Double?, partyId: Long?, items: List<EditableInvoiceItem>, costCenterId: Long, paymentAccountId: Long?) -> Unit
 ) {
     var notes by remember { mutableStateOf(uiState.editInvoiceNotes) }
     var selectedMethod by remember { mutableStateOf(uiState.editInvoicePaymentMethod) }
-    var totalText by remember { mutableStateOf(uiState.editInvoiceTotal) }
+    var selectedAccountId by remember { mutableStateOf(uiState.editInvoicePaymentAccountId) }
+    var selectedCostCenterId by remember { mutableStateOf(uiState.editInvoiceCostCenterId) }
     var paidText by remember { mutableStateOf(uiState.editInvoicePaidAmount) }
     var selectedPartyId by remember { mutableStateOf(uiState.editInvoicePartyId) }
+    var costCenterDropdownExpanded by remember { mutableStateOf(false) }
+
+    val itemsList = remember { mutableStateListOf<EditableInvoiceItem>().apply { addAll(uiState.editInvoiceItems) } }
+
+    var showAddItemSection by remember { mutableStateOf(false) }
+    var selectedProductForAdd by remember { mutableStateOf<ProductWithUnits?>(null) }
+    var selectedUnitForAdd by remember { mutableStateOf<ProductUnitEntity?>(null) }
+    var addQtyInput by remember { mutableStateOf("1.0") }
+    var addPriceInput by remember { mutableStateOf("0.0") }
+    var addDiscountInput by remember { mutableStateOf("0.0") }
+    var productDropdownExpanded by remember { mutableStateOf(false) }
+
+    val calculatedSubtotal = itemsList.sumOf { it.quantity * it.unitSellingPrice }
+    val calculatedDiscounts = itemsList.sumOf { it.discount }
+    val calculatedNetTotal = (calculatedSubtotal - calculatedDiscounts).coerceAtLeast(0.0)
+
+    val paidVal = paidText.toDoubleOrNull() ?: calculatedNetTotal
+    val remainingVal = (calculatedNetTotal - paidVal).coerceAtLeast(0.0)
+
+    val currentCostCenterName = remember(selectedCostCenterId, uiState.costCenters) {
+        uiState.costCenters.find { it.centerId == selectedCostCenterId }?.centerName
+            ?: if (selectedCostCenterId == 1L) "مركز التكلفة العام" else "مركز تكلفة #${selectedCostCenterId}"
+    }
+
+    data class InvoicePaymentOption(
+        val method: PaymentMethod,
+        val accountId: Long? = null,
+        val label: String,
+        val icon: androidx.compose.ui.graphics.vector.ImageVector
+    )
+
+    val paymentOptions = remember(uiState.financialAccounts) {
+        val list = mutableListOf<InvoicePaymentOption>()
+        list.add(InvoicePaymentOption(PaymentMethod.CASH, null, PaymentMethod.CASH.labelArabic, Icons.Default.Payments))
+        list.add(InvoicePaymentOption(PaymentMethod.CREDIT, null, PaymentMethod.CREDIT.labelArabic, Icons.Default.HourglassTop))
+        list.add(InvoicePaymentOption(PaymentMethod.MADA, null, PaymentMethod.MADA.labelArabic, Icons.Default.CreditCard))
+        list.add(InvoicePaymentOption(PaymentMethod.POS_CARD, null, PaymentMethod.POS_CARD.labelArabic, Icons.Default.PointOfSale))
+        list.add(InvoicePaymentOption(PaymentMethod.BANK_TRANSFER, null, PaymentMethod.BANK_TRANSFER.labelArabic, Icons.Default.AccountBalance))
+        list.add(InvoicePaymentOption(PaymentMethod.E_WALLET, null, PaymentMethod.E_WALLET.labelArabic, Icons.Default.AccountBalanceWallet))
+        list.add(InvoicePaymentOption(PaymentMethod.EXCHANGE_NETWORK, null, PaymentMethod.EXCHANGE_NETWORK.labelArabic, Icons.Default.SyncAlt))
+
+        uiState.financialAccounts.forEach { acc ->
+            val methodForAccount = when (acc.accountType) {
+                com.example.dokkani.data.local.entities.FinancialAccountType.BANK -> PaymentMethod.BANK_TRANSFER
+                com.example.dokkani.data.local.entities.FinancialAccountType.E_WALLET -> PaymentMethod.E_WALLET
+                com.example.dokkani.data.local.entities.FinancialAccountType.CASH_DRAWER -> PaymentMethod.CASH
+                else -> PaymentMethod.POS_CARD
+            }
+            val accountIcon = when (acc.accountType) {
+                com.example.dokkani.data.local.entities.FinancialAccountType.BANK -> Icons.Default.AccountBalance
+                com.example.dokkani.data.local.entities.FinancialAccountType.E_WALLET -> Icons.Default.AccountBalanceWallet
+                else -> Icons.Default.CreditCard
+            }
+            list.add(InvoicePaymentOption(methodForAccount, acc.id, "${acc.name} (${acc.accountType.labelArabic})", accountIcon))
+        }
+        list.distinctBy { Pair(it.method, it.accountId) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3359,13 +3621,13 @@ private fun EditInvoiceDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("تعديل الفاتورة المباشر: ${invoice.invoiceNumber}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("تعديل الفاتورة والمردود: ${invoice.invoiceNumber}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Surface(
                         color = Color(0xFFE3F2FD),
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
-                            "صلاحية مدير النظام (Admin)",
+                            "صلاحية مدير النظام (Admin) - شاشة تفصيلية للبنود والحسابات ومراكز التكلفة",
                             fontSize = 10.sp,
                             color = Color(0xFF1565C0),
                             fontWeight = FontWeight.Bold,
@@ -3380,104 +3642,494 @@ private fun EditInvoiceDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val formattedDate = remember(invoice.date) {
                     java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(invoice.date))
                 }
-                OutlinedTextField(
-                    value = formattedDate,
-                    onValueChange = {},
-                    readOnly = true,
-                    enabled = false,
-                    label = { Text("تاريخ الفاتورة (ثابت - غير قابل للتعديل)") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "ثابت",
-                            tint = Color(0xFF64748B)
-                        )
-                    },
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        disabledBorderColor = Color(0xFFCBD5E1),
-                        disabledTextColor = Color(0xFF334155),
-                        disabledLabelColor = Color(0xFF64748B)
-                    )
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedTextField(
-                        value = totalText,
-                        onValueChange = { totalText = it },
-                        label = { Text("إجمالي الفاتورة (${uiState.currencySymbol})") },
+                        value = formattedDate,
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = false,
+                        label = { Text("تاريخ الفاتورة (ثابت)") },
                         modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
-                    OutlinedTextField(
-                        value = paidText,
-                        onValueChange = { paidText = it },
-                        label = { Text("المبلغ المدفوع (${uiState.currencySymbol})") },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true
-                    )
-                }
 
-                Column {
-                    Text("طريقة الدفع:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = selectedMethod == PaymentMethod.CASH,
-                            onClick = { selectedMethod = PaymentMethod.CASH },
-                            label = { Text("نقداً") }
+                    var partyDropdownExpanded by remember { mutableStateOf(false) }
+                    val currentPartyName = remember(selectedPartyId, uiState.parties) {
+                        uiState.parties.find { it.id == selectedPartyId }?.name ?: "زبون نقدي مباشر"
+                    }
+
+                    Box(modifier = Modifier.weight(1.2f)) {
+                        OutlinedTextField(
+                            value = currentPartyName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("العميل / المورد") },
+                            trailingIcon = {
+                                IconButton(onClick = { partyDropdownExpanded = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
                         )
-                        FilterChip(
-                            selected = selectedMethod == PaymentMethod.CREDIT,
-                            onClick = { selectedMethod = PaymentMethod.CREDIT },
-                            label = { Text("آجل / ذمم") }
-                        )
-                        FilterChip(
-                            selected = selectedMethod == PaymentMethod.MADA,
-                            onClick = { selectedMethod = PaymentMethod.MADA },
-                            label = { Text("مدى") }
-                        )
-                        FilterChip(
-                            selected = selectedMethod == PaymentMethod.BANK_TRANSFER,
-                            onClick = { selectedMethod = PaymentMethod.BANK_TRANSFER },
-                            label = { Text("تحويل") }
-                        )
+                        DropdownMenu(
+                            expanded = partyDropdownExpanded,
+                            onDismissRequest = { partyDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("زبون نقدي مباشر", fontSize = 12.sp) },
+                                onClick = {
+                                    selectedPartyId = null
+                                    partyDropdownExpanded = false
+                                }
+                            )
+                            uiState.parties.forEach { party ->
+                                DropdownMenuItem(
+                                    text = { Text("${party.name} (${party.type.labelArabic})", fontSize = 12.sp) },
+                                    onClick = {
+                                        selectedPartyId = party.id
+                                        partyDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
 
-                Column {
-                    Text("الملاحظات والبيان:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
+                // 1. مركز التكلفة من قاعدة البيانات
+                Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
+                        value = currentCostCenterName,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("مركز التكلفة") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalance,
+                                contentDescription = "مركز التكلفة",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { costCenterDropdownExpanded = true }) {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
-                        maxLines = 2
+                        singleLine = true
                     )
+                    DropdownMenu(
+                        expanded = costCenterDropdownExpanded,
+                        onDismissRequest = { costCenterDropdownExpanded = false }
+                    ) {
+                        if (uiState.costCenters.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("مركز التكلفة العام (افتراضي)", fontSize = 12.sp) },
+                                onClick = {
+                                    selectedCostCenterId = 1L
+                                    costCenterDropdownExpanded = false
+                                }
+                            )
+                        } else {
+                            uiState.costCenters.forEach { center ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (center.isGeneral) Icons.Default.HomeWork else Icons.Default.Business,
+                                                contentDescription = null,
+                                                tint = if (center.centerId == selectedCostCenterId) MaterialTheme.colorScheme.primary else Color.Gray,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "${center.centerName} ${if (center.code.isNotBlank()) "(${center.code})" else ""}",
+                                                fontSize = 12.sp,
+                                                fontWeight = if (center.centerId == selectedCostCenterId) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedCostCenterId = center.centerId
+                                        costCenterDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
+
+                // 2. طرق الدفع الديناميكية من قاعدة البيانات
+                Column {
+                    Text("طريقة السداد الحالية (طرق الدفع الديناميكية من قاعدة البيانات):", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(paymentOptions) { opt ->
+                            val isSelected = selectedMethod == opt.method && (opt.accountId == null || selectedAccountId == opt.accountId)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedMethod = opt.method
+                                    selectedAccountId = opt.accountId
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = opt.icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = opt.label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFE0E0E0))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "بنود وأصناف الفاتورة (${itemsList.size} بند):",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Color(0xFF1A237E)
+                    )
+
+                    OutlinedButton(
+                        onClick = { showAddItemSection = !showAddItemSection },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (showAddItemSection) Icons.Default.Remove else Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (showAddItemSection) "إخفاء" else "+ إضافة صنف جديد", fontSize = 11.sp)
+                    }
+                }
+
+                AnimatedVisibility(visible = showAddItemSection) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFFF3E5F5),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Color(0xFFCE93D8))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("إضافة صنف جديد للفاتورة:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF4A148C))
+
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(
+                                    value = selectedProductForAdd?.product?.name ?: "اختر الصنف من القائمة...",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("الصنف") },
+                                    trailingIcon = {
+                                        IconButton(onClick = { productDropdownExpanded = true }) {
+                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+
+                                DropdownMenu(
+                                    expanded = productDropdownExpanded,
+                                    onDismissRequest = { productDropdownExpanded = false }
+                                ) {
+                                    uiState.productsWithUnits.forEach { pwu ->
+                                        DropdownMenuItem(
+                                            text = { Text("${pwu.product.name} (${pwu.product.code})", fontSize = 12.sp) },
+                                            onClick = {
+                                                selectedProductForAdd = pwu
+                                                val firstUnit = pwu.units.firstOrNull()
+                                                selectedUnitForAdd = firstUnit
+                                                addPriceInput = (firstUnit?.sellingPrice ?: 0.0).toString()
+                                                productDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (selectedProductForAdd != null) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedTextField(
+                                        value = addQtyInput,
+                                        onValueChange = { addQtyInput = it },
+                                        label = { Text("الكمية") },
+                                        modifier = Modifier.weight(1f),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = addPriceInput,
+                                        onValueChange = { addPriceInput = it },
+                                        label = { Text("السعر") },
+                                        modifier = Modifier.weight(1f),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = addDiscountInput,
+                                        onValueChange = { addDiscountInput = it },
+                                        label = { Text("الخصم") },
+                                        modifier = Modifier.weight(1f),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        singleLine = true
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        val prod = selectedProductForAdd?.product
+                                        val unit = selectedUnitForAdd ?: selectedProductForAdd?.units?.firstOrNull()
+                                        val qty = addQtyInput.toDoubleOrNull() ?: 1.0
+                                        val price = addPriceInput.toDoubleOrNull() ?: (unit?.sellingPrice ?: 0.0)
+                                        val disc = addDiscountInput.toDoubleOrNull() ?: 0.0
+
+                                        if (prod != null && unit != null && qty > 0) {
+                                            itemsList.add(
+                                                EditableInvoiceItem(
+                                                    id = 0L,
+                                                    productId = prod.id,
+                                                    productName = prod.name,
+                                                    productUnitId = unit.id,
+                                                    unitName = unit.unitName,
+                                                    quantity = qty,
+                                                    unitConversionFactor = unit.conversionFactor,
+                                                    unitCostPrice = unit.costPrice,
+                                                    unitSellingPrice = price,
+                                                    discount = disc
+                                                )
+                                            )
+                                            selectedProductForAdd = null
+                                            selectedUnitForAdd = null
+                                            addQtyInput = "1.0"
+                                            addPriceInput = "0.0"
+                                            addDiscountInput = "0.0"
+                                            showAddItemSection = false
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A))
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("تأكيد إضافة البند إلى الفاتورة")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (itemsList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(70.dp)
+                            .background(Color(0xFFFFF3E0), RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("لا توجد بنود في الفاتورة حالياً. يرجى إضافة صنف.", color = Color(0xFFE65100), fontSize = 12.sp)
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        itemsList.forEachIndexed { index, item ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+                                border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = item.productName,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp
+                                            )
+                                            Text(
+                                                text = "الوحدة: ${item.unitName}",
+                                                fontSize = 10.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "الإجمالي: %.2f %s".format(item.totalPrice, uiState.currencySymbol),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = Color(0xFF2E7D32)
+                                            )
+                                            IconButton(
+                                                onClick = { itemsList.removeAt(index) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "حذف البند",
+                                                    tint = Color(0xFFD32F2F),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        OutlinedTextField(
+                                            value = item.quantity.toString(),
+                                            onValueChange = { val q = it.toDoubleOrNull() ?: 0.0; itemsList[index] = item.copy(quantity = q) },
+                                            label = { Text("الكمية", fontSize = 10.sp) },
+                                            modifier = Modifier.weight(1f),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            singleLine = true
+                                        )
+
+                                        OutlinedTextField(
+                                            value = item.unitSellingPrice.toString(),
+                                            onValueChange = { val p = it.toDoubleOrNull() ?: 0.0; itemsList[index] = item.copy(unitSellingPrice = p) },
+                                            label = { Text("سعر الوحدة", fontSize = 10.sp) },
+                                            modifier = Modifier.weight(1f),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            singleLine = true
+                                        )
+
+                                        OutlinedTextField(
+                                            value = item.discount.toString(),
+                                            onValueChange = { val d = it.toDoubleOrNull() ?: 0.0; itemsList[index] = item.copy(discount = d) },
+                                            label = { Text("خصم البند", fontSize = 10.sp) },
+                                            modifier = Modifier.weight(1f),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            singleLine = true
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFE0E0E0))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    border = BorderStroke(1.dp, Color(0xFFA5D6A7))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("إجمالي البنود قبل الخصم:", fontSize = 11.sp, color = Color.DarkGray)
+                            Text("%.2f %s".format(calculatedSubtotal, uiState.currencySymbol), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        if (calculatedDiscounts > 0) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("إجمالي الخصومات:", fontSize = 11.sp, color = Color(0xFFD32F2F))
+                                Text("-%.2f %s".format(calculatedDiscounts, uiState.currencySymbol), fontSize = 11.sp, color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = Color(0xFFC8E6C9))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("الصافي الإجمالي للفاتورة:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("%.2f %s".format(calculatedNetTotal, uiState.currencySymbol), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1B5E20))
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = paidText,
+                                onValueChange = { paidText = it },
+                                label = { Text("المبلغ المدفوع (${uiState.currencySymbol})") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                singleLine = true
+                            )
+
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Text("المتبقي / المديونية الآجلة:", fontSize = 10.sp, color = Color.Gray)
+                                Text(
+                                    "%.2f %s".format(remainingVal, uiState.currencySymbol),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = if (remainingVal > 0) Color(0xFFC62828) else Color(0xFF2E7D32)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("البيان والملاحظات التفصيلية") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
+                )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val tot = totalText.toDoubleOrNull()
-                    val paid = paidText.toDoubleOrNull()
-                    onSave(notes, selectedMethod, tot, paid, selectedPartyId)
-                }
+                    onSave(notes, selectedMethod, calculatedNetTotal, paidVal, selectedPartyId, itemsList.toList(), selectedCostCenterId, selectedAccountId)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
             ) {
-                Text("حفظ التعديلات")
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("حفظ التعديلات والتحديث الفوري", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            OutlinedButton(onClick = onDismiss) {
                 Text("إلغاء")
             }
         }
@@ -3492,12 +4144,53 @@ private fun EditVoucherDialog(
     record: PosTransactionRecord,
     uiState: PosUiState,
     onDismiss: () -> Unit,
-    onSave: (notes: String, method: PaymentMethod, amount: Double?, partyName: String?) -> Unit
+    onSave: (notes: String, method: PaymentMethod, amount: Double?, partyName: String?, costCenterId: Long, paymentAccountId: Long?) -> Unit
 ) {
     var notes by remember { mutableStateOf(uiState.editVoucherNotes) }
     var selectedMethod by remember { mutableStateOf(uiState.editVoucherPaymentMethod) }
+    var selectedAccountId by remember { mutableStateOf(uiState.editVoucherPaymentAccountId) }
+    var selectedCostCenterId by remember { mutableStateOf(uiState.editVoucherCostCenterId) }
     var amountText by remember { mutableStateOf(uiState.editVoucherAmount) }
     var partyNameText by remember { mutableStateOf(uiState.editVoucherPaidTo) }
+    var costCenterDropdownExpanded by remember { mutableStateOf(false) }
+
+    val currentCostCenterName = remember(selectedCostCenterId, uiState.costCenters) {
+        uiState.costCenters.find { it.centerId == selectedCostCenterId }?.centerName
+            ?: if (selectedCostCenterId == 1L) "مركز التكلفة العام" else "مركز تكلفة #${selectedCostCenterId}"
+    }
+
+    data class VoucherPaymentOption(
+        val method: PaymentMethod,
+        val accountId: Long? = null,
+        val label: String,
+        val icon: androidx.compose.ui.graphics.vector.ImageVector
+    )
+
+    val paymentOptions = remember(uiState.financialAccounts) {
+        val list = mutableListOf<VoucherPaymentOption>()
+        list.add(VoucherPaymentOption(PaymentMethod.CASH, null, PaymentMethod.CASH.labelArabic, Icons.Default.Payments))
+        list.add(VoucherPaymentOption(PaymentMethod.MADA, null, PaymentMethod.MADA.labelArabic, Icons.Default.CreditCard))
+        list.add(VoucherPaymentOption(PaymentMethod.POS_CARD, null, PaymentMethod.POS_CARD.labelArabic, Icons.Default.PointOfSale))
+        list.add(VoucherPaymentOption(PaymentMethod.BANK_TRANSFER, null, PaymentMethod.BANK_TRANSFER.labelArabic, Icons.Default.AccountBalance))
+        list.add(VoucherPaymentOption(PaymentMethod.E_WALLET, null, PaymentMethod.E_WALLET.labelArabic, Icons.Default.AccountBalanceWallet))
+        list.add(VoucherPaymentOption(PaymentMethod.EXCHANGE_NETWORK, null, PaymentMethod.EXCHANGE_NETWORK.labelArabic, Icons.Default.SyncAlt))
+
+        uiState.financialAccounts.forEach { acc ->
+            val methodForAccount = when (acc.accountType) {
+                com.example.dokkani.data.local.entities.FinancialAccountType.BANK -> PaymentMethod.BANK_TRANSFER
+                com.example.dokkani.data.local.entities.FinancialAccountType.E_WALLET -> PaymentMethod.E_WALLET
+                com.example.dokkani.data.local.entities.FinancialAccountType.CASH_DRAWER -> PaymentMethod.CASH
+                else -> PaymentMethod.POS_CARD
+            }
+            val accountIcon = when (acc.accountType) {
+                com.example.dokkani.data.local.entities.FinancialAccountType.BANK -> Icons.Default.AccountBalance
+                com.example.dokkani.data.local.entities.FinancialAccountType.E_WALLET -> Icons.Default.AccountBalanceWallet
+                else -> Icons.Default.CreditCard
+            }
+            list.add(VoucherPaymentOption(methodForAccount, acc.id, "${acc.name} (${acc.accountType.labelArabic})", accountIcon))
+        }
+        list.distinctBy { Pair(it.method, it.accountId) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3514,7 +4207,7 @@ private fun EditVoucherDialog(
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
-                            "صلاحية مدير النظام (Admin)",
+                            "صلاحية مدير النظام (Admin) - شاشة تفصيلية للحسابات ومراكز التكلفة",
                             fontSize = 10.sp,
                             color = Color(0xFF00796B),
                             fontWeight = FontWeight.Bold,
@@ -3571,25 +4264,105 @@ private fun EditVoucherDialog(
                     singleLine = true
                 )
 
+                // 1. اختيار مركز التكلفة من قاعدة البيانات
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = currentCostCenterName,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("مركز التكلفة") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalance,
+                                contentDescription = "مركز التكلفة",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { costCenterDropdownExpanded = true }) {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    DropdownMenu(
+                        expanded = costCenterDropdownExpanded,
+                        onDismissRequest = { costCenterDropdownExpanded = false }
+                    ) {
+                        if (uiState.costCenters.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("مركز التكلفة العام (افتراضي)", fontSize = 12.sp) },
+                                onClick = {
+                                    selectedCostCenterId = 1L
+                                    costCenterDropdownExpanded = false
+                                }
+                            )
+                        } else {
+                            uiState.costCenters.forEach { center ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (center.isGeneral) Icons.Default.HomeWork else Icons.Default.Business,
+                                                contentDescription = null,
+                                                tint = if (center.centerId == selectedCostCenterId) MaterialTheme.colorScheme.primary else Color.Gray,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "${center.centerName} ${if (center.code.isNotBlank()) "(${center.code})" else ""}",
+                                                fontSize = 12.sp,
+                                                fontWeight = if (center.centerId == selectedCostCenterId) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedCostCenterId = center.centerId
+                                        costCenterDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 2. طرق الدفع الديناميكية من قاعدة البيانات
                 Column {
-                    Text("طريقة السداد:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("طريقة السداد (طرق الدفع الديناميكية من قاعدة البيانات):", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = selectedMethod == PaymentMethod.CASH,
-                            onClick = { selectedMethod = PaymentMethod.CASH },
-                            label = { Text("نقداً") }
-                        )
-                        FilterChip(
-                            selected = selectedMethod == PaymentMethod.MADA,
-                            onClick = { selectedMethod = PaymentMethod.MADA },
-                            label = { Text("مدى") }
-                        )
-                        FilterChip(
-                            selected = selectedMethod == PaymentMethod.BANK_TRANSFER,
-                            onClick = { selectedMethod = PaymentMethod.BANK_TRANSFER },
-                            label = { Text("تحويل بنكي") }
-                        )
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(paymentOptions) { opt ->
+                            val isSelected = selectedMethod == opt.method && (opt.accountId == null || selectedAccountId == opt.accountId)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedMethod = opt.method
+                                    selectedAccountId = opt.accountId
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = opt.icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = opt.label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -3609,7 +4382,7 @@ private fun EditVoucherDialog(
             Button(
                 onClick = {
                     val amt = amountText.toDoubleOrNull()
-                    onSave(notes, selectedMethod, amt, partyNameText)
+                    onSave(notes, selectedMethod, amt, partyNameText, selectedCostCenterId, selectedAccountId)
                 }
             ) {
                 Text("حفظ التعديلات")
@@ -3826,47 +4599,50 @@ private fun PosHistoryDialog(
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                             ) {
-                                Row(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(record.id, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                color = when (record.operation) {
-                                                    PosOperation.SALE -> Color(0xFFE8F5E9)
-                                                    PosOperation.PURCHASE -> Color(0xFFE3F2FD)
-                                                    PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFFFEBEE)
-                                                    PosOperation.RECEIPT -> Color(0xFFE0F2F1)
-                                                    PosOperation.EXPENSE -> Color(0xFFFFF3E0)
-                                                },
-                                                shape = RoundedCornerShape(4.dp)
-                                            ) {
-                                                Text(
-                                                    record.operation.titleArabic,
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold,
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(record.id, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Surface(
                                                     color = when (record.operation) {
-                                                        PosOperation.SALE -> Color(0xFF1B5E20)
-                                                        PosOperation.PURCHASE -> Color(0xFF1976D2)
-                                                        PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
-                                                        PosOperation.RECEIPT -> Color(0xFF00796B)
-                                                        PosOperation.EXPENSE -> Color(0xFFE65100)
+                                                        PosOperation.SALE -> Color(0xFFE8F5E9)
+                                                        PosOperation.PURCHASE -> Color(0xFFE3F2FD)
+                                                        PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFFFEBEE)
+                                                        PosOperation.RECEIPT -> Color(0xFFE0F2F1)
+                                                        PosOperation.EXPENSE -> Color(0xFFFFF3E0)
                                                     },
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                )
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text(
+                                                        record.operation.titleArabic,
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = when (record.operation) {
+                                                            PosOperation.SALE -> Color(0xFF1B5E20)
+                                                            PosOperation.PURCHASE -> Color(0xFF1976D2)
+                                                            PosOperation.SALE_RETURN, PosOperation.PURCHASE_RETURN -> Color(0xFFD32F2F)
+                                                            PosOperation.RECEIPT -> Color(0xFF00796B)
+                                                            PosOperation.EXPENSE -> Color(0xFFE65100)
+                                                        },
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
                                             }
+                                            Text(record.partyName, fontSize = 11.sp, color = Color.DarkGray)
+                                            Text(record.date, fontSize = 10.sp, color = Color.Gray)
                                         }
-                                        Text(record.partyName, fontSize = 11.sp, color = Color.DarkGray)
-                                        Text(record.date, fontSize = 10.sp, color = Color.Gray)
-                                    }
 
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text(
                                                 "%.2f %s".format(record.amount, uiState.currencySymbol),
@@ -3880,56 +4656,62 @@ private fun PosHistoryDialog(
                                             )
                                             Text(record.paymentMethod.labelArabic, fontSize = 10.sp, color = Color.Gray)
                                         }
+                                    }
 
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        IconButton(
-                                            onClick = {
-                                                viewModel.showTransactionDetails(record)
-                                            },
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Visibility,
-                                                contentDescription = "تفاصيل الحركة",
-                                                tint = Color(0xFF512DA8),
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
+                                    HorizontalDivider(color = Color(0xFFEEEEEE))
 
-                                        // زر معاينة وطباعة الفاتورة لعمليات البيع والشراء ومردوداتهما
+                                    @OptIn(ExperimentalLayoutApi::class)
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        AssistChip(
+                                            onClick = { viewModel.showTransactionDetails(record) },
+                                            label = { Text("عرض التفاصيل", fontSize = 10.sp) },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.Visibility,
+                                                    contentDescription = "تفاصيل الحركة",
+                                                    tint = Color(0xFF512DA8),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        )
+
                                         if (record.operation.isInvoiceType) {
-                                            IconButton(
+                                            AssistChip(
                                                 onClick = {
                                                     onDismiss()
                                                     viewModel.showReceiptForInvoiceNumber(record.id)
                                                 },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.ReceiptLong,
-                                                    contentDescription = "معاينة وطباعة الفاتورة",
-                                                    tint = Color(0xFF2E7D32),
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
+                                                label = { Text("معاينة الفاتورة", fontSize = 10.sp) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Default.ReceiptLong,
+                                                        contentDescription = "معاينة الفاتورة",
+                                                        tint = Color(0xFF2E7D32),
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                }
+                                            )
                                         }
 
-                                         IconButton(
-                                             onClick = {
-                                                 viewModel.loadRecordForEditing(record, currentUserRole)
-                                             },
-                                             modifier = Modifier.size(28.dp)
-                                         ) {
-                                             Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color(0xFF1976D2), modifier = Modifier.size(16.dp))
-                                         }
-                                         IconButton(
-                                             onClick = {
-                                                 viewModel.requestDeleteTransactionRecord(record, currentUserRole)
-                                             },
-                                             modifier = Modifier.size(28.dp)
-                                         ) {
-                                             Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color(0xFFD32F2F), modifier = Modifier.size(16.dp))
-                                         }
+                                        AssistChip(
+                                            onClick = { viewModel.loadRecordForEditing(record, currentUserRole) },
+                                            label = { Text("تعديل", fontSize = 10.sp) },
+                                            leadingIcon = {
+                                                Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color(0xFF1976D2), modifier = Modifier.size(14.dp))
+                                            }
+                                        )
+
+                                        AssistChip(
+                                            onClick = { viewModel.requestDeleteTransactionRecord(record, currentUserRole) },
+                                            label = { Text("حذف", fontSize = 10.sp, color = Color(0xFFD32F2F)) },
+                                            leadingIcon = {
+                                                Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color(0xFFD32F2F), modifier = Modifier.size(14.dp))
+                                            }
+                                        )
                                     }
                                 }
                             }
@@ -4365,8 +5147,22 @@ fun PosShiftCloseDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("- سندات الصرف (المصروفات):", color = Color(0xFFFCA5A5), fontSize = 12.sp)
+                            Text("- المصروفات التشغيلية النقدية:", color = Color(0xFFFCA5A5), fontSize = 12.sp)
                             Text("-${"%.2f".format(recon?.totalCashExpenses ?: 0.0)} ${uiState.currencySymbol}", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("- المشتريات النقدية المباشرة:", color = Color(0xFFFCA5A5), fontSize = 12.sp)
+                            Text("-${"%.2f".format(recon?.totalCashPurchases ?: 0.0)} ${uiState.currencySymbol}", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("- تسديدات الموردين نقداً:", color = Color(0xFFFCA5A5), fontSize = 12.sp)
+                            Text("-${"%.2f".format(recon?.totalSupplierPayments ?: 0.0)} ${uiState.currencySymbol}", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Color(0xFF2E7D32))

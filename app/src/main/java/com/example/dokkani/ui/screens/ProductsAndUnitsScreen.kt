@@ -45,6 +45,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.LaunchedEffect
+import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.ProductWastageEntity
 import com.example.dokkani.data.local.entities.ProductWastageWithProduct
@@ -87,6 +88,8 @@ import com.example.dokkani.data.local.entities.ProductEntity
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.UserRole
+import com.example.dokkani.ui.components.AppSearchBar
+import com.example.dokkani.ui.components.isItemMatchQuery
 import com.example.dokkani.ui.components.BarcodeTextField
 import com.example.dokkani.ui.components.ProductImageZoomDialog
 import com.example.dokkani.ui.components.ProductThumbnailImage
@@ -104,6 +107,7 @@ fun ProductsAndUnitsScreen(
     productsWithUnits: List<ProductWithUnits>,
     wasteRecords: List<ProductWastageWithProduct> = emptyList(),
     currencies: List<CurrencyEntity> = emptyList(),
+    costCenters: List<CostCenterEntity> = emptyList(),
     currentUserRole: UserRole = UserRole.ADMIN,
     onSaveProduct: (ProductEntity, String, Double, Double, String, Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onDeleteProduct: (Long) -> Unit = {},
@@ -111,7 +115,7 @@ fun ProductsAndUnitsScreen(
     onDeleteUnit: (ProductUnitEntity) -> Unit = {},
     onRenameCategory: (oldName: String, newName: String) -> Unit = { _, _ -> },
     onDeleteCategory: (categoryName: String, reassignTo: String) -> Unit = { _, _ -> },
-    onSaveWasteRecord: (productId: Long, quantity: Double, unit: String, currency: String, reason: String, totalCost: Double, adminUser: String, wasteId: Long, notes: String) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
+    onSaveWasteRecord: (productId: Long, quantity: Double, unit: String, currency: String, reason: String, totalCost: Double, adminUser: String, wasteId: Long, notes: String, costCenterId: Long) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
     onDeleteWasteRecord: (ProductWastageEntity) -> Unit = {},
     onPrintLabel: ((productId: Long, unitId: Long) -> Unit)? = null,
     currencySymbol: String = "ر.ي",
@@ -162,15 +166,17 @@ fun ProductsAndUnitsScreen(
     var searchQuery by remember { mutableStateOf("") }
 
     val filteredProducts = remember(productsWithUnits, searchQuery) {
-        val q = searchQuery.trim().lowercase()
-        if (q.isEmpty()) {
+        if (searchQuery.isBlank()) {
             productsWithUnits
         } else {
             productsWithUnits.filter { item ->
-                item.product.name.lowercase().contains(q) ||
-                        item.product.code.lowercase().contains(q) ||
-                        item.product.category.lowercase().contains(q) ||
-                        item.units.any { it.barcode.lowercase().contains(q) }
+                isItemMatchQuery(
+                    itemName = item.product.name,
+                    itemCode = item.product.code,
+                    barcode = item.units.firstOrNull()?.barcode ?: "",
+                    category = item.product.category,
+                    searchQuery = searchQuery
+                ) || item.units.any { u -> isItemMatchQuery(item.product.name, item.product.code, u.barcode, item.product.category, searchQuery) }
             }
         }
     }
@@ -319,11 +325,11 @@ fun ProductsAndUnitsScreen(
                         }
 
                         item {
-                            BarcodeTextField(
+                            AppSearchBar(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                label = "بحث بالاسم، الكود، أو القسم أو مسح الباركود",
-                                placeholder = "امسح باركود الصنف أو ابحث بالاسم...",
+                                label = "بحث الأصناف المخصص (صوتي / نصي / باركود)",
+                                placeholder = "انطق اسم الصنف بالميكروفون، اكتب الاسم، الكود، أو امسح الباركود...",
                                 onBarcodeScanned = { scannedCode -> searchQuery = scannedCode },
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -792,6 +798,7 @@ fun ProductsAndUnitsScreen(
                         productsWithUnits = productsWithUnits,
                         wasteRecords = wasteRecords,
                         currencies = currencies,
+                        costCenters = costCenters,
                         currentUserRole = currentUserRole,
                         currencySymbol = currencySymbol,
                         onSaveWasteRecord = onSaveWasteRecord,
@@ -832,8 +839,18 @@ fun ProductsAndUnitsScreen(
 
     // إضافة أو تعديل صنف
     if (showAddProductDialog || editingProduct != null) {
+        val initialUnit = remember(editingProduct, productsWithUnits) {
+            if (editingProduct != null) {
+                val pwu = productsWithUnits.find { it.product.id == editingProduct?.id }
+                pwu?.units?.find { it.isBaseUnit } ?: pwu?.units?.firstOrNull()
+            } else null
+        }
+
         AddEditProductDialog(
             initialProduct = editingProduct,
+            initialBaseUnit = initialUnit,
+            availableCategories = allCategories,
+            currencies = currencies,
             onSaveProduct = { prod, baseName, cost, sell, barcode, isBaseUnit ->
                 onSaveProduct(prod, baseName, cost, sell, barcode, isBaseUnit)
                 showAddProductDialog = false
@@ -1282,9 +1299,10 @@ private fun ProductWastageTabContent(
     productsWithUnits: List<ProductWithUnits>,
     wasteRecords: List<ProductWastageWithProduct>,
     currencies: List<CurrencyEntity>,
+    costCenters: List<CostCenterEntity> = emptyList(),
     currentUserRole: UserRole,
     currencySymbol: String,
-    onSaveWasteRecord: (productId: Long, quantity: Double, unit: String, currency: String, reason: String, totalCost: Double, adminUser: String, wasteId: Long, notes: String) -> Unit,
+    onSaveWasteRecord: (productId: Long, quantity: Double, unit: String, currency: String, reason: String, totalCost: Double, adminUser: String, wasteId: Long, notes: String, costCenterId: Long) -> Unit,
     onDeleteWasteRecord: (ProductWastageEntity) -> Unit
 ) {
     val isAdmin = currentUserRole == UserRole.ADMIN
@@ -1298,6 +1316,9 @@ private fun ProductWastageTabContent(
     var manualTotalCostInput by remember { mutableStateOf("") }
     var adminUserInput by remember { mutableStateOf("مدير النظام (Admin)") }
     var notesInput by remember { mutableStateOf("") }
+
+    var selectedCostCenter by remember(costCenters) { mutableStateOf(costCenters.firstOrNull()) }
+    var showCostCenterDropdown by remember { mutableStateOf(false) }
 
     var showProductDropdown by remember { mutableStateOf(false) }
     var showUnitDropdown by remember { mutableStateOf(false) }
@@ -1464,6 +1485,50 @@ private fun ProductWastageTabContent(
                             }
                         }
 
+                        // 1.5. اختيار مركز التكلفة (Cost Center Selection)
+                        ExposedDropdownMenuBox(
+                            expanded = showCostCenterDropdown,
+                            onExpandedChange = { showCostCenterDropdown = it }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedCostCenter?.centerName ?: if (costCenters.isEmpty()) "مركز التكلفة العام (افتراضي)" else "اختر مركز التكلفة...",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("مركز التكلفة *") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showCostCenterDropdown) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = showCostCenterDropdown,
+                                onDismissRequest = { showCostCenterDropdown = false }
+                            ) {
+                                if (costCenters.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("مركز التكلفة العام") },
+                                        onClick = { showCostCenterDropdown = false }
+                                    )
+                                } else {
+                                    costCenters.forEach { cc ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(cc.centerName, fontWeight = FontWeight.Bold)
+                                                    if (cc.code.isNotBlank()) {
+                                                        Text("الكود: ${cc.code}", fontSize = 11.sp, color = Color.Gray)
+                                                    }
+                                                }
+                                            },
+                                            onClick = {
+                                                selectedCostCenter = cc
+                                                showCostCenterDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         // 2. الكمية والوحدة
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedTextField(
@@ -1615,7 +1680,8 @@ private fun ProductWastageTabContent(
                                     costVal,
                                     adminUserInput,
                                     0L,
-                                    notesInput
+                                    notesInput,
+                                    selectedCostCenter?.centerId ?: 1L
                                 )
                                 quantityInput = ""
                                 manualTotalCostInput = ""
@@ -1741,8 +1807,10 @@ private fun ProductWastageTabContent(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
+                                val costCenterName = costCenters.find { it.centerId == record.costCenterId }?.centerName ?: "مركز التكلفة #${record.costCenterId}"
                                 Text("الكمية التالفة: ${record.quantity} ${record.unit}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                                 Text("سبب التلف: ${record.reason}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                                Text("مركز التكلفة: $costCenterName", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                             }
 
                             Column(horizontalAlignment = Alignment.End) {
@@ -1765,6 +1833,8 @@ private fun ProductWastageTabContent(
         var editReason by remember { mutableStateOf(record.reason) }
         var editCurrency by remember { mutableStateOf(record.currency) }
         var editTotalCost by remember { mutableStateOf(record.totalCost.toString()) }
+        var editCostCenter by remember { mutableStateOf(costCenters.find { it.centerId == record.costCenterId } ?: costCenters.firstOrNull()) }
+        var showEditCostCenterDropdown by remember { mutableStateOf(false) }
 
         AlertDialog(
             onDismissRequest = { editingRecord = null },
@@ -1800,6 +1870,36 @@ private fun ProductWastageTabContent(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+
+                    // اختيار مركز التكلفة عند التعديل
+                    ExposedDropdownMenuBox(
+                        expanded = showEditCostCenterDropdown,
+                        onExpandedChange = { showEditCostCenterDropdown = it }
+                    ) {
+                        OutlinedTextField(
+                            value = editCostCenter?.centerName ?: "مركز التكلفة العام",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("مركز التكلفة") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showEditCostCenterDropdown) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = showEditCostCenterDropdown,
+                            onDismissRequest = { showEditCostCenterDropdown = false }
+                        ) {
+                            costCenters.forEach { cc ->
+                                DropdownMenuItem(
+                                    text = { Text(cc.centerName) },
+                                    onClick = {
+                                        editCostCenter = cc
+                                        showEditCostCenterDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -1816,7 +1916,8 @@ private fun ProductWastageTabContent(
                             c,
                             record.adminUser,
                             record.id,
-                            record.notes
+                            record.notes,
+                            editCostCenter?.centerId ?: record.costCenterId
                         )
                         editingRecord = null
                     },

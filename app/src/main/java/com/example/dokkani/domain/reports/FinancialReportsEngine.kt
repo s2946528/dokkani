@@ -4,6 +4,7 @@ import com.example.dokkani.data.local.entities.CostValuationMethod
 import com.example.dokkani.data.local.entities.ExpenseEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
+import com.example.dokkani.data.local.entities.InvoiceStatus
 import com.example.dokkani.data.local.entities.InvoiceType
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.ProductWithUnits
@@ -105,10 +106,21 @@ object FinancialReportsEngine {
     fun generateTopProductsReport(
         productsWithUnits: List<ProductWithUnits>,
         invoiceItems: List<InvoiceItemEntity>,
-        productUnitCosts: Map<Long, Double>
+        productUnitCosts: Map<Long, Double>,
+        invoices: List<InvoiceEntity> = emptyList()
     ): TopProductsReport {
         val productMap = productsWithUnits.associateBy { it.product.id }
-        val groupedByProduct = invoiceItems.groupBy { it.productId }
+        val saleInvoiceIds = if (invoices.isNotEmpty()) {
+            invoices.filter { it.type == InvoiceType.SALE && it.status != InvoiceStatus.CANCELLED }.map { it.id }.toSet()
+        } else null
+
+        val saleInvoiceItems = if (saleInvoiceIds != null) {
+            invoiceItems.filter { it.invoiceId in saleInvoiceIds }
+        } else {
+            invoiceItems
+        }
+
+        val groupedByProduct = saleInvoiceItems.groupBy { it.productId }
 
         val topItemList = mutableListOf<TopProductItem>()
 
@@ -529,6 +541,99 @@ object FinancialReportsEngine {
             totalClosingStockValue = itemsList.sumOf { it.closingStockValue },
             totalCogsValue = itemsList.sumOf { it.calculatedCogs },
             selectedCostCenterName = costCenterName
+        )
+    }
+
+    /**
+     * توليد كشف الحركة التفصيلية للصنف مع العملة (Detailed Item Ledger Report)
+     */
+    fun generateProductItemLedgerReport(
+        productId: Long,
+        productCode: String,
+        productName: String,
+        category: String,
+        unitName: String,
+        currencySymbol: String,
+        unitCost: Double,
+        costCenterName: String,
+        movements: List<StockMovementEntity>
+    ): ProductItemLedgerReport {
+        val validMovements = movements.filter { it.productId == productId }
+        val sortedMovements = validMovements.sortedBy { it.timestamp }
+        val dateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+        val entries = mutableListOf<ItemLedgerEntry>()
+        var runningBal = 0.0
+
+        for (m in sortedMovements) {
+            val qtyIn: Double
+            val qtyOut: Double
+
+            when (m.movementType) {
+                com.example.dokkani.data.local.entities.MovementType.PURCHASE_IN,
+                com.example.dokkani.data.local.entities.MovementType.RETURN_IN,
+                com.example.dokkani.data.local.entities.MovementType.PRODUCE_SORTING -> {
+                    qtyIn = abs(m.quantityBaseUnit)
+                    qtyOut = 0.0
+                }
+                com.example.dokkani.data.local.entities.MovementType.SALE_OUT,
+                com.example.dokkani.data.local.entities.MovementType.RETURN_OUT,
+                com.example.dokkani.data.local.entities.MovementType.WASTAGE_OUT -> {
+                    qtyIn = 0.0
+                    qtyOut = abs(m.quantityBaseUnit)
+                }
+                com.example.dokkani.data.local.entities.MovementType.INVENTORY_ADJUSTMENT -> {
+                    if (m.quantityBaseUnit >= 0) {
+                        qtyIn = m.quantityBaseUnit
+                        qtyOut = 0.0
+                    } else {
+                        qtyIn = 0.0
+                        qtyOut = abs(m.quantityBaseUnit)
+                    }
+                }
+            }
+
+            runningBal += (qtyIn - qtyOut)
+            val cost = if (m.unitCostPriceBase > 0) m.unitCostPriceBase else unitCost
+            val totalVal = (qtyIn + qtyOut) * cost
+
+            entries.add(
+                ItemLedgerEntry(
+                    id = m.id,
+                    timestamp = m.timestamp,
+                    dateFormatted = dateTimeFormat.format(Date(m.timestamp)),
+                    movementType = m.movementType,
+                    movementTypeLabel = m.movementType.labelArabic,
+                    referenceNumber = m.referenceNumber ?: "-",
+                    notes = m.notes,
+                    quantityIn = qtyIn,
+                    quantityOut = qtyOut,
+                    runningBalance = runningBal,
+                    unitCost = cost,
+                    totalValue = totalVal,
+                    currencySymbol = currencySymbol
+                )
+            )
+        }
+
+        val totalIn = entries.sumOf { it.quantityIn }
+        val totalOut = entries.sumOf { it.quantityOut }
+        val issueDateStr = dateTimeFormat.format(Date())
+
+        return ProductItemLedgerReport(
+            productId = productId,
+            productCode = productCode,
+            productName = productName,
+            category = category,
+            unitName = unitName,
+            currencySymbol = currencySymbol,
+            currentUnitCost = unitCost,
+            costCenterName = costCenterName,
+            issueDateFormatted = issueDateStr,
+            totalQtyIn = totalIn,
+            totalQtyOut = totalOut,
+            closingBalance = runningBal,
+            totalValue = runningBal * unitCost,
+            entries = entries
         )
     }
 }

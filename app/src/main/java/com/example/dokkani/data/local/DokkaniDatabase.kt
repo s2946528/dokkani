@@ -75,6 +75,8 @@ import com.example.dokkani.data.local.dao.ProductWastageDao
 import com.example.dokkani.data.local.entities.ProductWastageEntity
 import com.example.dokkani.data.local.dao.CostCenterDao
 import com.example.dokkani.data.local.entities.CostCenterEntity
+import com.example.dokkani.data.local.dao.GlobalGroupDao
+import com.example.dokkani.data.local.entities.GlobalGroupEntity
 import com.example.dokkani.data.local.dao.ShortageSettlementDao
 import com.example.dokkani.data.local.entities.ShortageSettlementEntity
 
@@ -114,9 +116,11 @@ import com.example.dokkani.data.local.entities.ShortageSettlementEntity
         StockGroupAuditEntity::class,
         ProductWastageEntity::class,
         CostCenterEntity::class,
-        ShortageSettlementEntity::class
+        ShortageSettlementEntity::class,
+        GlobalGroupEntity::class,
+        com.example.dokkani.data.local.entities.InventoryAuditSheetEntity::class
     ],
-    version = 22,
+    version = 24,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -149,6 +153,8 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun productWastageDao(): ProductWastageDao
     abstract fun costCenterDao(): CostCenterDao
     abstract fun shortageSettlementDao(): ShortageSettlementDao
+    abstract fun globalGroupDao(): GlobalGroupDao
+    abstract fun inventoryAuditSheetDao(): com.example.dokkani.data.local.dao.InventoryAuditSheetDao
 
     companion object {
         @Volatile

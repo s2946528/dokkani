@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.dokkani.ui.components.AppSearchBar
+import com.example.dokkani.ui.components.isItemMatchQuery
 import com.example.dokkani.ui.components.BarcodeTextField
 import com.example.dokkani.ui.components.ReadOnlyReceiptAttachmentView
 import com.example.dokkani.ui.components.ProductSortSelector
@@ -38,6 +40,7 @@ import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.InvoiceItemEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PaymentMethod
+import com.example.dokkani.ui.components.PaymentMethodSelector
 import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.UserRole
@@ -137,6 +140,36 @@ fun PurchaseScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
                             )
+                        }
+
+                        // مؤشر إجمالي النقدية بالصندوق المتاح لحظياً
+                        val cashDrawerBalance = uiState.financialAccounts
+                            .filter { it.accountType == com.example.dokkani.data.local.entities.FinancialAccountType.CASH_DRAWER }
+                            .sumOf { it.currentBalance }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PointOfSale,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "إجمالي النقدية بالصندوق: %.2f %s".format(cashDrawerBalance, uiState.baseCurrencySymbol),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
 
                         Button(
@@ -278,6 +311,77 @@ fun PurchaseScreen(
                 confirmButton = {
                     Button(onClick = { viewModel.dismissSuccessDialog() }) {
                         Text("تم")
+                    }
+                }
+            )
+        }
+
+        // نافذة تنبيه تحذيري عند عدم كفاية رصيد الصندوق عند الشراء النقدي
+        if (uiState.showInsufficientCashDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissInsufficientCashDialog() },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "تنبيه - رصيد الصندوق غير كافٍ",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "الرصيد في الصندوق لا يسمح بإتمام العملية",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "المبلغ المطلوب للشراء النقدي: %.2f %s".format(
+                                        uiState.insufficientCashRequiredAmount,
+                                        uiState.baseCurrencySymbol
+                                    ),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = "رصيد الصندوق الحالي المتاح: %.2f %s".format(
+                                        uiState.insufficientCashCurrentBalance,
+                                        uiState.baseCurrencySymbol
+                                    ),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.dismissInsufficientCashDialog() },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("موافق", fontWeight = FontWeight.Bold)
                     }
                 }
             )
@@ -708,16 +812,15 @@ private fun ProductSearchAndAddCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BarcodeTextField(
+                AppSearchBar(
                     value = uiState.searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
                     modifier = Modifier.weight(1f),
-                    placeholder = "ابحث بالاسم أو امسح الباركود...",
-                    label = "البحث أو مسح باركود الصنف",
+                    placeholder = "انطق اسم الصنف بالميكروفون، أو اكتب الاسم/الباركود...",
+                    label = "بحث الأصناف (صوتي / نصي / باركود)",
                     onBarcodeScanned = { scannedCode ->
                         viewModel.setSearchQuery(scannedCode)
-                    },
-                    singleLine = true
+                    }
                 )
 
                 Button(
@@ -803,10 +906,10 @@ private fun ProductSearchAndAddCard(
             Spacer(modifier = Modifier.height(6.dp))
 
             val filteredProducts = uiState.productsWithUnits.filter { p ->
-                val query = uiState.searchQuery.trim().lowercase()
-                val matchesQuery = query.isEmpty() || p.product.name.lowercase().contains(query) ||
-                        p.product.code.lowercase().contains(query) ||
-                        p.units.any { it.barcode.lowercase().contains(query) }
+                val query = uiState.searchQuery
+                val matchesQuery = query.isBlank() ||
+                        isItemMatchQuery(p.product.name, p.product.code, p.units.firstOrNull()?.barcode ?: "", p.product.category, query) ||
+                        p.units.any { u -> isItemMatchQuery(p.product.name, p.product.code, u.barcode, p.product.category, query) }
                 val matchesCat = uiState.selectedCategory == "الكل" || p.product.category.trim() == uiState.selectedCategory.trim()
                 matchesQuery && matchesCat
             }.sortProducts(uiState.sortOption, uiState.productStockMap)
@@ -1123,58 +1226,14 @@ private fun InvoiceItemsAndTotalsCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = uiState.paymentMethod == PaymentMethod.CASH,
-                        onClick = { viewModel.setPaymentMethod(PaymentMethod.CASH) },
-                        label = {
-                            Text(
-                                "نقداً",
-                                fontSize = 12.sp,
-                                fontWeight = if (uiState.paymentMethod == PaymentMethod.CASH) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.Money, contentDescription = null, modifier = Modifier.size(16.dp))
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    FilterChip(
-                        selected = uiState.paymentMethod == PaymentMethod.CREDIT,
-                        onClick = { viewModel.setPaymentMethod(PaymentMethod.CREDIT) },
-                        label = {
-                            Text(
-                                "آجل (حساب المورد)",
-                                fontSize = 11.sp,
-                                fontWeight = if (uiState.paymentMethod == PaymentMethod.CREDIT) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(16.dp))
-                        },
-                        modifier = Modifier.weight(1.3f)
-                    )
-
-                    FilterChip(
-                        selected = uiState.paymentMethod == PaymentMethod.BANK_TRANSFER,
-                        onClick = { viewModel.setPaymentMethod(PaymentMethod.BANK_TRANSFER) },
-                        label = {
-                            Text(
-                                "تحويل بنكي",
-                                fontSize = 12.sp,
-                                fontWeight = if (uiState.paymentMethod == PaymentMethod.BANK_TRANSFER) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(16.dp))
-                        },
-                        modifier = Modifier.weight(1.1f)
-                    )
-                }
+                PaymentMethodSelector(
+                    selectedMethod = uiState.paymentMethod,
+                    onMethodSelected = { viewModel.setPaymentMethod(it) },
+                    financialAccounts = uiState.financialAccounts,
+                    selectedAccountId = uiState.selectedPaymentAccountId,
+                    onAccountSelected = { viewModel.setSelectedPaymentAccount(it) },
+                    currencySymbol = uiState.currencySymbol
+                )
             }
 
             Spacer(modifier = Modifier.height(4.dp))

@@ -24,6 +24,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import com.example.dokkani.data.local.DokkaniDatabase
+import com.example.dokkani.data.local.entities.GlobalGroupEntity
+import kotlinx.coroutines.launch
 import com.example.dokkani.data.local.entities.CurrencyEntity
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PartyType
@@ -335,38 +339,206 @@ fun CurrencyDropdownSelector(
 }
 
 /**
- * حوار إضافة / تعديل صنف
+ * مكون اختيار التصنيف / القسم من قائمة منسدلة تفاعلية تجلب البيانات ديناميكياً من قاعدة البيانات
+ * مع إمكانية إضافة تصنيف جديد مباشرة في قاعدة البيانات وتحديث القائمة فوراً.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryDropdownSelector(
+    selectedCategory: String,
+    onCategorySelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "التصنيف / القسم *",
+    availableCategoriesList: List<String>? = null,
+    onAddNewCategoryClick: (() -> Unit)? = null
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showAddCustomCategoryDialog by remember { mutableStateOf(false) }
+    var customCategoryInput by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val db = remember(context) { DokkaniDatabase.getDatabase(context, scope) }
+
+    // جلب المجموعات والتصنيفات ديناميكياً من جدول GlobalGroups بالنوع PRODUCT ومن جدول المنتجات
+    val dbGroups by db.globalGroupDao().getGroupsByEntityType("PRODUCT").collectAsState(initial = emptyList())
+    val dbProducts by db.productDao().getAllActiveProducts().collectAsState(initial = emptyList())
+
+    val defaultCategories = remember {
+        listOf(
+            "خضار وفواكه",
+            "ألبان وأجبان",
+            "مخبوزات",
+            "معلبات ومواد غذائية",
+            "مشروبات ومياه",
+            "حلويات وتسالي",
+            "منظفات ومستلزمات منزلية",
+            "عناية شخصية",
+            "تموينات عامة",
+            "عام"
+        )
+    }
+
+    // الدمج والتنقية لكل التصنيفات القادمة من قاعدة البيانات والقائمة الافتراضية
+    val categoriesToDisplay = remember(availableCategoriesList, dbGroups, dbProducts) {
+        val fromDbGroupNames = dbGroups.map { it.name }
+        val fromDbProductCategories = dbProducts.map { it.category }
+        val provided = availableCategoriesList ?: emptyList()
+        (defaultCategories + provided + fromDbGroupNames + fromDbProductCategories)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+    }
+
+    if (showAddCustomCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCustomCategoryDialog = false },
+            title = { Text("إضافة تصنيف / قسم جديد", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = customCategoryInput,
+                    onValueChange = { customCategoryInput = it },
+                    label = { Text("اسم التصنيف (مثال: مكسرات، بهارات، مجمدات...)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = customCategoryInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            scope.launch {
+                                try {
+                                    db.globalGroupDao().insertGroup(
+                                        GlobalGroupEntity(
+                                            entityType = "PRODUCT",
+                                            name = trimmed,
+                                            code = "CAT-${System.currentTimeMillis() % 10000}"
+                                        )
+                                    )
+                                } catch (_: Exception) {}
+                            }
+                            onCategorySelected(trimmed)
+                            customCategoryInput = ""
+                            showAddCustomCategoryDialog = false
+                        }
+                    }
+                ) {
+                    Text("إضافة وحفظ")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showAddCustomCategoryDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selectedCategory.ifBlank { "اختر التصنيف" },
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp)
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            categoriesToDisplay.forEach { categoryItem ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = categoryItem,
+                            fontWeight = if (categoryItem == selectedCategory) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    onClick = {
+                        onCategorySelected(categoryItem)
+                        expanded = false
+                    }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "+ إضافة تصنيف جديد...",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    if (onAddNewCategoryClick != null) {
+                        onAddNewCategoryClick()
+                    } else {
+                        showAddCustomCategoryDialog = true
+                    }
+                }
+            )
+        }
+    }
+}
+
+/**
+ * حوار إضافة / تعديل صنف الشامل
+ * يعرض الحقول الفعلية التي يحتاجها التاجر في السوق المحلي: اسم الصنف، الباركود، القسم، أسعار الشراء والبيع،
+ * الوحدة، حد إعادة الطلب، جعل SKU اختيارياً تماماً، وإدارة الصور الآمنة.
  */
 @Composable
 fun AddEditProductDialog(
     initialProduct: ProductEntity? = null,
+    initialBaseUnit: ProductUnitEntity? = null,
+    availableCategories: List<String>? = null,
+    currencies: List<CurrencyEntity>? = emptyList(),
     onSaveProduct: (ProductEntity, String, Double, Double, String, Boolean) -> Unit, // Product, baseUnitName, cost, sell, barcode, isBaseUnit
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf(initialProduct?.name ?: "") }
-    var code by remember { mutableStateOf(initialProduct?.code ?: "") }
-    var category by remember { mutableStateOf(initialProduct?.category ?: "عام") }
-    var englishName by remember { mutableStateOf(initialProduct?.englishName ?: "") }
-    var isWeighted by remember { mutableStateOf(initialProduct?.isWeighted ?: false) }
-    var minStockAlert by remember {
+    var name by remember(initialProduct) { mutableStateOf(initialProduct?.name ?: "") }
+    var code by remember(initialProduct) { mutableStateOf(initialProduct?.code ?: "") }
+    var category by remember(initialProduct) { mutableStateOf(initialProduct?.category ?: "عام") }
+    var englishName by remember(initialProduct) { mutableStateOf(initialProduct?.englishName ?: "") }
+    var isWeighted by remember(initialProduct) { mutableStateOf(initialProduct?.isWeighted ?: false) }
+    var minStockAlert by remember(initialProduct) {
         mutableStateOf(initialProduct?.minStockAlert?.toLong()?.toString() ?: "5")
     }
-    var imagePath by remember { mutableStateOf(initialProduct?.imagePath ?: "") }
+    var imagePath by remember(initialProduct) { mutableStateOf(initialProduct?.imagePath ?: "") }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        uri?.let {
-            imagePath = it.toString()
-        }
-    }
+    // القيم الأولية للوحدة الأساسية للصنف عند الإضافة أو التعديل
+    var baseUnitName by remember(initialBaseUnit) { mutableStateOf(initialBaseUnit?.unitName ?: "حبة") }
+    var isBaseUnit by remember(initialBaseUnit) { mutableStateOf(initialBaseUnit?.isBaseUnit ?: true) }
+    var costPrice by remember(initialBaseUnit) { mutableStateOf(initialBaseUnit?.costPrice?.let { if (it % 1.0 == 0.0) "%.0f".format(it) else it.toString() } ?: "0") }
+    var sellingPrice by remember(initialBaseUnit) { mutableStateOf(initialBaseUnit?.sellingPrice?.let { if (it % 1.0 == 0.0) "%.0f".format(it) else it.toString() } ?: "0") }
+    var barcode by remember(initialBaseUnit, initialProduct) { mutableStateOf(initialBaseUnit?.barcode ?: "") }
 
-    // Base unit initial values if creating new product
-    var baseUnitName by remember { mutableStateOf("حبة") }
-    var isBaseUnit by remember { mutableStateOf(true) }
-    var costPrice by remember { mutableStateOf("0") }
-    var sellingPrice by remember { mutableStateOf("0") }
-    var barcode by remember { mutableStateOf("") }
+    // حالة التحقق من تسعير الصنف وإدخال رمز المدير عند البيع بخسارة
+    var showPriceWarningDialog by remember { mutableStateOf(false) }
+    var managerPinInput by remember { mutableStateOf("") }
+    var managerPinError by remember { mutableStateOf<String?>(null) }
+    var pendingSaveAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val scrollState = rememberScrollState()
 
@@ -386,38 +558,94 @@ fun AddEditProductDialog(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // 1. اسم الصنف ورقم الباركود الأساسيان
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("اسم الصنف *") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    singleLine = true
                 )
 
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { code = it },
-                    label = { Text("كود الصنف / SKU *") },
+                BarcodeTextField(
+                    value = barcode,
+                    onValueChange = { barcode = it },
+                    label = "رقم الكود / الباركود الرئيسي",
+                    placeholder = "امسح باركود السلعة بالكاميرا أو اكتبه...",
+                    onBarcodeScanned = { scannedCode ->
+                        barcode = scannedCode
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 )
 
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    label = { Text("القسم / الفئة (مثال: معلبات، ألبان، خضار)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
+                // 2. التصنيف / القسم
+                CategoryDropdownSelector(
+                    selectedCategory = category,
+                    onCategorySelected = { category = it },
+                    label = "القسم / التصنيف *",
+                    availableCategoriesList = availableCategories,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = englishName,
-                    onValueChange = { englishName = it },
-                    label = { Text("الاسم بالإنجليزية (اختياري)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
+                // 3. أسعار الشراء والتكلفة وسعر البيع
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NumericOutlinedTextField(
+                        value = costPrice,
+                        onValueChange = { costPrice = it },
+                        label = { Text("سعر الشراء / التكلفة") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    NumericOutlinedTextField(
+                        value = sellingPrice,
+                        onValueChange = { sellingPrice = it },
+                        label = { Text("سعر البيع المعتمد") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
 
+                // 4. الوحدة وتعيين كـ وحدة أساسية
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    UnitDropdownSelector(
+                        selectedUnit = baseUnitName,
+                        onUnitSelected = { baseUnitName = it },
+                        label = "الوحدة الأساسية *",
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    NumericOutlinedTextField(
+                        value = minStockAlert,
+                        onValueChange = { minStockAlert = it },
+                        label = { Text("حد التنبيه بالنواقص") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                // 5. حقل الـ SKU الاختياري غير الإجباري والاسم الإنجليزي
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it },
+                        label = { Text("كود الصنف / SKU (اختياري)") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = englishName,
+                        onValueChange = { englishName = it },
+                        label = { Text("الاسم بالإنجليزية (اختياري)") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
+                    )
+                }
+
+                // 6. خيار بيع الصنف بالوزن / الميزان
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -427,125 +655,72 @@ fun AddEditProductDialog(
                         onCheckedChange = { isWeighted = it }
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("يباع بالوزن / الميزان (خضار وفواكه)", fontSize = 14.sp)
+                    Text("يباع بالوزن / الميزان (مثل الخضار واللحوم)", fontSize = 13.sp)
                 }
 
-                NumericOutlinedTextField(
-                    value = minStockAlert,
-                    onValueChange = { minStockAlert = it },
-                    label = { Text("حد إعادة الطلب للتنبيه بالنواقص") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
-
-                // قسم صورة المنتج وإدارتها
+                // 7. قسم صورة المنتج الآمنة مع حماية من الانهيار
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 ProductImagePickerSection(
                     imagePath = imagePath.ifBlank { null },
                     onImagePathChanged = { imagePath = it ?: "" },
                     productName = name.ifBlank { "صورة المنتج" }
                 )
-
-                if (initialProduct == null) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    Text(
-                        text = "الوحدة الخاصة للصنف:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    UnitDropdownSelector(
-                        selectedUnit = baseUnitName,
-                        onUnitSelected = { baseUnitName = it },
-                        label = "اسم الوحدة للصنف *",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // خيار تعيين كـ وحدة أساسية للصنف
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp)
-                    ) {
-                        Checkbox(
-                            checked = isBaseUnit,
-                            onCheckedChange = { isBaseUnit = it }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "تعيين كـ وحدة أساسية للصنف",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericOutlinedTextField(
-                            value = costPrice,
-                            onValueChange = { costPrice = it },
-                            label = { Text("سعر الشراء (ر.ي)") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        NumericOutlinedTextField(
-                            value = sellingPrice,
-                            onValueChange = { sellingPrice = it },
-                            label = { Text("سعر البيع (ر.ي)") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-
-                    BarcodeTextField(
-                        value = barcode,
-                        onValueChange = { barcode = it },
-                        label = "الباركود الخاص بالوحدة",
-                        placeholder = "امسح باركود السلعة بالكاميرا أو اكتبه...",
-                        onBarcodeScanned = { scannedCode ->
-                            barcode = scannedCode
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    if (name.isNotBlank() && code.isNotBlank()) {
+                    val trimmedName = name.trim()
+                    if (trimmedName.isNotBlank()) {
+                        val finalCode = code.trim().ifBlank {
+                            barcode.trim().ifBlank { "PRD-${System.currentTimeMillis() % 1000000}" }
+                        }
+
+                        val costVal = costPrice.safeToDouble()
+                        val sellVal = sellingPrice.safeToDouble()
+
                         val prod = (initialProduct ?: ProductEntity(
-                            name = name.trim(),
-                            code = code.trim(),
+                            name = trimmedName,
+                            code = finalCode,
                             category = category.ifBlank { "عام" }.trim(),
                             englishName = englishName.trim(),
                             isWeighted = isWeighted,
                             minStockAlert = minStockAlert.safeToDouble(5.0),
                             imagePath = imagePath.ifBlank { null }
                         )).copy(
-                            name = name.trim(),
-                            code = code.trim(),
+                            name = trimmedName,
+                            code = finalCode,
                             category = category.ifBlank { "عام" }.trim(),
                             englishName = englishName.trim(),
                             isWeighted = isWeighted,
                             minStockAlert = minStockAlert.safeToDouble(5.0),
                             imagePath = imagePath.ifBlank { null }
                         )
-                        onSaveProduct(
-                            prod,
-                            baseUnitName.ifBlank { "حبة" }.trim(),
-                            costPrice.safeToDouble(),
-                            sellingPrice.safeToDouble(),
-                            barcode.trim(),
-                            isBaseUnit
-                        )
+
+                        val saveBlock = {
+                            onSaveProduct(
+                                prod,
+                                baseUnitName.ifBlank { "حبة" }.trim(),
+                                costVal,
+                                sellVal,
+                                barcode.trim(),
+                                isBaseUnit
+                            )
+                        }
+
+                        // فحص شرط تسعير الصنف ومنع البيع بخسارة (سعر الشراء أعلى من أو يساوي سعر البيع)
+                        if (costVal >= sellVal && (costVal > 0.0 || sellVal > 0.0)) {
+                            pendingSaveAction = saveBlock
+                            showPriceWarningDialog = true
+                            managerPinInput = ""
+                            managerPinError = null
+                        } else {
+                            saveBlock()
+                        }
                     }
                 }
             ) {
-                Text("حفظ")
+                Text("حفظ التعديلات")
             }
         },
         dismissButton = {
@@ -555,6 +730,93 @@ fun AddEditProductDialog(
         },
         shape = RoundedCornerShape(16.dp)
     )
+
+    // نافذة تنبيه تحذيري عند إدخال سعر الشراء أعلى من سعر البيع واشتراط رمز مدير النظام
+    if (showPriceWarningDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPriceWarningDialog = false
+                pendingSaveAction = null
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "سعر الشراء أعلى من سعر البيع",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "سعر الشراء (%.2f) أعلى من سعر البيع المعتمد (%.2f). قد يؤدي ذلك للبيع بخسارة تجارية.".format(
+                            costPrice.safeToDouble(),
+                            sellingPrice.safeToDouble()
+                        ),
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "لتجاوز هذا التحذير واعتماد التسعير، يلزم إدخال رمز صلاحية مدير النظام:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = managerPinInput,
+                        onValueChange = {
+                            managerPinInput = it
+                            managerPinError = null
+                        },
+                        label = { Text("رمز صلاحية مدير النظام *") },
+                        placeholder = { Text("أدخل رمز المدير (1234)...") },
+                        isError = managerPinError != null,
+                        supportingText = managerPinError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val pin = managerPinInput.trim()
+                        if (pin == "1234" || pin == "0000") {
+                            showPriceWarningDialog = false
+                            pendingSaveAction?.invoke()
+                            pendingSaveAction = null
+                        } else {
+                            managerPinError = "رمز مدير النظام غير صحيح، يرجى إدخال 1234"
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("تأكيد اعتماد البيع بخسارة", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showPriceWarningDialog = false
+                        pendingSaveAction = null
+                    }
+                ) {
+                    Text("إلغاء وتعديل الأسعار")
+                }
+            }
+        )
+    }
 }
 
 /**

@@ -35,6 +35,7 @@ data class PaymentVoucherEntity(
     val amount: Double,                                   // مبلغ السند
     val voucherType: VoucherType,                          // نوع السند (سند قبض RECEIPT أو سند صرف PAYMENT)
     val paymentMethod: PaymentMethod = PaymentMethod.CASH,// طريقة السداد (كاش، شبكة، محفظة...)
+    val paymentAccountId: Long? = null,                   // معرف الحساب المالي المختار (بنك/محفظة/شبكة)
     val transactionRef: String = "",                       // رقم المرجع / رقم الحوالة / رقم الإشعار
     val receiptImagePath: String? = null,                 // صورة الإشعار
     val date: Long = System.currentTimeMillis(),         // تاريخ وساعة السند

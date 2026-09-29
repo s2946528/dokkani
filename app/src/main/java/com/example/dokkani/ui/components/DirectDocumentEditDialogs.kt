@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.dokkani.data.local.entities.FinancialAccountEntity
 import com.example.dokkani.data.local.entities.InvoiceEntity
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.PaymentVoucherEntity
@@ -30,6 +31,7 @@ import java.util.Locale
 @Composable
 fun DirectEditInvoiceDialog(
     invoice: InvoiceEntity,
+    financialAccounts: List<FinancialAccountEntity> = emptyList(),
     currencySymbol: String = "ر.ي",
     isAdmin: Boolean = true,
     onDismiss: () -> Unit,
@@ -40,13 +42,15 @@ fun DirectEditInvoiceDialog(
         newPaymentMethod: PaymentMethod,
         newRef: String,
         newNotes: String,
-        newReceiptImagePath: String?
+        newReceiptImagePath: String?,
+        newAccountId: Long?
     ) -> Unit
 ) {
     var totalInput by remember { mutableStateOf(invoice.total.toString()) }
     var paidInput by remember { mutableStateOf(invoice.paidAmount.toString()) }
     var discountInput by remember { mutableStateOf(invoice.discount.toString()) }
     var selectedMethod by remember { mutableStateOf(invoice.paymentMethod) }
+    var selectedAccountId by remember { mutableStateOf(invoice.paymentAccountId) }
     var refInput by remember { mutableStateOf(invoice.transactionRef) }
     var notesInput by remember { mutableStateOf(invoice.notes) }
     var receiptImagePath by remember { mutableStateOf(invoice.receiptImagePath) }
@@ -139,19 +143,18 @@ fun DirectEditInvoiceDialog(
                     )
                 )
 
-                // اختيار طريقة الدفع
+                // اختيار طريقة الدفع والتحصيل الديناميكية
                 PaymentMethodSelector(
                     selectedMethod = selectedMethod,
                     onMethodSelected = { if (isAdmin) selectedMethod = it },
+                    financialAccounts = financialAccounts,
+                    selectedAccountId = selectedAccountId,
+                    onAccountSelected = { if (isAdmin) selectedAccountId = it },
                     transactionRef = refInput,
-                    onTransactionRefChange = { if (isAdmin) refInput = it }
-                )
-
-                // مرفق صورة إشعار السداد
-                ReceiptAttachmentComponent(
+                    onTransactionRefChange = { if (isAdmin) refInput = it },
                     receiptImagePath = receiptImagePath,
-                    onReceiptImageChanged = { receiptImagePath = it },
-                    label = "صورة إشعار السداد / الحوالة"
+                    onReceiptImageChange = { if (isAdmin) receiptImagePath = it },
+                    currencySymbol = currencySymbol
                 )
 
                 Row(
@@ -214,7 +217,8 @@ fun DirectEditInvoiceDialog(
                             selectedMethod,
                             refInput,
                             notesInput,
-                            receiptImagePath
+                            receiptImagePath,
+                            selectedAccountId
                         )
                     }
                 ) {
@@ -240,6 +244,7 @@ fun DirectEditInvoiceDialog(
 @Composable
 fun DirectEditVoucherDialog(
     voucher: PaymentVoucherEntity,
+    financialAccounts: List<FinancialAccountEntity> = emptyList(),
     currencySymbol: String = "ر.ي",
     isAdmin: Boolean = true,
     onDismiss: () -> Unit,
@@ -248,11 +253,13 @@ fun DirectEditVoucherDialog(
         newPaymentMethod: PaymentMethod,
         newRef: String,
         newNotes: String,
-        newReceiptImagePath: String?
+        newReceiptImagePath: String?,
+        newAccountId: Long?
     ) -> Unit
 ) {
     var amountInput by remember { mutableStateOf(voucher.amount.toString()) }
     var selectedMethod by remember { mutableStateOf(voucher.paymentMethod) }
+    var selectedAccountId by remember { mutableStateOf(voucher.paymentAccountId) }
     var refInput by remember { mutableStateOf(voucher.transactionRef) }
     var notesInput by remember { mutableStateOf(voucher.notes) }
     var receiptImagePath by remember { mutableStateOf(voucher.receiptImagePath) }
@@ -352,19 +359,19 @@ fun DirectEditVoucherDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // طريقة السداد
+                // طريقة السداد والتحصيل الديناميكية
                 PaymentMethodSelector(
                     selectedMethod = selectedMethod,
                     onMethodSelected = { if (isAdmin) selectedMethod = it },
+                    financialAccounts = financialAccounts,
+                    selectedAccountId = selectedAccountId,
+                    onAccountSelected = { if (isAdmin) selectedAccountId = it },
                     transactionRef = refInput,
-                    onTransactionRefChange = { if (isAdmin) refInput = it }
-                )
-
-                // مرفق صورة إشعار السداد
-                ReceiptAttachmentComponent(
+                    onTransactionRefChange = { if (isAdmin) refInput = it },
                     receiptImagePath = receiptImagePath,
-                    onReceiptImageChanged = { receiptImagePath = it },
-                    label = "صورة إشعار السداد / الحوالة"
+                    onReceiptImageChange = { if (isAdmin) receiptImagePath = it },
+                    allowCredit = false,
+                    currencySymbol = currencySymbol
                 )
 
                 // البيان / الملاحظات
@@ -388,7 +395,8 @@ fun DirectEditVoucherDialog(
                             selectedMethod,
                             refInput,
                             notesInput,
-                            receiptImagePath
+                            receiptImagePath,
+                            selectedAccountId
                         )
                     }
                 ) {

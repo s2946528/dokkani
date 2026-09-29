@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Inventory
@@ -89,6 +90,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.Business
 import com.example.dokkani.ui.screens.costcenters.CostCentersManagementScreen
 import com.example.dokkani.ui.screens.ValueSellingManagementScreen
+import com.example.dokkani.ui.components.ZoomableBox
 
 data class NavTabItem(
     val title: String,
@@ -126,6 +128,7 @@ fun DokkaniApp(
         NavTabItem("الترخيص والحماية", Icons.Default.Security, setOf(UserRole.ADMIN)),
         NavTabItem("إدارة العملات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("إدارة مراكز التكلفة", Icons.Default.Business, setOf(UserRole.ADMIN)),
+        NavTabItem("إدارة المجموعات والتصنيفات", Icons.Default.Category, setOf(UserRole.ADMIN, UserRole.INVENTORY, UserRole.CASHIER)),
         NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
         NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN))
     )
@@ -185,6 +188,7 @@ fun DokkaniApp(
                 icon = Icons.Default.Settings,
                 headerColor = Color(0xFF37474F),
                 items = listOf(
+                    com.example.dokkani.ui.components.NavTabItem("إدارة المجموعات والتصنيفات", Icons.Default.Category, setOf(UserRole.ADMIN, UserRole.INVENTORY, UserRole.CASHIER)),
                     com.example.dokkani.ui.components.NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
                     com.example.dokkani.ui.components.NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN)),
                     com.example.dokkani.ui.components.NavTabItem("شؤون العمال والرواتب", Icons.Default.Badge, setOf(UserRole.ADMIN)),
@@ -279,12 +283,15 @@ fun DokkaniApp(
                 )
             }
         ) { paddingValues ->
-            Column(
+            ZoomableBox(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                if (showValueSellingManagementScreen) {
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (showValueSellingManagementScreen) {
                     ValueSellingManagementScreen(
                         currentUserRole = currentUserRole,
                         onNavigateBack = { showValueSellingManagementScreen = false }
@@ -313,6 +320,7 @@ fun DokkaniApp(
                                     productsWithUnits = uiState.products,
                                     wasteRecords = uiState.wasteRecords,
                                     currencies = uiState.currencies,
+                                    costCenters = uiState.costCenters,
                                     currentUserRole = currentUserRole,
                                     currencySymbol = uiState.currencySymbol,
                                     onSaveProduct = viewModel::saveProduct,
@@ -431,6 +439,7 @@ fun DokkaniApp(
                                     onVoucherInputsChanged = viewModel::updateVoucherInputs,
                                     onVoucherReceiptImagePathChanged = viewModel::updateVoucherReceiptImagePath,
                                     onVoucherCostCenterSelected = viewModel::setVoucherCostCenterId,
+                                    onVoucherAccountSelected = viewModel::setVoucherAccountId,
                                     onSubmitPaymentVoucher = viewModel::submitPaymentVoucher,
                                     onSaveParty = viewModel::saveParty,
                                     onDeleteParty = viewModel::requestDeletePartyWithProtection,
@@ -532,7 +541,10 @@ fun DokkaniApp(
                                     onSelectValuationMethod = viewModel::selectValuationMethod,
                                     onSelectCostCenter = viewModel::selectReportCostCenterId,
                                     onSelectStatementMode = viewModel::selectReportStatementMode,
-                                    onRefreshReports = viewModel::refreshReports
+                                    onToggleHideZeroBalances = viewModel::toggleHideZeroBalances,
+                                    onRefreshReports = viewModel::refreshReports,
+                                    onOpenItemLedger = viewModel::openProductItemLedger,
+                                    onCloseItemLedger = viewModel::closeProductItemLedger
                                 )
                             }
                             "طباعة الباركود" -> {
@@ -605,12 +617,19 @@ fun DokkaniApp(
                                     onNavigateBack = { viewModel.selectTab(0) }
                                 )
                             }
+                            "إدارة المجموعات والتصنيفات" -> {
+                                com.example.dokkani.ui.screens.groups.GlobalGroupsManagementScreen(
+                                    currentUserRole = currentUserRole,
+                                    onNavigateBack = { viewModel.selectTab(0) }
+                                )
+                            }
                             "إعدادات النظام" -> {
                                 SystemSettingsScreen(
                                     settings = uiState.settings,
                                     currencies = uiState.currencies,
                                     parties = uiState.parties,
                                     invoices = uiState.invoices,
+                                    financialAccounts = uiState.financialAccounts,
                                     currentUserRole = currentUserRole,
                                     onUpdateValuationMethod = viewModel::selectValuationMethod,
                                     onUpdateEnableNegativeStock = viewModel::updateEnableNegativeStock,
@@ -637,6 +656,7 @@ fun DokkaniApp(
                     }
                 }
             }
+        }
         }
     }
 

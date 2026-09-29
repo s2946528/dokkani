@@ -185,4 +185,43 @@ data class StockMovementReport(
     val selectedCostCenterName: String = "جميع مراكز التكلفة"
 )
 
+/**
+ * حركة تفصيلية واحدة لصنف معين (Detailed Item Ledger Entry)
+ */
+data class ItemLedgerEntry(
+    val id: Long,
+    val timestamp: Long,
+    val dateFormatted: String,
+    val movementType: com.example.dokkani.data.local.entities.MovementType,
+    val movementTypeLabel: String,
+    val referenceNumber: String,
+    val notes: String,
+    val quantityIn: Double,        // الكمية الواردة (+)
+    val quantityOut: Double,       // الكمية الصادرة (-)
+    val runningBalance: Double,    // الرصيد المتراكم
+    val unitCost: Double,          // سعر تكلفة الوحدة
+    val totalValue: Double,        // إجمالي القيمة (الكمية * التكلفة)
+    val currencySymbol: String     // عملة الصنف / الحركة
+)
+
+/**
+ * كشف الحركة التفصيلية للصنف مع العملة (Product Item Ledger Report)
+ */
+data class ProductItemLedgerReport(
+    val productId: Long,
+    val productCode: String,
+    val productName: String,
+    val category: String,
+    val unitName: String,
+    val currencySymbol: String,      // عملة الصنف (ر.ي / ر.س / USD / إلخ)
+    val currentUnitCost: Double,     // تكلفة الوحدة الحالية
+    val costCenterName: String,      // اسم مركز التكلفة
+    val issueDateFormatted: String,  // تاريخ وقت إصدار التقرير
+    val totalQtyIn: Double,          // إجمالي الكميات الواردة
+    val totalQtyOut: Double,         // إجمالي الكميات الصادرة
+    val closingBalance: Double,      // الرصيد النهائي المتراكم
+    val totalValue: Double,          // إجمالي القيمة الإجمالية للرصيد الختامي
+    val entries: List<ItemLedgerEntry> // الحركات التفصيلية
+)
+
 

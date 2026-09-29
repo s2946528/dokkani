@@ -474,6 +474,7 @@ fun ProductImagePickerSection(
 
 /**
  * حفظ ملف الصورة القادم من URI إلى مجلد التطبيق الداخلي الخاص بـ الأصناف
+ * مع معالجة حماية شاملة ضد انهيار التطبيق (Out Of Memory & Invalid URI Crash Protection)
  */
 private fun saveProductUriToAppStorage(context: Context, uri: Uri): String? {
     return try {
@@ -481,20 +482,64 @@ private fun saveProductUriToAppStorage(context: Context, uri: Uri): String? {
         if (!productsDir.exists()) productsDir.mkdirs()
 
         val destFile = File(productsDir, "prod_${System.currentTimeMillis()}.jpg")
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            FileOutputStream(destFile).use { output ->
-                input.copyTo(output)
+
+        // 1. محاولة ضغط وتقليل حجم الصورة بأمان لمنع الـ OutOfMemoryError
+        val compressedSuccess = try {
+            val options = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, options)
+            }
+
+            var sampleSize = 1
+            while (options.outWidth / sampleSize > 1200 || options.outHeight / sampleSize > 1200) {
+                sampleSize *= 2
+            }
+
+            val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+            }
+
+            val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, decodeOptions)
+            }
+
+            if (bitmap != null) {
+                FileOutputStream(destFile).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                }
+                bitmap.recycle()
+                destFile.exists() && destFile.length() > 0
+            } else {
+                false
+            }
+        } catch (_: Throwable) {
+            false
+        }
+
+        // 2. إذا فشل فك الضغط المباشر، يتم النسخ الآمن
+        if (!compressedSuccess) {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
             }
         }
-        destFile.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
+
+        if (destFile.exists() && destFile.length() > 0) {
+            destFile.absolutePath
+        } else {
+            null
+        }
+    } catch (t: Throwable) {
+        t.printStackTrace()
         null
     }
 }
 
 /**
- * حفظ صورة الكاميرا Bitmap إلى مجلد التطبيق الداخلي الخاص بـ الأصناف
+ * حفظ صورة الكاميرا Bitmap إلى مجلد التطبيق الداخلي الخاص بـ الأصناف باحترافية وأمان
  */
 private fun saveProductBitmapToAppStorage(context: Context, bitmap: Bitmap): String? {
     return try {
@@ -503,11 +548,11 @@ private fun saveProductBitmapToAppStorage(context: Context, bitmap: Bitmap): Str
 
         val destFile = File(productsDir, "prod_${System.currentTimeMillis()}.jpg")
         FileOutputStream(destFile).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
         }
-        destFile.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
+        if (destFile.exists() && destFile.length() > 0) destFile.absolutePath else null
+    } catch (t: Throwable) {
+        t.printStackTrace()
         null
     }
 }

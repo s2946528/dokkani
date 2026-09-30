@@ -17,33 +17,33 @@ interface CashShiftDao {
     @Query("SELECT * FROM cash_shifts ORDER BY startTime DESC")
     suspend fun getAllShiftsSync(): List<CashShiftEntity>
 
-    // التحديث التراكمي المباشر للمبيعات النقدية
-    @Query("UPDATE cash_shifts SET totalCashSales = totalCashSales + :amount, expectedCashInDrawer = expectedCashInDrawer + :amount WHERE id = :id")
-    suspend fun addCashSales(id: Long, amount: Double)
+    // المبيعات النقدية (تضيف للدرج)
+    @Query("UPDATE cash_shifts SET totalCashSales = :newSales, expectedCashInDrawer = openingCash + :newSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateSales(id: Long, newSales: Double)
 
-    // التحديث التراكمي المباشر للمشتريات النقدية (تخصم من الدرج)
-    @Query("UPDATE cash_shifts SET totalCashPurchases = totalCashPurchases + :amount, expectedCashInDrawer = expectedCashInDrawer - :amount WHERE id = :id")
-    suspend fun addCashPurchase(id: Long, amount: Double)
+    // المصروفات (تخصم من الدرج)
+    @Query("UPDATE cash_shifts SET totalCashExpenses = :newExpenses, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - :newExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateExpenses(id: Long, newExpenses: Double)
 
-    // التحديث التراكمي المباشر للمصروفات (تخصم من الدرج)
-    @Query("UPDATE cash_shifts SET totalCashExpenses = totalCashExpenses + :amount, expectedCashInDrawer = expectedCashInDrawer - :amount WHERE id = :id")
-    suspend fun addCashExpense(id: Long, amount: Double)
+    // سندات القبض / التحصيل (تضيف للدرج)
+    @Query("UPDATE cash_shifts SET totalCashCollections = :newCollections, expectedCashInDrawer = openingCash + totalCashSales + :newCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateCollections(id: Long, newCollections: Double)
 
-    // التحديث التراكمي المباشر لسندات القبض وتحصيل الديون (تضيف للدرج)
-    @Query("UPDATE cash_shifts SET totalCashCollections = totalCashCollections + :amount, expectedCashInDrawer = expectedCashInDrawer + :amount WHERE id = :id")
-    suspend fun addCashCollection(id: Long, amount: Double)
+    // دفعة لمورد (تخصم من الدرج)
+    @Query("UPDATE cash_shifts SET totalSupplierPayments = :newPayments, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - :newPayments - totalCashPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateSupplierPayments(id: Long, newPayments: Double)
 
-    // التحديث التراكمي المباشر لسندات الصرف للموردين (تخصم من الدرج)
-    @Query("UPDATE cash_shifts SET totalSupplierPayments = totalSupplierPayments + :amount, expectedCashInDrawer = expectedCashInDrawer - :amount WHERE id = :id")
-    suspend fun addSupplierPayment(id: Long, amount: Double)
+    // المشتريات النقدية (تخصم من الدرج)
+    @Query("UPDATE cash_shifts SET totalCashPurchases = :newPurchases, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - :newPurchases - totalOwnerDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateCashPurchases(id: Long, newPurchases: Double)
 
     // مسحوبات المالك (تخصم من الدرج)
-    @Query("UPDATE cash_shifts SET totalOwnerDrawings = totalOwnerDrawings + :amount, expectedCashInDrawer = expectedCashInDrawer - :amount WHERE id = :id")
-    suspend fun addOwnerDrawing(id: Long, amount: Double)
+    @Query("UPDATE cash_shifts SET totalOwnerDrawings = :newDrawings, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - :newDrawings - totalStaffAdvances WHERE id = :id")
+    suspend fun updateOwnerDrawings(id: Long, newDrawings: Double)
 
     // سلف الموظفين (تخصم من الدرج)
-    @Query("UPDATE cash_shifts SET totalStaffAdvances = totalStaffAdvances + :amount, expectedCashInDrawer = expectedCashInDrawer - :amount WHERE id = :id")
-    suspend fun addStaffAdvance(id: Long, amount: Double)
+    @Query("UPDATE cash_shifts SET totalStaffAdvances = :newAdvances, expectedCashInDrawer = openingCash + totalCashSales + totalCashCollections - totalCashExpenses - totalSupplierPayments - totalCashPurchases - totalOwnerDrawings - :newAdvances WHERE id = :id")
+    suspend fun updateStaffAdvances(id: Long, newAdvances: Double)
 
     @Query("UPDATE cash_shifts SET totalMadaSales = totalMadaSales + :amount WHERE id = :id")
     suspend fun addMadaSales(id: Long, amount: Double)
@@ -54,13 +54,12 @@ interface CashShiftDao {
     @Query("UPDATE cash_shifts SET totalTransferSales = totalTransferSales + :amount WHERE id = :id")
     suspend fun addTransferSales(id: Long, amount: Double)
 
-    @Query("UPDATE cash_shifts SET totalCreditSales = totalCreditSales + :amount WHERE id, :amount WHERE id = :id")
+    @Query("UPDATE cash_shifts SET totalCreditSales = totalCreditSales + :amount WHERE id = :id")
     suspend fun addCreditSales(id: Long, amount: Double)
 
     @Query("UPDATE cash_shifts SET settlementStatus = :status, settlementNotes = :notes, status = 'SETTLED' WHERE id = :id")
     suspend fun updateSettlement(id: Long, status: String, notes: String)
 
-    @Query("SELECT * FROM cash_shifts WHERE status = 'OPEN' ORDER BY startTime DESC LIMIT */
     @Query("SELECT * FROM cash_shifts WHERE status = 'OPEN' ORDER BY startTime DESC LIMIT 1")
     suspend fun getOpenShift(): CashShiftEntity?
 

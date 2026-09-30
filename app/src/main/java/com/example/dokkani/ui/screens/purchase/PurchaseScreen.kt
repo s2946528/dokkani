@@ -341,8 +341,8 @@ fun PurchaseScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "الرصيد في الصندوق لا يسمح بإتمام العملية",
-                            fontSize = 14.sp,
+                            text = "رصيد الصندوق غير كافٍ لإتمام عملية الشراء النقدي. يرجى التوجه لاختيار طريقة دفع أخرى (مثل التحويل للشراء الآجل) أو اختيار حساب مالي بديل يحتوي على سيولة كافية.",
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )

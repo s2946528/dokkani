@@ -501,22 +501,13 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
                 // 1. التحقق من كفاية رصيد الصندوق عند الشراء النقدي قبل البدء بحفظ الفاتورة
                 // المعيار المحاسبي: يمنع الشراء النقدي إذا كان المبلغ المطلوبة أكبر من النقدية المتاحة في الصندوق (expectedCashInDrawer)
+                // 1. التحقق الحارم من كفاية رصيد الصندوق عند الشراء النقدي
                 if (state.paymentMethod == PaymentMethod.CASH) {
                     val openShift = shiftDao.getOpenShift()
-                    val cashAccount = if (state.selectedPaymentAccountId != null && state.selectedPaymentAccountId != 0L) {
-                        db.financialAccountDao().getAccountById(state.selectedPaymentAccountId)
-                    } else {
-                        db.financialAccountDao().getAllAccountsSync()
-                            .firstOrNull { it.accountType == FinancialAccountType.CASH_DRAWER && it.isActive }
-                    }
+                    val availableCash = openShift?.expectedCashInDrawer ?: 0.0
 
-                    val availableCash = if (state.selectedPaymentAccountId != null && state.selectedPaymentAccountId != 0L) {
-                        cashAccount?.currentBalance ?: openShift?.expectedCashInDrawer ?: 0.0
-                    } else {
-                        openShift?.expectedCashInDrawer ?: cashAccount?.currentBalance ?: 0.0
-                    }
-
-                    if (availableCash < finalTotalLocal - 0.0001) {
+                    // إذا كان إجمالي الفاتورة أكبر من النقدية المتاحة في الدرج، نمنع العملية فوراً
+                    if (finalTotalLocal > availableCash) {
                         _uiState.update {
                             it.copy(
                                 isProcessing = false,

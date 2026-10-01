@@ -413,310 +413,318 @@ private fun ActiveAuditTabContent(
         modifier = Modifier.fillMaxSize()
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
-            // ترويسة سند الجرد والتحكم بحالة المسودة أو الاعتماد
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (uiState.isCurrentSheetPosted) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
-            ),
-            border = BorderStroke(
-                1.dp,
-                if (uiState.isCurrentSheetPosted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outlineVariant
-            )
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (uiState.isCurrentSheetPosted) Icons.Default.Lock else Icons.Default.Receipt,
-                            contentDescription = null,
-                            tint = if (uiState.isCurrentSheetPosted) Color(0xFF1B5E20) else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "سند الجرد: ${uiState.voucherNumber}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = if (uiState.isCurrentSheetPosted) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    // شارة شريط الحالة والضوابط
-                    Surface(
-                        color = if (uiState.isCurrentSheetPosted) Color(0xFF2E7D32) else Color(0xFFFFF3E0),
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, if (uiState.isCurrentSheetPosted) Color(0xFF1B5E20) else Color(0xFFFFB74D))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (uiState.isCurrentSheetPosted) Icons.Default.Verified else Icons.Default.Edit,
-                                contentDescription = null,
-                                tint = if (uiState.isCurrentSheetPosted) Color.White else Color(0xFFE65100),
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = if (uiState.isCurrentSheetPosted) "🔒 معتمد ومقفل محاسبياً" else "📝 مسودة (قابلة للتعديل)",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (uiState.isCurrentSheetPosted) Color.White else Color(0xFFE65100)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "التاريخ: ${dateFormat.format(Date(uiState.voucherDate))}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    var costCenterExpanded by remember { mutableStateOf(false) }
-                    val activeCc = uiState.costCenters.firstOrNull { it.centerId == uiState.selectedCostCenterId }
-
-                    ExposedDropdownMenuBox(
-                        expanded = costCenterExpanded && !uiState.isCurrentSheetPosted,
-                        onExpandedChange = { if (!uiState.isCurrentSheetPosted) costCenterExpanded = !costCenterExpanded },
-                        modifier = Modifier.widthIn(max = 200.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = activeCc?.centerName ?: "مركز التكلفة العام",
-                            onValueChange = {},
-                            readOnly = true,
-                            enabled = !uiState.isCurrentSheetPosted,
-                            label = { Text("مركز التكلفة", fontSize = 9.sp) },
-                            trailingIcon = { if (!uiState.isCurrentSheetPosted) ExposedDropdownMenuDefaults.TrailingIcon(expanded = costCenterExpanded) },
-                            modifier = Modifier.menuAnchor(),
-                            singleLine = true,
-                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        )
-
-                        ExposedDropdownMenu(
-                            expanded = costCenterExpanded && !uiState.isCurrentSheetPosted,
-                            onDismissRequest = { costCenterExpanded = false }
-                        ) {
-                            uiState.costCenters.forEach { cc ->
-                                DropdownMenuItem(
-                                    text = { Text(cc.centerName, fontSize = 11.sp) },
-                                    onClick = {
-                                        viewModel.setSelectedCostCenter(cc.centerId)
-                                        costCenterExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // إذا كان السند معتمداً، يظهر تنبيه القفل وضوابط النزاهة المحاسبية
-                if (uiState.isCurrentSheetPosted) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
-                        color = Color(0xFF1B5E20).copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = Color(0xFF1B5E20),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "ملاحظة: تم اعتماد هذا الجرد نهائياً وتم تحديث قيود المخزون. يمنع التعديل أو الحذف المباشر لضمان النزاهة المحاسبية.",
-                                fontSize = 10.sp,
-                                color = Color(0xFF1B5E20),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // كروت المؤشرات والإحصائيات الأفقية
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                MetricCard(
-                    title = "إجمالي الأصناف",
-                    value = "$totalItemsCount صنف",
-                    subtitle = "نطاق الجرد الحالي",
-                    containerColor = Color(0xFFE3F2FD),
-                    contentColor = Color(0xFF1565C0),
-                    icon = Icons.Default.List
-                )
-            }
-            item {
-                MetricCard(
-                    title = "الأصناف المطابقة",
-                    value = "$matchingItemsCount صنف",
-                    subtitle = "مطابقة بدون فروقات",
-                    containerColor = Color(0xFFE8F5E9),
-                    contentColor = Color(0xFF2E7D32),
-                    icon = Icons.Default.CheckCircle
-                )
-            }
-            item {
-                MetricCard(
-                    title = "عجز مخزني ⚠",
-                    value = "%.1f قطعة".format(totalShortageQty),
-                    subtitle = "قيمة بيع: %.2f %s".format(totalShortageSellingValue, uiState.currencySymbol),
-                    containerColor = Color(0xFFFFEBEE),
-                    contentColor = Color(0xFFC62828),
-                    icon = Icons.Default.Warning
-                )
-            }
-            item {
-                MetricCard(
-                    title = "زيادة مخزنية ▲",
-                    value = "%.1f قطعة".format(totalSurplusQty),
-                    subtitle = "قيمة بيع: %.2f %s".format(totalSurplusSellingValue, uiState.currencySymbol),
-                    containerColor = Color(0xFFE0F7FA),
-                    contentColor = Color(0xFF00838F),
-                    icon = Icons.Default.TrendingUp
-                )
-            }
-        }
-
-        // شريط البحث الذكي الموحد والمتعدد (نصي / صوتي / باركود عبر الكاميرا)
-        AppSearchBar(
-            value = uiState.searchQuery,
-            onValueChange = { viewModel.setSearchQuery(it) },
-            placeholder = "ابحث عن صنف بالاسم، سجارة شملان، كوسة، بطاطس، طماطم...",
-            label = "بحث أصناف الجرد والمطابقة",
-            enableVoiceSearch = true,
-            enableBarcodeScanner = true,
-            onBarcodeScanned = { barcode ->
-                viewModel.setSearchQuery(barcode)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("inventory_search_input")
-        )
-
-        // شريط تصفية المجموعات والتصنيفات
-        if (uiState.categories.isNotEmpty()) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()
+            // قائمة التمرير الرئيسية وتشمل الترويسة والمؤشرات والبحث وأصناف الجرد
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
-                    FilterChip(
-                        selected = uiState.selectedCategoryFilter == null,
-                        onClick = { viewModel.setCategoryFilter(null) },
-                        label = { Text("الكل (${uiState.auditItems.size})", fontSize = 11.sp) },
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                items(uiState.categories) { cat ->
-                    val count = uiState.auditItems.count { it.categoryName == cat }
-                    FilterChip(
-                        selected = uiState.selectedCategoryFilter == cat,
-                        onClick = { viewModel.setCategoryFilter(cat) },
-                        label = { Text("$cat ($count)", fontSize = 11.sp) },
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-            }
-        }
-
-        // قائمة الأصناف والعد الفعلي للمطابقة
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (uiState.filteredAuditItems.isEmpty()) {
+                // 1. ترويسة سند الجرد والتحكم بحالة المسودة أو الاعتماد
                 item {
                     Card(
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (uiState.isCurrentSheetPosted) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (uiState.isCurrentSheetPosted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outlineVariant
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (uiState.isCurrentSheetPosted) Icons.Default.Lock else Icons.Default.Receipt,
+                                        contentDescription = null,
+                                        tint = if (uiState.isCurrentSheetPosted) Color(0xFF1B5E20) else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "سند الجرد: ${uiState.voucherNumber}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = if (uiState.isCurrentSheetPosted) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                // شارة شريط الحالة والضوابط
+                                Surface(
+                                    color = if (uiState.isCurrentSheetPosted) Color(0xFF2E7D32) else Color(0xFFFFF3E0),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, if (uiState.isCurrentSheetPosted) Color(0xFF1B5E20) else Color(0xFFFFB74D))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (uiState.isCurrentSheetPosted) Icons.Default.Verified else Icons.Default.Edit,
+                                            contentDescription = null,
+                                            tint = if (uiState.isCurrentSheetPosted) Color.White else Color(0xFFE65100),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = if (uiState.isCurrentSheetPosted) "🔒 معتمد ومقفل محاسبياً" else "📝 مسودة (قابلة للتعديل)",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (uiState.isCurrentSheetPosted) Color.White else Color(0xFFE65100)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "التاريخ: ${dateFormat.format(Date(uiState.voucherDate))}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                var costCenterExpanded by remember { mutableStateOf(false) }
+                                val activeCc = uiState.costCenters.firstOrNull { it.centerId == uiState.selectedCostCenterId }
+
+                                ExposedDropdownMenuBox(
+                                    expanded = costCenterExpanded && !uiState.isCurrentSheetPosted,
+                                    onExpandedChange = { if (!uiState.isCurrentSheetPosted) costCenterExpanded = !costCenterExpanded },
+                                    modifier = Modifier.widthIn(max = 200.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = activeCc?.centerName ?: "مركز التكلفة العام",
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        enabled = !uiState.isCurrentSheetPosted,
+                                        label = { Text("مركز التكلفة", fontSize = 9.sp) },
+                                        trailingIcon = { if (!uiState.isCurrentSheetPosted) ExposedDropdownMenuDefaults.TrailingIcon(expanded = costCenterExpanded) },
+                                        modifier = Modifier.menuAnchor(),
+                                        singleLine = true,
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    )
+
+                                    ExposedDropdownMenu(
+                                        expanded = costCenterExpanded && !uiState.isCurrentSheetPosted,
+                                        onDismissRequest = { costCenterExpanded = false }
+                                    ) {
+                                        uiState.costCenters.forEach { cc ->
+                                            DropdownMenuItem(
+                                                text = { Text(cc.centerName, fontSize = 11.sp) },
+                                                onClick = {
+                                                    viewModel.setSelectedCostCenter(cc.centerId)
+                                                    costCenterExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // إذا كان السند معتمداً، يظهر تنبيه القفل وضوابط النزاهة المحاسبية
+                            if (uiState.isCurrentSheetPosted) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Surface(
+                                    color = Color(0xFF1B5E20).copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1B5E20),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "ملاحظة: تم اعتماد هذا الجرد نهائياً وتم تحديث قيود المخزون. يمنع التعديل أو الحذف المباشر لضمان النزاهة المحاسبية.",
+                                            fontSize = 10.sp,
+                                            color = Color(0xFF1B5E20),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. كروت المؤشرات والإحصائيات الأفقية
+                item {
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
+                            MetricCard(
+                                title = "إجمالي الأصناف",
+                                value = "$totalItemsCount صنف",
+                                subtitle = "نطاق الجرد الحالي",
+                                containerColor = Color(0xFFE3F2FD),
+                                contentColor = Color(0xFF1565C0),
+                                icon = Icons.Default.List
+                            )
+                        }
+                        item {
+                            MetricCard(
+                                title = "الأصناف المطابقة",
+                                value = "$matchingItemsCount صنف",
+                                subtitle = "مطابقة بدون فروقات",
+                                containerColor = Color(0xFFE8F5E9),
+                                contentColor = Color(0xFF2E7D32),
+                                icon = Icons.Default.CheckCircle
+                            )
+                        }
+                        item {
+                            MetricCard(
+                                title = "عجز مخزني ⚠",
+                                value = "%.1f قطعة".format(totalShortageQty),
+                                subtitle = "قيمة بيع: %.2f %s".format(totalShortageSellingValue, uiState.currencySymbol),
+                                containerColor = Color(0xFFFFEBEE),
+                                contentColor = Color(0xFFC62828),
+                                icon = Icons.Default.Warning
+                            )
+                        }
+                        item {
+                            MetricCard(
+                                title = "زيادة مخزنية ▲",
+                                value = "%.1f قطعة".format(totalSurplusQty),
+                                subtitle = "قيمة بيع: %.2f %s".format(totalSurplusSellingValue, uiState.currencySymbol),
+                                containerColor = Color(0xFFE0F7FA),
+                                contentColor = Color(0xFF00838F),
+                                icon = Icons.Default.TrendingUp
+                            )
+                        }
+                    }
+                }
+
+                // 3. شريط البحث الذكي الموحد والمتعدد (نصي / صوتي / باركود عبر الكاميرا)
+                item {
+                    AppSearchBar(
+                        value = uiState.searchQuery,
+                        onValueChange = { viewModel.setSearchQuery(it) },
+                        placeholder = "ابحث عن صنف بالاسم، سجارة شملان، كوسة، بطاطس، طماطم...",
+                        label = "بحث أصناف الجرد والمطابقة",
+                        enableVoiceSearch = true,
+                        enableBarcodeScanner = true,
+                        onBarcodeScanned = { barcode ->
+                            viewModel.setSearchQuery(barcode)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
+                            .testTag("inventory_search_input")
+                    )
+                }
+
+                // 4. شريط تصفية المجموعات والتصنيفات
+                if (uiState.categories.isNotEmpty()) {
+                    item {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.SearchOff,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(48.dp)
+                            item {
+                                FilterChip(
+                                    selected = uiState.selectedCategoryFilter == null,
+                                    onClick = { viewModel.setCategoryFilter(null) },
+                                    label = { Text("الكل (${uiState.auditItems.size})", fontSize = 11.sp) },
+                                    shape = RoundedCornerShape(8.dp)
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "لا توجد أصناف مطابقة للبحث أو الجرد الميداني",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "جرّب تغيير كلمة البحث أو إلغاء تصفية المجموعات لإظهار الأصناف",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            items(uiState.categories) { cat ->
+                                val count = uiState.auditItems.count { it.categoryName == cat }
+                                FilterChip(
+                                    selected = uiState.selectedCategoryFilter == cat,
+                                    onClick = { viewModel.setCategoryFilter(cat) },
+                                    label = { Text("$cat ($count)", fontSize = 11.sp) },
+                                    shape = RoundedCornerShape(8.dp)
                                 )
                             }
                         }
                     }
                 }
-            } else {
-                items(uiState.filteredAuditItems, key = { it.productId }) { item ->
-                    InventoryAuditItemCard(
-                        item = item,
-                        currencySymbol = uiState.currencySymbol,
-                        isReadOnly = uiState.isCurrentSheetPosted,
-                        onActualQtyChange = { newQtyStr ->
-                            viewModel.updateActualEndingQty(item.productId, newQtyStr)
+
+                // 5. قائمة الأصناف والعد الفعلي للمطابقة
+                if (uiState.filteredAuditItems.isEmpty()) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.SearchOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "لا توجد أصناف مطابقة للبحث أو الجرد الميداني",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "جرّب تغيير كلمة البحث أو إلغاء تصفية المجموعات لإظهار الأصناف",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
-                    )
+                    }
+                } else {
+                    items(uiState.filteredAuditItems, key = { it.productId }) { item ->
+                        InventoryAuditItemCard(
+                            item = item,
+                            currencySymbol = uiState.currencySymbol,
+                            isReadOnly = uiState.isCurrentSheetPosted,
+                            onActualQtyChange = { newQtyStr ->
+                                viewModel.updateActualEndingQty(item.productId, newQtyStr)
+                            }
+                        )
+                    }
                 }
             }
-        }
 
-        // الشريط السفلي الثابت للتحكم والاعتماد والطباعة السرية
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
+            // الشريط السفلي الثابت للتحكم والاعتماد والطباعة السرية
+            Card(
+                shape = RoundedCornerShape(0.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            ) {
             Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

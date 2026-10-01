@@ -1377,6 +1377,25 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // التحقق المحاسبي الحارم من كفاية رصيد الصندوق عند الشراء النقدي أو مردود المبيعات النقدي
+                if ((state.activeOperation == PosOperation.PURCHASE || state.activeOperation == PosOperation.SALE_RETURN) && state.paymentMethod == PaymentMethod.CASH) {
+                    val openShift = getOrCreateOpenShift(shiftDao)
+                    val availableCash = openShift.expectedCashInDrawer
+                    val requiredAmount = state.cartSummary.finalTotal
+
+                    if (requiredAmount > availableCash + 0.0001) {
+                        val opName = if (state.activeOperation == PosOperation.PURCHASE) "الشراء النقدي" else "مردود المبيعات النقدي"
+                        _uiState.update {
+                            it.copy(
+                                isProcessingCheckout = false,
+                                userFeedbackMessage = "لا يمكن إتمام عملية $opName: رصيد الصندوق المتاح في الدرج (${String.format(Locale.US, "%.2f", availableCash)} ${state.currencySymbol}) غير كافٍ لتغطية قيمة الفاتورة المطلوبة (${String.format(Locale.US, "%.2f", requiredAmount)} ${state.currencySymbol}). يرجى التحويل للدفع الآجل أو اختيار طريقة دفع أخرى.",
+                                isError = true
+                            )
+                        }
+                        return@launch
+                    }
+                }
+
                 db.withTransaction {
                     val timestamp = System.currentTimeMillis()
                     val totalInvoicesCount = invoiceDao.countInvoices() + 1

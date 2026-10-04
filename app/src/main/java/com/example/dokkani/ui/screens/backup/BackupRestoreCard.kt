@@ -148,8 +148,12 @@ fun BackupRestoreCard(
 
                         Button(
                             onClick = {
-                                val defaultFileName = BackupRestoreHelper.generateBackupFileName()
-                                exportDocumentLauncher.launch(defaultFileName)
+                                try {
+                                    val defaultFileName = BackupRestoreHelper.generateBackupFileName()
+                                    exportDocumentLauncher.launch(defaultFileName)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "تعذر فتح حافظة الملفات: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
                             },
                             enabled = !uiState.isExporting,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -228,7 +232,11 @@ fun BackupRestoreCard(
 
                         OutlinedButton(
                             onClick = {
-                                importDocumentLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+                                try {
+                                    importDocumentLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "تعذر فتح مستعرض الملفات: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
                             },
                             enabled = !uiState.isRestoring,
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),

@@ -500,7 +500,7 @@ fun SystemSettingsScreen(
                         val currentRate = settings?.defaultTaxRate ?: 0.0
                         val pctValue = if (currentRate <= 1.0) currentRate * 100.0 else currentRate
                         var taxRateText by remember(settings?.defaultTaxRate) {
-                            mutableStateOf(if (pctValue % 1.0 == 0.0) pctValue.toInt().toString() else "%.1f".format(pctValue))
+                            mutableStateOf(if (pctValue % 1.0 == 0.0) pctValue.toInt().toString() else String.format(Locale.US, "%.1f", pctValue))
                         }
 
                         Row(
@@ -638,7 +638,7 @@ fun SystemSettingsScreen(
                         val currentPurRate = settings?.purchaseTaxRate ?: 0.0
                         val pctPurValue = if (currentPurRate <= 1.0) currentPurRate * 100.0 else currentPurRate
                         var purTaxRateText by remember(settings?.purchaseTaxRate) {
-                            mutableStateOf(if (pctPurValue % 1.0 == 0.0) pctPurValue.toInt().toString() else "%.1f".format(pctPurValue))
+                            mutableStateOf(if (pctPurValue % 1.0 == 0.0) pctPurValue.toInt().toString() else String.format(Locale.US, "%.1f", pctPurValue))
                         }
 
                         Row(
@@ -1581,14 +1581,17 @@ fun SystemSettingsScreen(
     }
 
     if (deletingCurrency != null) {
-        ConfirmDeleteDialog(
-            message = "هل أنت ألكيد من حذف العملة '${deletingCurrency?.name}'؟",
-            onConfirm = {
-                onDeleteCurrency(deletingCurrency!!)
-                deletingCurrency = null
-            },
-            onDismiss = { deletingCurrency = null }
-        )
+        val currToDelete = deletingCurrency
+        if (currToDelete != null) {
+            ConfirmDeleteDialog(
+                message = "هل أنت ألكيد من حذف العملة '${currToDelete.name}'؟",
+                onConfirm = {
+                    onDeleteCurrency(currToDelete)
+                    deletingCurrency = null
+                },
+                onDismiss = { deletingCurrency = null }
+            )
+        }
     }
 
     if (showAddPartyDialog || editingParty != null) {
@@ -1607,23 +1610,29 @@ fun SystemSettingsScreen(
     }
 
     if (deletingParty != null) {
-        ConfirmDeleteDialog(
-            message = "هل أنت ألكيد من حذف الحساب '${deletingParty?.name}'؟",
-            onConfirm = {
-                onDeleteParty(deletingParty!!)
-                deletingParty = null
-            },
-            onDismiss = { deletingParty = null }
-        )
+        val partyToDelete = deletingParty
+        if (partyToDelete != null) {
+            ConfirmDeleteDialog(
+                message = "هل أنت ألكيد من حذف الحساب '${partyToDelete.name}'؟",
+                onConfirm = {
+                    onDeleteParty(partyToDelete)
+                    deletingParty = null
+                },
+                onDismiss = { deletingParty = null }
+            )
+        }
     }
 
     if (deletingInvoiceId != null) {
-        val inv = invoices.find { it.id == deletingInvoiceId }
+        val targetId = deletingInvoiceId
+        val inv = invoices.find { it.id == targetId }
         ConfirmDeleteTransactionDialog(
             title = "تأكيد حذف الفاتورة",
-            message = "هل أنت متأكد من حذف الفاتورة رقم #${inv?.invoiceNumber ?: deletingInvoiceId} بقيمة ${"%.2f".format(inv?.total ?: 0.0)}؟",
+            message = "هل أنت متأكد من حذف الفاتورة رقم #${inv?.invoiceNumber ?: targetId} بقيمة ${String.format(Locale.US, "%.2f", inv?.total ?: 0.0)}؟",
             onConfirm = {
-                onDeleteInvoice(deletingInvoiceId!!)
+                if (targetId != null) {
+                    onDeleteInvoice(targetId)
+                }
                 deletingInvoiceId = null
             },
             onDismiss = { deletingInvoiceId = null }

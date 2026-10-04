@@ -271,12 +271,13 @@ fun InventoryAuditCountSheetScreen(
                     ArchivedAuditSheetsTabContent(
                         uiState = uiState,
                         viewModel = viewModel,
+                        currentUserRole = currentUserRole,
                         dateFormat = dateFormat,
                         speechRecognizerLauncher = speechRecognizerLauncher
                     )
                 }
 
-                // 2. نافذة تأكيد حذف مسودة الجرد (Delete Confirm Dialog)
+                // 2. نافذة تأكيد حذف سند الجرد والتسوية (Delete Confirm Dialog)
                 if (uiState.showDeleteConfirmDialog && uiState.sheetToDelete != null) {
                     val sheet = uiState.sheetToDelete!!
                     AlertDialog(
@@ -285,17 +286,17 @@ fun InventoryAuditCountSheetScreen(
                             Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp))
                         },
                         title = {
-                            Text("تأكيد حذف مسودة الجرد", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text("تأكيد حذف قيد الجرد والتسوية", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         },
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("هل أنت متأكد من حذف مسودة الجرد رقم #${sheet.voucherNumber}؟", fontSize = 13.sp)
+                                Text("هل أنت متأكد من حذف قيد الجرد والتسوية رقم #${sheet.voucherNumber}؟", fontSize = 13.sp)
                                 Surface(
                                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
                                     Text(
-                                        text = "ملاحظة: تقتصر إمكانية الحذف المباشر على المسودات غير المعتمدة فقط. سيتم حذف البيانات المؤقتة كلياً.",
+                                        text = "ملاحظة هامة: هذه العملية خاصة بمدير النظام (Admin) فقط. سيتم إلغاء وعكس حركات تسوية المخزون وسجلات العجز المرتبطة به لضمان توازن ميزان المراجعة وقاعدة البيانات.",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onErrorContainer,
                                         fontWeight = FontWeight.Bold,
@@ -306,10 +307,10 @@ fun InventoryAuditCountSheetScreen(
                         },
                         confirmButton = {
                             Button(
-                                onClick = { viewModel.confirmDeleteSheet() },
+                                onClick = { viewModel.confirmDeleteSheet(currentUserRole) },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             ) {
-                                Text("نعم (حذف المسودة)", fontWeight = FontWeight.Bold)
+                                Text("نعم (حذف وعكس القيد)", fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
@@ -702,7 +703,10 @@ private fun ActiveAuditTabContent(
                         }
                     }
                 } else {
-                    items(uiState.filteredAuditItems, key = { it.productId }) { item ->
+                    items(
+                        items = uiState.filteredAuditItems,
+                        key = { "${it.productId}_${it.barcode}_${it.productName}" }
+                    ) { item ->
                         InventoryAuditItemCard(
                             item = item,
                             currencySymbol = uiState.currencySymbol,
@@ -808,13 +812,14 @@ private fun ActiveAuditTabContent(
 }
 
 /**
- * تبويب 2: محتوى "أرشيف السندات السابقة" مع ضوابط وصلاحيات الحذف والتعديل
+ * تبويب 2: محتوى "أرشيف السندات السابقة" مع ضوابط وصلاحيات الحذف والتعديل المخصصة لمدير النظام
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ArchivedAuditSheetsTabContent(
     uiState: InventoryCountSheetUiState,
     viewModel: InventoryCountSheetViewModel,
+    currentUserRole: UserRole,
     dateFormat: SimpleDateFormat,
     speechRecognizerLauncher: androidx.activity.result.ActivityResultLauncher<Intent>
 ) {
@@ -906,10 +911,12 @@ private fun ArchivedAuditSheetsTabContent(
                     ArchivedAuditSheetCard(
                         sheet = sheet,
                         currencySymbol = uiState.currencySymbol,
+                        currentUserRole = currentUserRole,
                         dateFormat = dateFormat,
                         onLoadClick = { viewModel.loadSheetToActiveAudit(sheet) },
+                        onUnlockOrEditClick = { viewModel.unlockOrEditPostedSheet(sheet, currentUserRole) },
                         onPreviewClick = { viewModel.setPreviewingArchivedSheet(sheet) },
-                        onDeleteClick = { viewModel.requestDeleteSheet(sheet) }
+                        onDeleteClick = { viewModel.requestDeleteSheet(sheet, currentUserRole) }
                     )
                 }
             }
@@ -921,8 +928,10 @@ private fun ArchivedAuditSheetsTabContent(
 private fun ArchivedAuditSheetCard(
     sheet: InventoryAuditSheetEntity,
     currencySymbol: String,
+    currentUserRole: UserRole,
     dateFormat: SimpleDateFormat,
     onLoadClick: () -> Unit,
+    onUnlockOrEditClick: () -> Unit,
     onPreviewClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
@@ -989,7 +998,7 @@ private fun ArchivedAuditSheetCard(
                 )
             }
 
-            // خيارات وأزرار التحكم بالصلاحيات
+            // خيارات وأزرار التحكم بالصلاحيات (تعديل وحذف لمدير النظام Admin حصرياً)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1004,34 +1013,62 @@ private fun ArchivedAuditSheetCard(
                     ) {
                         Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("معاينة/طباعة", fontSize = 11.sp)
+                        Text("طباعة", fontSize = 11.sp)
                     }
 
-                    // تحميل للسند الحالي
-                    Button(
-                        onClick = onLoadClick,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (sheet.isDraft) "استكمال الجرد" else "استعراض البنود", fontSize = 11.sp)
+                    if (sheet.isPosted) {
+                        // زر إعادة فتح وتعديل السند المعتمد (مدير النظام فقط)
+                        Button(
+                            onClick = onUnlockOrEditClick,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (currentUserRole == UserRole.ADMIN) MaterialTheme.colorScheme.primary else Color.Gray
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تعديل السند (Admin)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        // استكمال تعديل المسودة
+                        Button(
+                            onClick = onLoadClick,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تعديل المسودة", fontSize = 11.sp)
+                        }
                     }
                 }
 
-                // زر الحذف الضابط (يُفعل فقط للمسودات، ويُقفل للسندات المعتمدة)
-                if (sheet.isDraft) {
-                    IconButton(onClick = onDeleteClick, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "حذف المسودة", tint = MaterialTheme.colorScheme.error)
+                // زر الحذف المخصص لمدير النظام Admin
+                if (currentUserRole == UserRole.ADMIN || sheet.isDraft) {
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "حذف قيد الجرد والتسوية",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 } else {
-                    // أيقونة قفل الحذف للمعتمد
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "مقفل ضد الحذف والتعديل",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    // رمز القفل لغير المدراء مع حماية المحاولة
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "خاص بمدير النظام",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

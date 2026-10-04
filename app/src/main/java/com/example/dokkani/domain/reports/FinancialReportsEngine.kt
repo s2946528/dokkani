@@ -313,16 +313,24 @@ object FinancialReportsEngine {
             }
         }
 
-        // 2. العملاء (أرصدة مدينة - أصل متداول)
+        // 2. العملاء (ديون مدينة كأصول، وسدادات مقدمة كالتزامات)
         val customerReceivables = parties.filter { it.type == PartyType.CUSTOMER || it.type == PartyType.BOTH }.sumOf { if (it.currentBalance > 0) it.currentBalance else 0.0 }
+        val customerPrepayments = parties.filter { it.type == PartyType.CUSTOMER || it.type == PartyType.BOTH }.sumOf { if (it.currentBalance < 0) abs(it.currentBalance) else 0.0 }
         if (customerReceivables > 0.001) {
             rawItems.add(TrialBalanceItem("10300", "10300 - حسابات العملاء (ديون الشكك)", "أصل متداول", debit = customerReceivables, credit = 0.0))
         }
+        if (customerPrepayments > 0.001) {
+            rawItems.add(TrialBalanceItem("20200", "20200 - سدادات سلفيات وسدف العملاء المقدمة", "التزام متداول", debit = 0.0, credit = customerPrepayments))
+        }
 
-        // 3. الموردين (أرصدة دائنة - التزام متداول)
+        // 3. الموردين (التزامات دائنة، ودفعات سلفة للموردين كأصول)
         val supplierPayables = parties.filter { it.type == PartyType.SUPPLIER || it.type == PartyType.BOTH }.sumOf { if (it.currentBalance < 0) abs(it.currentBalance) else 0.0 }
+        val supplierAdvances = parties.filter { it.type == PartyType.SUPPLIER || it.type == PartyType.BOTH }.sumOf { if (it.currentBalance > 0) it.currentBalance else 0.0 }
         if (supplierPayables > 0.001) {
             rawItems.add(TrialBalanceItem("20100", "20100 - حسابات الموردين والالتزامات", "التزام متداول", debit = 0.0, credit = supplierPayables))
+        }
+        if (supplierAdvances > 0.001) {
+            rawItems.add(TrialBalanceItem("10700", "10700 - مدفوعات سلفية مقدمة للموردين", "أصل متداول", debit = supplierAdvances, credit = 0.0))
         }
 
         // 4. تقييم المخزون (بضاعة آخر المدة - أصل متداول)
@@ -401,7 +409,7 @@ object FinancialReportsEngine {
         val totalDebit = finalItems.sumOf { it.debit }
         val totalCredit = finalItems.sumOf { it.credit }
         val diff = abs(totalDebit - totalCredit)
-        val isBalanced = diff < 1.0
+        val isBalanced = diff < 0.01
 
         val unbalanced = if (!isBalanced) {
             finalItems.filter { abs(it.debit - it.credit) > 0.01 }
@@ -635,5 +643,34 @@ object FinancialReportsEngine {
             totalValue = runningBal * unitCost,
             entries = entries
         )
+    }
+}
+
+/**
+ * نظام المنع الحارم والفحص المسبق للقيود وميزان المراجعة (Strict Double-Entry Trial Balance Guard)
+ * يضمن التوازن المطلق (المدين = الدائن) قبل اعتماد أو حفظ أي معاملة مالية في النظام.
+ */
+object TrialBalanceGuard {
+
+    /**
+     * فحص والتحقق الحارم من التوازن المحاسبي المزدوج (Double-Entry Balance Check)
+     */
+    fun verifyDoubleEntryBalance(
+        debitAmount: Double,
+        creditAmount: Double,
+        operationName: String
+    ): Result<Unit> {
+        val diff = abs(debitAmount - creditAmount)
+        return if (diff < 0.01) {
+            Result.success(Unit)
+        } else {
+            Result.failure(
+                IllegalStateException(
+                    "إيقاف حارم: تعذر إتمام عملية $operationName نظراً لوجود عدم توازن محاسبي في القيد المزدوج! " +
+                    "إجمالي المدين (%.2f) لا يساوي إجمالي الدائن (%.2f) بفرق قدره %.2f. " +
+                    "يرجى تصحيح المبالغ قبل الحفظ.".format(debitAmount, creditAmount, diff)
+                )
+            )
+        }
     }
 }

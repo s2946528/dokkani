@@ -96,6 +96,7 @@ import com.example.dokkani.ui.components.ProductThumbnailImage
 import com.example.dokkani.ui.screens.crud.AddEditProductDialog
 import com.example.dokkani.ui.screens.crud.AddEditUnitDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
+import com.example.dokkani.ui.screens.assembly.ItemAssemblyScreen
 
 data class FlattenedUnitItem(
     val product: ProductEntity,
@@ -277,6 +278,20 @@ fun ProductsAndUnitsScreen(
                     }
                 },
                 modifier = Modifier.testTag("tab_wastage")
+            )
+            Tab(
+                selected = selectedTab == 4,
+                onClick = { selectedTab = 4 },
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("تركيب الأصناف", fontWeight = FontWeight.Bold)
+                    }
+                },
+                modifier = Modifier.testTag("tab_item_assembly")
             )
         }
 

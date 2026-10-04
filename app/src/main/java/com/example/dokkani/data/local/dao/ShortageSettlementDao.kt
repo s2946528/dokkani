@@ -40,6 +40,9 @@ interface ShortageSettlementDao {
     @Query("DELETE FROM shortage_settlements WHERE id = :id")
     suspend fun deleteShortageById(id: Long)
 
+    @Query("DELETE FROM shortage_settlements WHERE notes LIKE '%' || :voucherNumber || '%' OR auditId = :auditId")
+    suspend fun deleteShortagesByVoucherNumberOrAuditId(voucherNumber: String, auditId: Long): Int
+
     @Query("SELECT SUM(totalValueSalesAmount) FROM shortage_settlements WHERE status = 'SETTLED'")
     fun getTotalSettledValueSalesRevenue(): Flow<Double?>
 

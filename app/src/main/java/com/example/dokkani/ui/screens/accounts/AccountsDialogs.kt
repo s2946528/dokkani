@@ -1,6 +1,7 @@
 package com.example.dokkani.ui.screens.accounts
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,12 +26,13 @@ import com.example.dokkani.ui.AccountUsageCheckResult
 import java.util.Locale
 
 /**
- * حوار إضافة أو تعديل حساب مالي (بنك، محفظة إلكترونية، صندوق نقدية، حساب دليل محاسبي)
+ * حوار إضافة أو تعديل حساب مالي بمواصفات الأنظمة المحاسبية المتقدمة (Chart of Accounts Dialog)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditAccountDialog(
     initialAccount: FinancialAccountEntity? = null,
+    parentPresetAccount: FinancialAccountEntity? = null,
     existingAccounts: List<FinancialAccountEntity> = emptyList(),
     currencySymbol: String = "ر.ي",
     onSave: (FinancialAccountEntity) -> Unit,
@@ -39,29 +41,48 @@ fun AddEditAccountDialog(
     val isEdit = initialAccount != null
 
     var name by remember { mutableStateOf(initialAccount?.name ?: "") }
+    var isMainAccount by remember { mutableStateOf(initialAccount?.isMainAccount ?: false) }
     var accountType by remember { mutableStateOf(initialAccount?.accountType ?: FinancialAccountType.BANK) }
 
-    // الحساب الرئيسي الافتراضي المقترن بنوع الحساب
-    val defaultParent = ChartOfAccountsDefaults.PARENT_ACCOUNTS.firstOrNull { it.defaultType == accountType }
-        ?: ChartOfAccountsDefaults.PARENT_ACCOUNTS[1]
+    // الحساب الرئيسي الافتراضي المقترن بنوع الحساب أو الحساب المحدد مسبقاً كأب
+    val defaultParentCode = parentPresetAccount?.code ?: initialAccount?.parentAccountCode ?: ChartOfAccountsDefaults.PARENT_ACCOUNTS[0].code
+    val defaultParentName = parentPresetAccount?.name ?: initialAccount?.parentAccountName ?: ChartOfAccountsDefaults.PARENT_ACCOUNTS[0].name
 
-    var selectedParentCode by remember {
-        mutableStateOf(initialAccount?.parentAccountCode ?: defaultParent.code)
-    }
-    var selectedParentName by remember {
-        mutableStateOf(initialAccount?.parentAccountName ?: defaultParent.name)
+    var selectedParentCode by remember { mutableStateOf(defaultParentCode) }
+    var selectedParentName by remember { mutableStateOf(defaultParentName) }
+
+    // طبيعة الحساب (مدين / دائن) والحساب الختامي
+    var debitCreditNature by remember {
+        mutableStateOf(
+            initialAccount?.debitCreditNature
+                ?: ChartOfAccountsDefaults.PARENT_ACCOUNTS.firstOrNull { it.code == selectedParentCode }?.defaultNature
+                ?: "DEBIT"
+        )
     }
 
-    // اقتراح كود فرعي تلقائي في حالة الإضافة
-    val suggestedCode = remember(accountType, selectedParentCode) {
+    var finalAccountMapping by remember {
+        mutableStateOf(
+            initialAccount?.finalAccountMapping
+                ?: ChartOfAccountsDefaults.PARENT_ACCOUNTS.firstOrNull { it.code == selectedParentCode }?.defaultFinalAccount
+                ?: "BALANCE_SHEET"
+        )
+    }
+
+    // اقتراح كود حساب تلقائي
+    val suggestedCode = remember(accountType, selectedParentCode, isMainAccount) {
         if (isEdit) initialAccount?.code ?: ""
         else {
             val prefix = selectedParentCode
             val existingCodes = existingAccounts
                 .filter { it.parentAccountCode == prefix }
                 .mapNotNull { it.code.toIntOrNull() }
-            val nextNum = if (existingCodes.isEmpty()) (prefix.toIntOrNull() ?: 100) * 100 + 1 else existingCodes.maxOrNull()!! + 1
-            nextNum.toString()
+
+            if (existingCodes.isEmpty()) {
+                val pInt = prefix.toIntOrNull() ?: 100
+                "${pInt}01"
+            } else {
+                (existingCodes.maxOrNull()!! + 1).toString()
+            }
         }
     }
 
@@ -74,23 +95,40 @@ fun AddEditAccountDialog(
     var parentDropdownExpanded by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
+    // التحقق من صحة البيانات والقيود المفتاحية (Validation)
+    val isNameValid = name.trim().isNotBlank()
+    val isCodeValid = code.trim().isNotBlank()
+    val isCodeDuplicate = remember(code, existingAccounts, initialAccount) {
+        if (isEdit && code.trim() == initialAccount?.code) false
+        else existingAccounts.any { it.code == code.trim() }
+    }
+    val canSave = isNameValid && isCodeValid && !isCodeDuplicate
+
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("add_edit_account_dialog"),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = if (isEdit) Icons.Default.Edit else Icons.Default.AccountBalance,
+                    imageVector = if (isEdit) Icons.Default.Edit else Icons.Default.AccountTree,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(26.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (isEdit) "تعديل بيانات الحساب" else "إضافة حساب جديد بالدليل المحاسبي",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = if (isEdit) "تعديل بيانات الحساب المحاسبي" else "إضافة حساب جديد بالدليل المحاسبي",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "هيكل الدليل المحاسبي الشجري المعياري",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
             }
         },
         text = {
@@ -100,56 +138,33 @@ fun AddEditAccountDialog(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // نوع الحساب المالي
-                Text("نوع الحساب المالي *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                // 1. نوع الهيكل المحاسبي (حساب رئيسي تجميعي أم فرعي تنفيذي)
+                Text("نوع الهيكل المحاسبي *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FinancialAccountType.values().take(3).forEach { type ->
-                        FilterChip(
-                            selected = accountType == type,
-                            onClick = {
-                                accountType = type
-                                val parent = ChartOfAccountsDefaults.PARENT_ACCOUNTS.firstOrNull { it.defaultType == type }
-                                if (parent != null) {
-                                    selectedParentCode = parent.code
-                                    selectedParentName = parent.name
-                                    if (!isEdit) {
-                                        val prefix = parent.code
-                                        val existing = existingAccounts
-                                            .filter { it.parentAccountCode == prefix }
-                                            .mapNotNull { it.code.toIntOrNull() }
-                                        code = if (existing.isEmpty()) "${prefix}01" else (existing.maxOrNull()!! + 1).toString()
-                                    }
-                                }
-                            },
-                            label = { Text(type.labelArabic, fontSize = 11.sp) },
-                            modifier = Modifier.testTag("chip_type_${type.name}")
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FinancialAccountType.values().drop(3).forEach { type ->
-                        FilterChip(
-                            selected = accountType == type,
-                            onClick = {
-                                accountType = type
-                                val parent = ChartOfAccountsDefaults.PARENT_ACCOUNTS.firstOrNull { it.defaultType == type }
-                                if (parent != null) {
-                                    selectedParentCode = parent.code
-                                    selectedParentName = parent.name
-                                }
-                            },
-                            label = { Text(type.labelArabic, fontSize = 11.sp) }
-                        )
-                    }
+                    FilterChip(
+                        selected = !isMainAccount,
+                        onClick = { isMainAccount = false },
+                        label = { Text("حساب فرعي (تنفيذي / قيود)", fontSize = 11.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(14.dp))
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = isMainAccount,
+                        onClick = { isMainAccount = true },
+                        label = { Text("حساب رئيسي (تجميعي)", fontSize = 11.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(14.dp))
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
-                // ربطه بالحساب الرئيسي في الدليل المحاسبي
+                // 2. اختيار الحساب الأب (Parent Account)
                 ExposedDropdownMenuBox(
                     expanded = parentDropdownExpanded,
                     onExpandedChange = { parentDropdownExpanded = !parentDropdownExpanded }
@@ -158,7 +173,7 @@ fun AddEditAccountDialog(
                         value = selectedParentName,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("الحساب الرئيسي بالدليل المحاسبي *") },
+                        label = { Text("الحساب الأب (الماركة / المجموعة) *") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = parentDropdownExpanded) },
                         modifier = Modifier
                             .menuAnchor()
@@ -170,15 +185,53 @@ fun AddEditAccountDialog(
                         expanded = parentDropdownExpanded,
                         onDismissRequest = { parentDropdownExpanded = false }
                     ) {
+                        // خيارات الحسابات الرئيسية من المعايير الافتراضية
                         ChartOfAccountsDefaults.PARENT_ACCOUNTS.forEach { parent ->
                             DropdownMenuItem(
-                                text = { Text(parent.name, fontSize = 13.sp) },
+                                text = {
+                                    Column {
+                                        Text(parent.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("كود الأب: ${parent.code}", fontSize = 10.sp, color = Color.Gray)
+                                    }
+                                },
                                 onClick = {
                                     selectedParentCode = parent.code
                                     selectedParentName = parent.name
+                                    accountType = parent.defaultType
+                                    debitCreditNature = parent.defaultNature
+                                    finalAccountMapping = parent.defaultFinalAccount
                                     parentDropdownExpanded = false
+
                                     if (!isEdit) {
                                         val prefix = parent.code
+                                        val existing = existingAccounts
+                                            .filter { it.parentAccountCode == prefix }
+                                            .mapNotNull { it.code.toIntOrNull() }
+                                        code = if (existing.isEmpty()) "${prefix}01" else (existing.maxOrNull()!! + 1).toString()
+                                    }
+                                }
+                            )
+                        }
+
+                        // إضافة الحسابات الرئيسية المخصصة المسجلة في النظام
+                        existingAccounts.filter { it.isMainAccount }.forEach { customParent ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("${customParent.code} - ${customParent.name}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        Text("حساب رئيسي مخصص", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                    }
+                                },
+                                onClick = {
+                                    selectedParentCode = customParent.code
+                                    selectedParentName = "${customParent.code} - ${customParent.name}"
+                                    accountType = customParent.accountType
+                                    debitCreditNature = customParent.debitCreditNature
+                                    finalAccountMapping = customParent.finalAccountMapping
+                                    parentDropdownExpanded = false
+
+                                    if (!isEdit) {
+                                        val prefix = customParent.code
                                         val existing = existingAccounts
                                             .filter { it.parentAccountCode == prefix }
                                             .mapNotNull { it.code.toIntOrNull() }
@@ -190,22 +243,30 @@ fun AddEditAccountDialog(
                     }
                 }
 
-                // اسم الحساب
+                // 3. اسم الحساب
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("اسم الحساب (مثل: مصرف الراجحي، محفظة STC Pay) *") },
+                    label = { Text("اسم الحساب المحاسبي *") },
+                    placeholder = { Text("مثال: مصرف الراجحي الرئيسي، صندوق الدرج 1") },
+                    isError = !isNameValid && name.isNotEmpty(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("account_name_input"),
                     shape = RoundedCornerShape(10.dp)
                 )
 
-                // كود الحساب
+                // 4. كود الحساب
                 OutlinedTextField(
                     value = code,
                     onValueChange = { code = it },
-                    label = { Text("كود الحساب في الدليل (مثل: 10201) *") },
+                    label = { Text("كود الحساب الفرعي/الرئيسي *") },
+                    isError = isCodeDuplicate || (!isCodeValid && code.isNotEmpty()),
+                    supportingText = {
+                        if (isCodeDuplicate) {
+                            Text("كود الحساب مُستخدم بالفعل في الدليل المحاسبي", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -213,41 +274,116 @@ fun AddEditAccountDialog(
                     shape = RoundedCornerShape(10.dp)
                 )
 
-                // رقم الحساب المصرفي أو الآيبان أو رقم المحفظة
-                OutlinedTextField(
-                    value = accountNumber,
-                    onValueChange = { accountNumber = it },
-                    label = { Text("رقم الحساب / الآيبان IBAN / رقم المحفظة") },
-                    placeholder = { Text("مثال: SA0380000000000000000000") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("account_number_input"),
-                    shape = RoundedCornerShape(10.dp)
-                )
+                // 5. طبيعة الحساب (مدين / دائن) الحساب الختامي
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("طبيعة الحساب *", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilterChip(
+                                selected = debitCreditNature == "DEBIT",
+                                onClick = { debitCreditNature = "DEBIT" },
+                                label = { Text("مدين", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = debitCreditNature == "CREDIT",
+                                onClick = { debitCreditNature = "CREDIT" },
+                                label = { Text("دائن", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
 
-                // الرصيد الافتتاحي
-                OutlinedTextField(
-                    value = openingBalance,
-                    onValueChange = { openingBalance = it },
-                    label = { Text("الرصيد الافتتاحي (${currencySymbol})") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    enabled = !isEdit, // يعدل فقط عند الإنشاء للمحافظة على الأمان المحاسبي
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("account_opening_balance_input"),
-                    shape = RoundedCornerShape(10.dp)
-                )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("الحساب الختامي *", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilterChip(
+                                selected = finalAccountMapping == "BALANCE_SHEET",
+                                onClick = { finalAccountMapping = "BALANCE_SHEET" },
+                                label = { Text("ميزانية", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = finalAccountMapping == "PROFIT_LOSS",
+                                onClick = { finalAccountMapping = "PROFIT_LOSS" },
+                                label = { Text("أرباح وخسائر", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
 
-                // ملاحظات
+                // 6. نوع الحساب المالي (بنك، محفظة، صندوق...)
+                Text("التصنيف المالي للحساب *", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FinancialAccountType.values().take(3).forEach { type ->
+                        FilterChip(
+                            selected = accountType == type,
+                            onClick = { accountType = type },
+                            label = { Text(type.labelArabic, fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FinancialAccountType.values().drop(3).forEach { type ->
+                        FilterChip(
+                            selected = accountType == type,
+                            onClick = { accountType = type },
+                            label = { Text(type.labelArabic, fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // 7. رقم الحساب المصرفي / الآيبان
+                if (accountType == FinancialAccountType.BANK || accountType == FinancialAccountType.E_WALLET) {
+                    OutlinedTextField(
+                        value = accountNumber,
+                        onValueChange = { accountNumber = it },
+                        label = { Text("رقم الحساب / IBAN / رقم المحفظة") },
+                        placeholder = { Text("مثال: SA0380000000000000000000") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("account_number_input"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+
+                // 8. الرصيد الافتتاحي (للحسابات الفرعية فقط)
+                if (!isMainAccount) {
+                    OutlinedTextField(
+                        value = openingBalance,
+                        onValueChange = { openingBalance = it },
+                        label = { Text("الرصيد الافتتاحي (${currencySymbol})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        enabled = !isEdit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("account_opening_balance_input"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+
+                // 9. ملاحظات إضافية
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("ملاحظات وإعدادات الحساب") },
+                    label = { Text("ملاحظات / معلومات إضافية") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 )
 
-                // حالة الحساب
+                // 10. حالة الحساب
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -262,15 +398,10 @@ fun AddEditAccountDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (isActive) "حساب نشط ومتاح للعمليات المالية" else "حساب معطل (موقوف مؤقتاً)",
+                            text = if (isActive) "حساب نشط ومتاح للعمليات والقيود" else "حساب معطل (موقوف مؤقتاً)",
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = if (isActive) Color(0xFF0F5132) else MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            text = "الحسابات المعطلة لا تظهر في عمليات البيع والتحصيل الفوري",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -278,16 +409,23 @@ fun AddEditAccountDialog(
         },
         confirmButton = {
             Button(
+                enabled = canSave,
                 onClick = {
-                    if (name.isNotBlank() && code.isNotBlank()) {
+                    if (canSave) {
                         val parsedOpening = openingBalance.toDoubleOrNull() ?: 0.0
                         val currentBal = if (isEdit) (initialAccount?.currentBalance ?: 0.0) else parsedOpening
+                        val computedLevel = if (selectedParentCode.length <= 1) 1 else if (selectedParentCode.length <= 3) 2 else 3
+
                         val account = (initialAccount ?: FinancialAccountEntity(
                             code = code.trim(),
                             name = name.trim(),
                             accountType = accountType,
                             parentAccountCode = selectedParentCode,
                             parentAccountName = selectedParentName,
+                            isMainAccount = isMainAccount,
+                            level = computedLevel,
+                            finalAccountMapping = finalAccountMapping,
+                            debitCreditNature = debitCreditNature,
                             accountNumber = accountNumber.trim(),
                             openingBalance = parsedOpening,
                             currentBalance = currentBal,
@@ -300,6 +438,10 @@ fun AddEditAccountDialog(
                             accountType = accountType,
                             parentAccountCode = selectedParentCode,
                             parentAccountName = selectedParentName,
+                            isMainAccount = isMainAccount,
+                            level = computedLevel,
+                            finalAccountMapping = finalAccountMapping,
+                            debitCreditNature = debitCreditNature,
                             accountNumber = accountNumber.trim(),
                             openingBalance = parsedOpening,
                             currentBalance = currentBal,

@@ -1,5 +1,7 @@
 package com.example.dokkani.ui.screens.cash
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -103,7 +105,13 @@ fun CashAndExpensesScreen(
     onRequestDeleteAccount: (FinancialAccountEntity) -> Unit = {},
     onConfirmDeleteAccount: (FinancialAccountEntity) -> Unit = {},
     onDisableAccountInstead: (AccountUsageCheckResult) -> Unit = {},
-    onDismissAccountDeleteDialogs: () -> Unit = {}
+    onDismissAccountDeleteDialogs: () -> Unit = {},
+    onUpdateExpensePaymentMethod: (PaymentMethod) -> Unit = {},
+    onUpdateExpensePaymentAccountId: (Long?) -> Unit = {},
+    onUpdateExpenseTransactionRef: (String) -> Unit = {},
+    onUpdateExpenseReceiptImagePath: (String?) -> Unit = {},
+    onUpdateExpenseSecondaryMethod: (PaymentMethod?) -> Unit = {},
+    onUpdateExpenseSecondaryPaidAmount: (Double) -> Unit = {}
 ) {
     LaunchedEffect(Unit) {
         onCalculateDrawerReconciliation()
@@ -193,16 +201,16 @@ fun CashAndExpensesScreen(
     // نافذة تسجيل مصروف جديد
     if (uiState.showAddExpenseDialog) {
         AddExpenseDialog(
-            category = uiState.expenseCategoryInput,
-            amount = uiState.expenseAmountInput,
-            paidTo = uiState.expensePaidToInput,
-            notes = uiState.expenseNotesInput,
-            selectedMethod = uiState.expensePaymentMethod,
-            isSubmitting = uiState.isSubmittingExpense,
+            uiState = uiState,
             onInputsChanged = onExpenseInputsChanged,
+            onPaymentMethodChanged = onUpdateExpensePaymentMethod,
+            onPaymentAccountChanged = onUpdateExpensePaymentAccountId,
+            onTransactionRefChanged = onUpdateExpenseTransactionRef,
+            onReceiptImageChanged = onUpdateExpenseReceiptImagePath,
+            onSecondaryMethodChanged = onUpdateExpenseSecondaryMethod,
+            onSecondaryPaidAmountChanged = onUpdateExpenseSecondaryPaidAmount,
             onDismiss = onDismissAddExpenseDialog,
-            onSubmit = onSubmitExpense,
-            currencySymbol = uiState.currencySymbol
+            onSubmit = onSubmitExpense
         )
     }
 
@@ -446,62 +454,86 @@ private fun ExpenseItemCard(expense: ExpenseEntity, currencySymbol: String = "ر
 }
 
 /**
- * نافذة حوار إضافة مصروف تشغيلي
+ * نافذة حوار إضافة مصروف تشغيلي مع طرق الدفع الديناميكية وإخفاء الحسابات الفارغة
  */
 @Composable
 private fun AddExpenseDialog(
-    category: String,
-    amount: String,
-    paidTo: String,
-    notes: String,
-    selectedMethod: PaymentMethod,
-    isSubmitting: Boolean,
+    uiState: DokkaniUiState,
     onInputsChanged: (String, String, String, String, PaymentMethod) -> Unit,
+    onPaymentMethodChanged: (PaymentMethod) -> Unit,
+    onPaymentAccountChanged: (Long?) -> Unit,
+    onTransactionRefChanged: (String) -> Unit,
+    onReceiptImageChanged: (String?) -> Unit,
+    onSecondaryMethodChanged: (PaymentMethod?) -> Unit,
+    onSecondaryPaidAmountChanged: (Double) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: () -> Unit,
-    currencySymbol: String = "ر.ي"
+    onSubmit: () -> Unit
 ) {
+    val category = uiState.expenseCategoryInput
+    val amount = uiState.expenseAmountInput
+    val paidTo = uiState.expensePaidToInput
+    val notes = uiState.expenseNotesInput
+    val selectedMethod = uiState.expensePaymentMethod
+    val isSubmitting = uiState.isSubmittingExpense
+    val currencySymbol = uiState.currencySymbol
+
+    val parsedAmount = amount.toDoubleOrNull() ?: 0.0
+    val isPaymentMethodValid = when (selectedMethod) {
+        PaymentMethod.CASH -> true
+        PaymentMethod.BANK_TRANSFER, PaymentMethod.E_WALLET, PaymentMethod.POS_CARD, PaymentMethod.MADA, PaymentMethod.EXCHANGE_NETWORK -> {
+            uiState.expensePaymentAccountId != null || uiState.financialAccounts.any { it.isActive }
+        }
+        PaymentMethod.MULTI -> {
+            uiState.expenseSecondaryMethod != null || uiState.expensePaymentAccountId != null
+        }
+        else -> true
+    }
+    val isSaveEnabled = !isSubmitting && parsedAmount > 0.0 && isPaymentMethodValid
+
+    val dialogScrollState = rememberScrollState()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("تسجيل مصروف تشغيلي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.MoneyOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("تسجيل مصروف تشغيلي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(dialogScrollState),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 // تصنيفات المصروف السريعة
-                Text("التصنيف:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
-                Spacer(modifier = Modifier.height(4.dp))
+                Text("التصنيف *", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(ExpenseCategories.ALL) { cat ->
                         val isSelected = cat == category
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (isSelected) Color(0xFF0F5132) else Color(0xFFF1F5F9),
-                            modifier = Modifier.clickable {
-                                onInputsChanged(cat, amount, paidTo, notes, selectedMethod)
-                            }
-                        ) {
-                            Text(
-                                text = cat,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else Color(0xFF334155),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                            )
-                        }
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onInputsChanged(cat, amount, paidTo, notes, selectedMethod) },
+                            label = { Text(cat, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) }
+                        )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
 
                 // حقل المبلغ
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { onInputsChanged(category, it, paidTo, notes, selectedMethod) },
-                    label = { Text("مبلغ المصروف (${currencySymbol})*") },
+                    label = { Text("مبلغ المصروف (${currencySymbol}) *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier
@@ -509,31 +541,42 @@ private fun AddExpenseDialog(
                         .testTag("expense_amount_field")
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                // طريقة الصرف والدفع الديناميكية المقترنة بقاعدة البيانات
+                Text("طريقة الصرف والتحصيل المالي *", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
 
-                // طريقة الصرف
-                Text("طريقة الصرف:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf(PaymentMethod.CASH, PaymentMethod.MADA, PaymentMethod.BANK_TRANSFER).forEach { method ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable {
-                                onInputsChanged(category, amount, paidTo, notes, method)
-                            }
-                        ) {
-                            RadioButton(
-                                selected = selectedMethod == method,
-                                onClick = { onInputsChanged(category, amount, paidTo, notes, method) }
-                            )
-                            Text(text = method.labelArabic, fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
+                com.example.dokkani.ui.components.PaymentMethodSelector(
+                    selectedMethod = selectedMethod,
+                    onMethodSelected = { method ->
+                        onPaymentMethodChanged(method)
+                        onInputsChanged(category, amount, paidTo, notes, method)
+                    },
+                    financialAccounts = uiState.financialAccounts,
+                    selectedAccountId = uiState.expensePaymentAccountId,
+                    onAccountSelected = { accId ->
+                        onPaymentAccountChanged(accId)
+                    },
+                    transactionRef = uiState.expenseTransactionRef,
+                    onTransactionRefChange = { ref ->
+                        onTransactionRefChanged(ref)
+                    },
+                    secondaryMethod = uiState.expenseSecondaryMethod,
+                    onSecondaryMethodSelected = { secMethod ->
+                        onSecondaryMethodChanged(secMethod)
+                    },
+                    secondaryPaidAmount = uiState.expenseSecondaryPaidAmount,
+                    onSecondaryPaidAmountChange = { secAmount ->
+                        onSecondaryPaidAmountChanged(secAmount)
+                    },
+                    receiptImagePath = uiState.expenseReceiptImagePath,
+                    onReceiptImageChange = { imgPath ->
+                        onReceiptImageChanged(imgPath)
+                    },
+                    allowCredit = false,
+                    allowMulti = true,
+                    hideEmptyAccounts = true,
+                    currencySymbol = currencySymbol,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 // المدفوع له
                 OutlinedTextField(
@@ -543,8 +586,6 @@ private fun AddExpenseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                Spacer(modifier = Modifier.height(6.dp))
 
                 // البيان والملاحظات
                 OutlinedTextField(
@@ -558,13 +599,15 @@ private fun AddExpenseDialog(
         confirmButton = {
             Button(
                 onClick = onSubmit,
-                enabled = !isSubmitting && (amount.toDoubleOrNull() ?: 0.0) > 0.0,
+                enabled = isSaveEnabled,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                 modifier = Modifier.testTag("btn_confirm_expense")
             ) {
                 if (isSubmitting) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
                 } else {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text("حفظ المصروف", fontWeight = FontWeight.Bold)
                 }
             }

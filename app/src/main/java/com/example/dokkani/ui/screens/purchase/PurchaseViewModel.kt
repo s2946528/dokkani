@@ -24,6 +24,7 @@ import com.example.dokkani.data.local.entities.ProductUnitEntity
 import com.example.dokkani.data.local.entities.ProductWithUnits
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.UserRole
+import com.example.dokkani.domain.reports.TrialBalanceGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -516,6 +517,21 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                         }
                         return@launch
                     }
+                }
+
+                // فحص المنع الحارم للتوازن المحاسبي المزدوج (Double-Entry Trial Balance Guard)
+                val debitVal = (state.subtotalBaseCurrency - (state.discount * state.exchangeRate)) + state.taxAmountBaseCurrency
+                val creditVal = state.finalTotalBaseCurrency
+                val guardCheck = TrialBalanceGuard.verifyDoubleEntryBalance(debitVal, creditVal, "فاتورة الشراء والتوريد")
+                if (guardCheck.isFailure) {
+                    _uiState.update {
+                        it.copy(
+                            isProcessing = false,
+                            feedbackMessage = guardCheck.exceptionOrNull()?.message ?: "خطأ في قيد الشراء",
+                            isError = true
+                        )
+                    }
+                    return@launch
                 }
 
                 db.withTransaction {

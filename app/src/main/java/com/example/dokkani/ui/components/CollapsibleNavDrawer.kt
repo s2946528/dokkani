@@ -67,7 +67,7 @@ fun CollapsibleNavDrawerSheet(
             allDepartments.forEach { dept ->
                 // فتح القسم تلقائياً إذا كان يحوي الشاشة النشطة حالياً
                 val containsActive = dept.items.any { it.title == activeTabTitle }
-                this[dept.id] = containsActive || dept.id == "general_ledger" || dept.id == "sales"
+                this[dept.id] = containsActive || dept.id == "operations" || dept.id == "general_ledger" || dept.id == "sales"
             }
         }
     }

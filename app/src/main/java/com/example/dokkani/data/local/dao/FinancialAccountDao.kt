@@ -17,6 +17,60 @@ interface FinancialAccountDao {
     @Query("SELECT * FROM financial_accounts WHERE isActive = 1 ORDER BY code ASC")
     fun getActiveAccounts(): Flow<List<FinancialAccountEntity>>
 
+    /**
+     * استعلام شامل لجلب جميع الحسابات الفرعية المستفيدة لسندات الصرف (Inclusive Query):
+     * يدمج العملاء (104)، الموردين (201)، الموظفين والرواتب والعمالة (202 و 503)، والحسابات الفرعية العامة بالدليل المحاسبي.
+     */
+    @Query("""
+        SELECT * FROM financial_accounts 
+        WHERE isActive = 1 
+          AND isMainAccount = 0 
+          AND (
+            parentAccountCode IN ('104', '201', '202', '503') 
+            OR code LIKE '104%' 
+            OR code LIKE '201%' 
+            OR code LIKE '202%' 
+            OR code LIKE '503%'
+            OR name LIKE '%رواتب%' 
+            OR name LIKE '%أجور%' 
+            OR name LIKE '%موظف%' 
+            OR name LIKE '%عامل%'
+            OR parentAccountCode LIKE '1%' 
+            OR parentAccountCode LIKE '2%' 
+            OR parentAccountCode LIKE '3%' 
+            OR parentAccountCode LIKE '4%' 
+            OR parentAccountCode LIKE '5%'
+            OR accountType IN ('CHART_ACCOUNT', 'LIABILITY', 'EXPENSE')
+          )
+        ORDER BY code ASC
+    """)
+    fun getBeneficiarySubAccounts(): Flow<List<FinancialAccountEntity>>
+
+    @Query("""
+        SELECT * FROM financial_accounts 
+        WHERE isActive = 1 
+          AND isMainAccount = 0 
+          AND (
+            parentAccountCode IN ('104', '201', '202', '503') 
+            OR code LIKE '104%' 
+            OR code LIKE '201%' 
+            OR code LIKE '202%' 
+            OR code LIKE '503%'
+            OR name LIKE '%رواتب%' 
+            OR name LIKE '%أجور%' 
+            OR name LIKE '%موظف%' 
+            OR name LIKE '%عامل%'
+            OR parentAccountCode LIKE '1%' 
+            OR parentAccountCode LIKE '2%' 
+            OR parentAccountCode LIKE '3%' 
+            OR parentAccountCode LIKE '4%' 
+            OR parentAccountCode LIKE '5%'
+            OR accountType IN ('CHART_ACCOUNT', 'LIABILITY', 'EXPENSE')
+          )
+        ORDER BY code ASC
+    """)
+    suspend fun getBeneficiarySubAccountsSync(): List<FinancialAccountEntity>
+
     @Query("SELECT * FROM financial_accounts WHERE isActive = 1 AND currentBalance != 0.0 AND accountType IN ('BANK', 'E_WALLET') ORDER BY code ASC")
     fun getActiveNonZeroBankAndWalletAccounts(): Flow<List<FinancialAccountEntity>>
 

@@ -37,6 +37,7 @@ import com.example.dokkani.domain.pos.PosCheckoutResult
 import com.example.dokkani.domain.pos.PosOperation
 import com.example.dokkani.domain.pos.PosTransactionRecord
 import com.example.dokkani.domain.pos.TransactionItemDetail
+import com.example.dokkani.domain.reports.TrialBalanceGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -1394,6 +1395,25 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         return@launch
                     }
+                }
+
+                // فحص المنع الحارم للتوازن المحاسبي المزدوج (Double-Entry Balance Guard)
+                val totalInvoiceFinal = state.cartSummary.finalTotal
+                val totalInvoiceSubtotal = (state.cartSummary.subtotal - state.cartSummary.discount) + state.cartSummary.taxAmount
+                val doubleEntryCheck = TrialBalanceGuard.verifyDoubleEntryBalance(
+                    debitAmount = totalInvoiceFinal,
+                    creditAmount = totalInvoiceSubtotal,
+                    operationName = "فاتورة (${state.activeOperation.titleArabic})"
+                )
+                if (doubleEntryCheck.isFailure) {
+                    _uiState.update {
+                        it.copy(
+                            isProcessingCheckout = false,
+                            userFeedbackMessage = doubleEntryCheck.exceptionOrNull()?.message ?: "خطأ في توازن قيد الفاتورة",
+                            isError = true
+                        )
+                    }
+                    return@launch
                 }
 
                 db.withTransaction {

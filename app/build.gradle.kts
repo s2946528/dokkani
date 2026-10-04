@@ -102,6 +102,8 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
+  implementation(libs.firebase.messaging)
+  implementation(libs.androidx.work.runtime.ktx)
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
 

@@ -232,41 +232,15 @@ fun AppSearchBar(
                         }
                     }
 
-                    // زر البحث الصوتي
+                    // زر البحث الصوتي المحلي أوفلاين
                     if (enableVoiceSearch) {
-                        IconButton(
-                            onClick = {
-                                val hasPermission = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.RECORD_AUDIO
-                                ) == PackageManager.PERMISSION_GRANTED
-
-                                if (hasPermission) {
-                                    launchVoiceRecognition(context, speechRecognizerLauncher) { isListeningVoice = true }
-                                } else {
-                                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .scale(if (isListeningVoice) micPulseScale else 1f)
-                                .testTag("voice_search_mic_button")
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isListeningVoice) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = if (isListeningVoice) Icons.Default.Mic else Icons.Default.Mic,
-                                        contentDescription = "البحث الصوتي للأصناف",
-                                        tint = if (isListeningVoice) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                        VoiceInputIconButton(
+                            onTextCaptured = { spokenText ->
+                                onValueChange(spokenText)
+                                onSearchSubmitted?.invoke(spokenText)
+                                Toast.makeText(context, "تم الالتقاط الصوتي المحلي: $spokenText", Toast.LENGTH_SHORT).show()
                             }
-                        }
+                        )
                     }
 
                     // زر مسح الباركود بالكاميرا (إن وُجد)

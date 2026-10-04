@@ -17,6 +17,7 @@ import com.example.dokkani.data.local.entities.MovementType
 import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.StockMovementEntity
+import com.example.dokkani.domain.reports.TrialBalanceGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -500,6 +501,22 @@ class PurchaseReturnViewModel(application: Application) : AndroidViewModel(appli
                     }
                     return@launch
                 }
+            }
+
+            val doubleEntryCheck = TrialBalanceGuard.verifyDoubleEntryBalance(
+                debitAmount = totalReturnAmount,
+                creditAmount = totalReturnAmount,
+                operationName = "فاتورة مردودات المشتريات"
+            )
+            if (doubleEntryCheck.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isProcessing = false,
+                        userFeedbackMessage = doubleEntryCheck.exceptionOrNull()?.message ?: "خطأ في توازن قيد مردود المشتريات",
+                        isError = true
+                    )
+                }
+                return@launch
             }
 
             _uiState.update { it.copy(isProcessing = true) }

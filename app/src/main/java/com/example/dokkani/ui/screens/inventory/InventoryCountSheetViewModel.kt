@@ -3,6 +3,7 @@ package com.example.dokkani.ui.screens.inventory
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.dokkani.data.local.DokkaniDatabase
 import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.entities.InventoryAuditSheetEntity
@@ -10,6 +11,7 @@ import com.example.dokkani.data.local.entities.MovementType
 import com.example.dokkani.data.local.entities.ShortageSettlementEntity
 import com.example.dokkani.data.local.entities.StockMovementEntity
 import com.example.dokkani.data.local.entities.UserRole
+import com.example.dokkani.domain.reports.TrialBalanceGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -210,12 +212,18 @@ class InventoryCountSheetViewModel(application: Application) : AndroidViewModel(
                     )
                 }
 
-                val categories = items.map { it.categoryName }.distinct().sorted()
+                val categories = items.map { it.categoryName }.filter { it.isNotBlank() }.distinct().sorted()
 
                 _uiState.update { state ->
-                    val filtered = filterItems(items, state.searchQuery, state.selectedCategoryFilter)
+                    // حماية الأصناف المحملة حالياً من المستند المفتوح ضد المسح التلقائي
+                    val activeItems = if (state.currentSheetId != null && state.auditItems.isNotEmpty()) {
+                        state.auditItems
+                    } else {
+                        items
+                    }
+                    val filtered = filterItems(activeItems, state.searchQuery, state.selectedCategoryFilter)
                     state.copy(
-                        auditItems = items,
+                        auditItems = activeItems,
                         filteredAuditItems = filtered,
                         categories = categories
                     )
@@ -287,14 +295,16 @@ class InventoryCountSheetViewModel(application: Application) : AndroidViewModel(
         query: String,
         category: String?
     ): List<InventoryAuditItemState> {
+        val cleanQuery = query.trim()
+        val cleanCat = category?.trim()
         return items.filter { item ->
-            val matchesCategory = (category == null || item.categoryName == category)
-            val matchesSearch = (query.isBlank() || isItemMatchQuery(
+            val matchesCategory = (cleanCat.isNullOrBlank() || item.categoryName.equals(cleanCat, ignoreCase = true))
+            val matchesSearch = (cleanQuery.isBlank() || isItemMatchQuery(
                 itemName = item.productName,
-                itemCode = "",
+                itemCode = item.barcode,
                 barcode = item.barcode,
                 category = item.categoryName,
-                searchQuery = query
+                searchQuery = cleanQuery
             ))
             matchesCategory && matchesSearch
         }
@@ -467,12 +477,38 @@ class InventoryCountSheetViewModel(application: Application) : AndroidViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val decodedItems = decodeAuditItemsFromJson(sheet.itemsDataJson)
 
-            _uiState.update { state ->
-                val activeItems = if (decodedItems.isNotEmpty()) {
-                    decodedItems
-                } else {
-                    state.auditItems
+            val activeItems = if (decodedItems.isNotEmpty()) {
+                decodedItems
+            } else {
+                // إذا كان JSON السند فارغاً، يتم إعادة جلب منتجات النظام الحالية لضمان عرض قائمة الأصناف
+                val productsWithUnits = productDao.getProductsWithUnitsSync()
+                productsWithUnits.map { pw ->
+                    val prod = pw.product
+                    val baseUnit = pw.units.firstOrNull { it.isBaseUnit } ?: pw.units.firstOrNull()
+                    val unitName = baseUnit?.unitName ?: "قطعة"
+                    val costPrice = baseUnit?.costPrice ?: 0.0
+                    val sellingPrice = baseUnit?.sellingPrice ?: 0.0
+
+                    val rawStock = stockMovementDao.getTotalStockQuantity(prod.id)
+                    val wasteQty = wastageDao.getTotalWasteQuantityForProduct(prod.id) ?: 0.0
+                    val bookStockNet = (rawStock - wasteQty).coerceAtLeast(0.0)
+
+                    InventoryAuditItemState(
+                        productId = prod.id,
+                        productName = prod.name,
+                        categoryName = prod.category,
+                        unitName = unitName,
+                        bookStockQuantity = bookStockNet,
+                        isolatedDailyWasteQty = wasteQty,
+                        actualEndingQtyInput = String.format(java.util.Locale.US, "%.1f", bookStockNet),
+                        unitCostPrice = costPrice,
+                        unitSellingPrice = sellingPrice,
+                        barcode = prod.code
+                    )
                 }
+            }
+
+            _uiState.update { state ->
                 val filtered = filterItems(activeItems, state.searchQuery, state.selectedCategoryFilter)
 
                 state.copy(
@@ -484,7 +520,7 @@ class InventoryCountSheetViewModel(application: Application) : AndroidViewModel(
                     selectedCostCenterId = sheet.costCenterId,
                     auditItems = activeItems,
                     filteredAuditItems = filtered,
-                    selectedTabIndex = 0, // الانقال لتبويب الجرد الحالي
+                    selectedTabIndex = 0, // الانتقال لتبويب الجرد الحالي
                     feedbackMessage = if (sheet.isPosted)
                         "تم عرض السند المعتمد رقم #${sheet.voucherNumber} (ملاحظة: السند معتمد ومقفل ضد التعديل)"
                     else
@@ -522,20 +558,19 @@ class InventoryCountSheetViewModel(application: Application) : AndroidViewModel(
     }
 
     /**
-     * طلب حذف سند جرد (مع التحقق الصارم من الصلاحيات والنزاهة)
+     * طلب حذف سند جرد أو تسوية (متاح حصرياً لمدير النظام Admin)
      */
-    fun requestDeleteSheet(sheet: InventoryAuditSheetEntity) {
-        if (sheet.isPosted) {
+    fun requestDeleteSheet(sheet: InventoryAuditSheetEntity, currentUserRole: UserRole) {
+        if (currentUserRole != UserRole.ADMIN) {
             _uiState.update {
                 it.copy(
-                    feedbackMessage = "عذراً! لا يمكن حذف سند الجرد المعتمد (#${sheet.voucherNumber}) حمايةً للنزاهة المالية والمحاسبية. يمكنك إنشاء سند تسوية جديد عند الحاجة.",
+                    feedbackMessage = "ليس لديك الصلاحية للتعديل أو الحذف، هذه الصلاحية خاصة بمدير النظام فقط",
                     isErrorFeedback = true
                 )
             }
             return
         }
 
-        // إذا كان مسودة، يُسمح بالحذف بعد التأكيد
         _uiState.update {
             it.copy(
                 showDeleteConfirmDialog = true,
@@ -554,29 +589,115 @@ class InventoryCountSheetViewModel(application: Application) : AndroidViewModel(
     }
 
     /**
-     * تأكيد حذف مسودة الجرد
+     * تأكيد حذف سند الجرد أو التسوية مع عكس القيود المحاسبية وحركات المخزون بـ db.withTransaction
      */
-    fun confirmDeleteSheet() {
+    fun confirmDeleteSheet(currentUserRole: UserRole) {
         val sheet = _uiState.value.sheetToDelete ?: return
-        if (sheet.isPosted) return
-
-        viewModelScope.launch(Dispatchers.IO) {
-            auditSheetDao.deleteDraftSheetById(sheet.id)
-
-            _uiState.update { state ->
-                val isCurrentDeleted = (state.currentSheetId == sheet.id)
-                state.copy(
+        if (currentUserRole != UserRole.ADMIN) {
+            _uiState.update {
+                it.copy(
                     showDeleteConfirmDialog = false,
                     sheetToDelete = null,
-                    currentSheetId = if (isCurrentDeleted) null else state.currentSheetId,
-                    voucherStatus = if (isCurrentDeleted) InventoryAuditSheetEntity.STATUS_DRAFT else state.voucherStatus,
-                    feedbackMessage = "تم حذف مسودة الجرد رقم #${sheet.voucherNumber} بنجاح من قاعدة البيانات",
-                    isErrorFeedback = false
+                    feedbackMessage = "ليس لديك الصلاحية للتعديل أو الحذف، هذه الصلاحية خاصة بمدير النظام فقط",
+                    isErrorFeedback = true
                 )
             }
+            return
+        }
 
-            if (_uiState.value.currentSheetId == null) {
-                startNewStocktakingSheet()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    if (sheet.isPosted) {
+                        // 1. عكس وإلغاء حركات تسوية المخزون الناتجة عن السند المعتمد
+                        stockMovementDao.deleteMovementsByReferenceNumber("ADJ-${sheet.voucherNumber}")
+
+                        // 2. إلغاء وعكس سجلات عجز المخزون والبيع بالقيمة المرتبطة بالسند
+                        shortageDao.deleteShortagesByVoucherNumberOrAuditId(sheet.voucherNumber, sheet.date)
+                    }
+
+                    // 3. حذف سند الجرد والتسوية من قاعدة البيانات
+                    auditSheetDao.deleteAuditSheet(sheet)
+                }
+
+                _uiState.update { state ->
+                    val isCurrentDeleted = (state.currentSheetId == sheet.id)
+                    state.copy(
+                        showDeleteConfirmDialog = false,
+                        sheetToDelete = null,
+                        currentSheetId = if (isCurrentDeleted) null else state.currentSheetId,
+                        voucherStatus = if (isCurrentDeleted) InventoryAuditSheetEntity.STATUS_DRAFT else state.voucherStatus,
+                        feedbackMessage = "تم حذف وإلغاء قيد التسوية والجرد رقم #${sheet.voucherNumber} وانعكست القيود المحاسبية بنجاح",
+                        isErrorFeedback = false
+                    )
+                }
+
+                if (_uiState.value.currentSheetId == null) {
+                    startNewStocktakingSheet()
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        showDeleteConfirmDialog = false,
+                        sheetToDelete = null,
+                        feedbackMessage = "حدث خطأ أثناء حذف قيد الجرد والتسوية: ${e.localizedMessage}",
+                        isErrorFeedback = true
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * إلغاء قفل وتعديل سند جرد وتسوية معتمد (متاح حصرياً لمدير النظام Admin)
+     */
+    fun unlockOrEditPostedSheet(sheet: InventoryAuditSheetEntity, currentUserRole: UserRole) {
+        if (currentUserRole != UserRole.ADMIN) {
+            _uiState.update {
+                it.copy(
+                    feedbackMessage = "ليس لديك الصلاحية للتعديل أو الحذف، هذه الصلاحية خاصة بمدير النظام فقط",
+                    isErrorFeedback = true
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.withTransaction {
+                    if (sheet.isPosted) {
+                        // 1. إلغاء وعكس حركات تسوية المخزون السابقة
+                        stockMovementDao.deleteMovementsByReferenceNumber("ADJ-${sheet.voucherNumber}")
+
+                        // 2. إلغاء وعكس سجلات العجز المخزني السابقة
+                        shortageDao.deleteShortagesByVoucherNumberOrAuditId(sheet.voucherNumber, sheet.date)
+
+                        // 3. تحويل حالة السند إلى مسودة (DRAFT) للسماح بتعديل الكميات وإعادة الاعتماد
+                        val draftSheet = sheet.copy(
+                            status = InventoryAuditSheetEntity.STATUS_DRAFT,
+                            notes = "مسودة جرد معاد فتحها للتعديل بواسطة مدير النظام",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        auditSheetDao.updateAuditSheet(draftSheet)
+                    }
+                }
+
+                val draftSheet = sheet.copy(status = InventoryAuditSheetEntity.STATUS_DRAFT)
+                loadSheetToActiveAudit(draftSheet)
+
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "تم إلغاء قفل سند الجرد والتسوية رقم #${sheet.voucherNumber} بنجاح ومتاح الآن للتعديل بواسطة مدير النظام",
+                        isErrorFeedback = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        feedbackMessage = "حدث خطأ أثناء إلغاء قفل سند الجرد للتعديل: ${e.localizedMessage}",
+                        isErrorFeedback = true
+                    )
+                }
             }
         }
     }
@@ -622,6 +743,27 @@ class InventoryCountSheetViewModel(application: Application) : AndroidViewModel(
             val auditTimestamp = System.currentTimeMillis()
 
             var totalShortageValue = 0.0
+
+            // فحص وتأكيد تكافؤ قيود التسوية والتحقق الحارم قبل إجراء أي إدراج بقاعدة البيانات
+            val totalShortageCostVal = currentState.auditItems.sumOf { it.totalShortageCostValue }
+            val totalSurplusCostVal = currentState.auditItems.sumOf { it.totalSurplusCostValue }
+            val totalAuditAdjustmentCost = totalShortageCostVal + totalSurplusCostVal
+
+            val guardCheck = TrialBalanceGuard.verifyDoubleEntryBalance(
+                debitAmount = totalAuditAdjustmentCost,
+                creditAmount = totalAuditAdjustmentCost,
+                operationName = "اعتماد وتسوية الجرد الدوري"
+            )
+            if (guardCheck.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isCommittingAudit = false,
+                        feedbackMessage = guardCheck.exceptionOrNull()?.message ?: "خطأ في قيد الجرد",
+                        isErrorFeedback = true
+                    )
+                }
+                return@launch
+            }
 
             for (item in currentState.auditItems) {
                 val bookQty = item.bookStockQuantity

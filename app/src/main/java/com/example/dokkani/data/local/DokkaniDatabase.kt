@@ -77,7 +77,10 @@ import com.example.dokkani.data.local.dao.CostCenterDao
 import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.dao.GlobalGroupDao
 import com.example.dokkani.data.local.entities.GlobalGroupEntity
+import com.example.dokkani.data.local.dao.ItemAssemblyDao
 import com.example.dokkani.data.local.dao.ShortageSettlementDao
+import com.example.dokkani.data.local.entities.ItemAssemblyComponentEntity
+import com.example.dokkani.data.local.entities.ItemAssemblyEntity
 import com.example.dokkani.data.local.entities.ShortageSettlementEntity
 
 /**
@@ -118,9 +121,11 @@ import com.example.dokkani.data.local.entities.ShortageSettlementEntity
         CostCenterEntity::class,
         ShortageSettlementEntity::class,
         GlobalGroupEntity::class,
-        com.example.dokkani.data.local.entities.InventoryAuditSheetEntity::class
+        com.example.dokkani.data.local.entities.InventoryAuditSheetEntity::class,
+        ItemAssemblyEntity::class,
+        ItemAssemblyComponentEntity::class
     ],
-    version = 24,
+    version = 25,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -155,6 +160,7 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun shortageSettlementDao(): ShortageSettlementDao
     abstract fun globalGroupDao(): GlobalGroupDao
     abstract fun inventoryAuditSheetDao(): com.example.dokkani.data.local.dao.InventoryAuditSheetDao
+    abstract fun itemAssemblyDao(): ItemAssemblyDao
 
     companion object {
         @Volatile
@@ -175,6 +181,17 @@ abstract class DokkaniDatabase : RoomDatabase() {
                 instance
             }
         }
+
+        fun closeDatabase() {
+            synchronized(this) {
+                try {
+                    if (INSTANCE?.isOpen == true) {
+                        INSTANCE?.close()
+                    }
+                } catch (_: Exception) {}
+                INSTANCE = null
+            }
+        }
     }
 
     private class DokkaniDatabaseCallback(
@@ -185,11 +202,15 @@ abstract class DokkaniDatabase : RoomDatabase() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             scope.launch(Dispatchers.IO) {
-                provider()?.let { database ->
-                    database.withTransaction {
-                        // البذر النظيف فقط عند إنشاء قاعدة البيانات
-                        populateInitialGroceryData(database)
+                try {
+                    provider()?.let { database ->
+                        database.withTransaction {
+                            // البذر النظيف فقط عند إنشاء قاعدة البيانات
+                            populateInitialGroceryData(database)
+                        }
                     }
+                } catch (e: Exception) {
+                    android.util.Log.e("DokkaniDatabase", "Error populating initial grocery data safely: ${e.message}", e)
                 }
             }
         }
@@ -263,17 +284,18 @@ abstract class DokkaniDatabase : RoomDatabase() {
                 )
             )
 
-            // 4. الحسابات المالية والبنوك والمحافظ الافتراضية
+            // 4. الحسابات المالية الافتراضية وشجرة الدليل المحاسبي الرئيسية (الأصول، الخصوم، حقوق الملكية، الإيرادات، المصروفات)
             val accountDao = db.financialAccountDao()
             if (accountDao.getAccountsCount() == 0) {
                 accountDao.insertAll(
                     listOf(
+                        // 1. الأصول (Assets)
                         FinancialAccountEntity(
                             code = "10101",
                             name = "صندوق النقدية الرئيسي",
                             accountType = FinancialAccountType.CASH_DRAWER,
                             parentAccountCode = "101",
-                            parentAccountName = "101 - النقدية وما في حكمها (الصناديق)",
+                            parentAccountName = "101 - النقدية وما في حكمها (الصناديق والدرج)",
                             accountNumber = "DRAWER-01",
                             openingBalance = 0.0,
                             currentBalance = 0.0,
@@ -324,15 +346,144 @@ abstract class DokkaniDatabase : RoomDatabase() {
                             notes = "محفظة دفع رقمية"
                         ),
                         FinancialAccountEntity(
+                            code = "10401",
+                            name = "حساب ذمم العملاء والمدينون العامة",
+                            accountType = FinancialAccountType.CHART_ACCOUNT,
+                            parentAccountCode = "104",
+                            parentAccountName = "104 - الأصول المتداولة (العملاء والذمم المدينة)",
+                            accountNumber = "AR-ACC-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب تجميعي لذمم العملاء الآجلة"
+                        ),
+                        FinancialAccountEntity(
                             code = "10501",
-                            name = "أصول غير ملموسة - خلو قدم / نقل موقع متجر",
+                            name = "مخزون البضائع المتاحة للبيع",
                             accountType = FinancialAccountType.CHART_ACCOUNT,
                             parentAccountCode = "105",
-                            parentAccountName = "105 - الأصول الثابتة غير الملموسة (خلو رجل / نقل قدم)",
+                            parentAccountName = "105 - مخزون البضائع المتاحة للبيع",
+                            accountNumber = "INV-ACC-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب تقييم مخزون المنتجات والأصناف المتاحة للبيع"
+                        ),
+                        FinancialAccountEntity(
+                            code = "10601",
+                            name = "أصول غير ملموسة - خلو قدم / نقل موقع متجر",
+                            accountType = FinancialAccountType.CHART_ACCOUNT,
+                            parentAccountCode = "106",
+                            parentAccountName = "106 - الأصول الثابتة وغير الملموسة (خلو رجل/نقل قدم)",
                             accountNumber = "INTANGIBLE-GW01",
                             openingBalance = 0.0,
                             currentBalance = 0.0,
                             notes = "حساب الأصول غير الملموسة المعني بتسجيل مبالغ الخلو ونقل القدم وحقوق الانتفاع"
+                        ),
+
+                        // 2. الخصوم والالتزامات (Liabilities)
+                        FinancialAccountEntity(
+                            code = "20101",
+                            name = "حساب ذمم الموردين والدائنون العامة",
+                            accountType = FinancialAccountType.LIABILITY,
+                            parentAccountCode = "201",
+                            parentAccountName = "201 - الخصوم المتداولة والدائنون (الموردون)",
+                            accountNumber = "AP-ACC-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب تجميعي لالتزامات ومستحقات الموردين الآجلة"
+                        ),
+                        FinancialAccountEntity(
+                            code = "20201",
+                            name = "مستحقات رواتب وأجور الموظفين",
+                            accountType = FinancialAccountType.LIABILITY,
+                            parentAccountCode = "202",
+                            parentAccountName = "202 - المستحقات والتزامات الموظفين والرواتب",
+                            accountNumber = "PAYROLL-LIAB-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب التزامات ومستحقات الرواتب والأجور للعمالة"
+                        ),
+
+                        // 3. حقوق الملكية (Equity)
+                        FinancialAccountEntity(
+                            code = "30101",
+                            name = "رأس المال الافتتاحي المعتمد للمالك",
+                            accountType = FinancialAccountType.CHART_ACCOUNT,
+                            parentAccountCode = "301",
+                            parentAccountName = "301 - رأس المال الافتتاحي والحصص",
+                            accountNumber = "EQUITY-CAP-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب حقوق الملكية ورأس مال المتجر الافتتاحي"
+                        ),
+                        FinancialAccountEntity(
+                            code = "30201",
+                            name = "الأرباح والخسائر المبقاة والمرحلة",
+                            accountType = FinancialAccountType.CHART_ACCOUNT,
+                            parentAccountCode = "302",
+                            parentAccountName = "302 - الأرباح والخسائر المدورة والمبقاة",
+                            accountNumber = "RETAINED-EARN-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب تجميع الأرباح والخسائر السنوية والمرحلة"
+                        ),
+
+                        // 4. الإيرادات والمبيعات (Revenues)
+                        FinancialAccountEntity(
+                            code = "40101",
+                            name = "إيرادات مبيعات البضائع والمنتجات العامة",
+                            accountType = FinancialAccountType.CHART_ACCOUNT,
+                            parentAccountCode = "401",
+                            parentAccountName = "401 - إيرادات مبيعات البضائع والخدمات",
+                            accountNumber = "REV-SALES-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب تجميع إيرادات ومتحصلات مبيعات المتجر"
+                        ),
+                        FinancialAccountEntity(
+                            code = "40201",
+                            name = "الإيرادات والأرباح الرأسمالية المتنوعة",
+                            accountType = FinancialAccountType.CHART_ACCOUNT,
+                            parentAccountCode = "402",
+                            parentAccountName = "402 - الإيرادات والأرباح المتنوعة والأخرى",
+                            accountNumber = "REV-OTHER-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب الإيرادات الثانوية والمكاسب الرأسمالية"
+                        ),
+
+                        // 5. المصروفات والتكاليف (Expenses)
+                        FinancialAccountEntity(
+                            code = "50101",
+                            name = "تكلفة البضاعة المباعة (مشتريات)",
+                            accountType = FinancialAccountType.EXPENSE,
+                            parentAccountCode = "501",
+                            parentAccountName = "501 - تكلفة البضاعة المباعة (المشتريات)",
+                            accountNumber = "COGS-ACC-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب تكلفة مبيعات البضائع والمستلزمات"
+                        ),
+                        FinancialAccountEntity(
+                            code = "50201",
+                            name = "المصروفات التشغيلية والإيجارات والنثريات",
+                            accountType = FinancialAccountType.EXPENSE,
+                            parentAccountCode = "502",
+                            parentAccountName = "502 - المصروفات والنثريات التشغيلية والإدارية",
+                            accountNumber = "EXP-OPER-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب النفقات التشغيلية اليومية والإيجار والكهرباء"
+                        ),
+                        FinancialAccountEntity(
+                            code = "50301",
+                            name = "مصروفات أجور ورواتب العمالة",
+                            accountType = FinancialAccountType.EXPENSE,
+                            parentAccountCode = "503",
+                            parentAccountName = "503 - مصروفات الرواتب والأجور والمنافع",
+                            accountNumber = "EXP-SALARY-01",
+                            openingBalance = 0.0,
+                            currentBalance = 0.0,
+                            notes = "حساب النفقات المباشرة لأجور ورواتب الموظفين"
                         )
                     )
                 )

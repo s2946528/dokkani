@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.*
 import com.example.dokkani.domain.hr.HrPayrollEngine
 import com.example.dokkani.ui.DokkaniUiState
+import com.example.dokkani.ui.components.PaymentMethodSelector
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -62,10 +63,10 @@ fun HrAndPayrollScreen(
     onSaveAttendance: () -> Unit,
     onOpenHrTransactionDialog: (EmployeeEntity?, EmployeeTransactionType) -> Unit,
     onDismissHrTransactionDialog: () -> Unit,
-    onHrTransactionInputsChanged: (EmployeeTransactionType, String, String, PaymentMethod, EmployeeEntity?) -> Unit,
+    onHrTransactionInputsChanged: (EmployeeTransactionType, String, String, PaymentMethod, EmployeeEntity?, Long?) -> Unit,
     onSaveHrTransaction: () -> Unit,
     onGeneratePayrollRun: (Int, Int) -> Unit,
-    onPayoutPayrollRecord: (PayrollRecordEntity, PaymentMethod) -> Unit,
+    onPayoutPayrollRecord: (PayrollRecordEntity, PaymentMethod, Long?) -> Unit,
     onCancelPayrollPayout: (PayrollRecordEntity) -> Unit = {},
     onOpenAdjustSalaryDialog: (EmployeeEntity) -> Unit = {},
     onDismissAdjustSalaryDialog: () -> Unit = {},
@@ -213,6 +214,7 @@ fun HrAndPayrollScreen(
                 3 -> MonthlyPayrollTab(
                     employees = uiState.employees,
                     payrollRecords = uiState.payrollRecords,
+                    financialAccounts = uiState.financialAccounts,
                     currentUserRole = currentUserRole,
                     currencySymbol = uiState.currencySymbol,
                     selectedMonth = uiState.selectedPayrollMonth,
@@ -262,11 +264,13 @@ fun HrAndPayrollScreen(
     if (uiState.showHrTransactionDialog) {
         HrTransactionDialog(
             employees = uiState.employees,
+            financialAccounts = uiState.financialAccounts,
             selectedEmployee = uiState.selectedEmployeeForTrans,
             type = uiState.hrTransTypeInput,
             amount = uiState.hrTransAmountInput,
             notes = uiState.hrTransNotesInput,
             paymentMethod = uiState.hrTransPaymentMethod,
+            paymentAccountId = uiState.hrTransPaymentAccountId,
             isSubmitting = uiState.isSubmittingHrAction,
             currencySymbol = uiState.currencySymbol,
             onInputsChanged = onHrTransactionInputsChanged,
@@ -742,13 +746,14 @@ private fun AdvancesAndPenaltiesTab(
 private fun MonthlyPayrollTab(
     employees: List<EmployeeEntity>,
     payrollRecords: List<PayrollRecordEntity>,
+    financialAccounts: List<FinancialAccountEntity> = emptyList(),
     currentUserRole: UserRole,
     currencySymbol: String,
     selectedMonth: Int,
     selectedYear: Int,
     isSubmitting: Boolean,
     onGenerateRun: (Int, Int) -> Unit,
-    onPayoutRecord: (PayrollRecordEntity, PaymentMethod) -> Unit,
+    onPayoutRecord: (PayrollRecordEntity, PaymentMethod, Long?) -> Unit,
     onCancelPayoutRecord: (PayrollRecordEntity) -> Unit
 ) {
     var recordToCancel by remember { mutableStateOf<PayrollRecordEntity?>(null) }
@@ -865,20 +870,13 @@ private fun MonthlyPayrollTab(
                             }
 
                             if (record.status == PayrollStatus.UNPAID) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(
-                                    onClick = { onPayoutRecord(record, PaymentMethod.CASH) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("صرف صافي الراتب نقداً من الدرج", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
+                                PayrollPayoutSection(
+                                    record = record,
+                                    financialAccounts = financialAccounts,
+                                    currencySymbol = currencySymbol,
+                                    isSubmitting = isSubmitting,
+                                    onPayoutRecord = onPayoutRecord
+                                )
                             } else if (record.status == PayrollStatus.PAID) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 if (currentUserRole == UserRole.ADMIN) {
@@ -891,7 +889,7 @@ private fun MonthlyPayrollTab(
                                     ) {
                                         Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("إلغاء الصرف وعكس الحركة للدرج (ADMIN)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("إلغاء الصرف وعكس الحركة (ADMIN)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 } else {
                                     Surface(
@@ -935,7 +933,7 @@ private fun MonthlyPayrollTab(
                         color = Color(0xFF1E293B)
                     )
                     Text(
-                        text = "• المبلغ المردود للدرج: ${"%.2f".format(record.netPayableSalary)} $currencySymbol\n• سيتم إلغاء سحب النقدية وتخفيض المصروفات من تقرير الشفت (Z-Report) تلقائياً.\n• ستعود حالة الموظف إلى 'مستحق' لإمكانية تعديلها أو إعادة صرفها.",
+                        text = "• المبلغ المردود للحساب: ${"%.2f".format(record.netPayableSalary)} $currencySymbol\n• سيتم إلغاء السحب وتخفيض المصروفات وعكس القيد المحاسبي تلقائياً.\n• ستعود حالة الموظف إلى 'مستحق' لإكانية إعادة صرفها بمكون طرق الدفع.",
                         fontSize = 12.sp,
                         color = Color(0xFF475569),
                         lineHeight = 18.sp
@@ -963,6 +961,88 @@ private fun MonthlyPayrollTab(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun PayrollPayoutSection(
+    record: PayrollRecordEntity,
+    financialAccounts: List<FinancialAccountEntity>,
+    currencySymbol: String,
+    isSubmitting: Boolean,
+    onPayoutRecord: (PayrollRecordEntity, PaymentMethod, Long?) -> Unit
+) {
+    var selectedMethod by remember { mutableStateOf(PaymentMethod.CASH) }
+    var selectedAccountId by remember { mutableStateOf<Long?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Payments,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "طرق الدفع والصرف الديناميكية:",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        PaymentMethodSelector(
+            selectedMethod = selectedMethod,
+            onMethodSelected = { method ->
+                selectedMethod = method
+            },
+            financialAccounts = financialAccounts,
+            selectedAccountId = selectedAccountId,
+            onAccountSelected = { accId ->
+                selectedAccountId = accId
+            },
+            allowCredit = false,
+            allowMulti = false,
+            hideEmptyAccounts = true,
+            currencySymbol = currencySymbol,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Button(
+            onClick = { onPayoutRecord(record, selectedMethod, selectedAccountId) },
+            enabled = !isSubmitting,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("btn_payout_payroll_${record.id}")
+        ) {
+            if (isSubmitting) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+            } else {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "اعتماد وصرف صافي الراتب (${"%.2f".format(record.netPayableSalary)} $currencySymbol)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 
@@ -1166,14 +1246,16 @@ private fun MarkAttendanceDialog(
 @Composable
 private fun HrTransactionDialog(
     employees: List<EmployeeEntity>,
+    financialAccounts: List<FinancialAccountEntity> = emptyList(),
     selectedEmployee: EmployeeEntity?,
     type: EmployeeTransactionType,
     amount: String,
     notes: String,
     paymentMethod: PaymentMethod,
+    paymentAccountId: Long? = null,
     isSubmitting: Boolean,
     currencySymbol: String,
-    onInputsChanged: (EmployeeTransactionType, String, String, PaymentMethod, EmployeeEntity?) -> Unit,
+    onInputsChanged: (EmployeeTransactionType, String, String, PaymentMethod, EmployeeEntity?, Long?) -> Unit,
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -1226,7 +1308,7 @@ private fun HrTransactionDialog(
                                     }
                                 },
                                 onClick = {
-                                    onInputsChanged(type, amount, notes, paymentMethod, emp)
+                                    onInputsChanged(type, amount, notes, paymentMethod, emp, paymentAccountId)
                                     expandedDropdown = false
                                 }
                             )
@@ -1240,7 +1322,7 @@ private fun HrTransactionDialog(
                     FilterChip(
                         selected = type == EmployeeTransactionType.ADVANCE,
                         onClick = { 
-                            onInputsChanged(EmployeeTransactionType.ADVANCE, amount, notes, PaymentMethod.CASH, selectedEmployee) 
+                            onInputsChanged(EmployeeTransactionType.ADVANCE, amount, notes, PaymentMethod.CASH, selectedEmployee, paymentAccountId) 
                         },
                         label = { Text("سلفة نقدية", fontSize = 11.sp) },
                         leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, modifier = Modifier.size(14.dp)) }
@@ -1248,7 +1330,7 @@ private fun HrTransactionDialog(
                     FilterChip(
                         selected = type == EmployeeTransactionType.PENALTY,
                         onClick = { 
-                            onInputsChanged(EmployeeTransactionType.PENALTY, amount, notes, PaymentMethod.CREDIT, selectedEmployee) 
+                            onInputsChanged(EmployeeTransactionType.PENALTY, amount, notes, PaymentMethod.CREDIT, selectedEmployee, null) 
                         },
                         label = { Text("خصم / جزاء", fontSize = 11.sp) },
                         leadingIcon = { Icon(Icons.Default.RemoveCircleOutline, contentDescription = null, modifier = Modifier.size(14.dp)) }
@@ -1256,7 +1338,7 @@ private fun HrTransactionDialog(
                     FilterChip(
                         selected = type == EmployeeTransactionType.BONUS,
                         onClick = { 
-                            onInputsChanged(EmployeeTransactionType.BONUS, amount, notes, paymentMethod, selectedEmployee) 
+                            onInputsChanged(EmployeeTransactionType.BONUS, amount, notes, paymentMethod, selectedEmployee, paymentAccountId) 
                         },
                         label = { Text("مكافأة / حافز", fontSize = 11.sp) },
                         leadingIcon = { Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(14.dp)) }
@@ -1266,41 +1348,49 @@ private fun HrTransactionDialog(
                 // 3. المبلغ
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { onInputsChanged(type, it, notes, paymentMethod, selectedEmployee) },
+                    onValueChange = { onInputsChanged(type, it, notes, paymentMethod, selectedEmployee, paymentAccountId) },
                     label = { Text("المبلغ الفعلي ($currencySymbol)*") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 4. طريقة الصرف والتأثير على الدرج
+                // 4. طريقة الصرف ومصدر السداد المالي (الطرف الدائن في القيد)
                 if (type == EmployeeTransactionType.ADVANCE || type == EmployeeTransactionType.BONUS) {
-                    Text("طريقة الصرف والتأثير المحاسبي:*", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF334155))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = paymentMethod == PaymentMethod.CASH,
-                            onClick = { onInputsChanged(type, amount, notes, PaymentMethod.CASH, selectedEmployee) },
-                            label = { Text("صرف نقدي من الدرج", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        FilterChip(
-                            selected = paymentMethod == PaymentMethod.CREDIT,
-                            onClick = { onInputsChanged(type, amount, notes, PaymentMethod.CREDIT, selectedEmployee) },
-                            label = { Text("قيد إداري مؤجل", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    Text("طريقة الصرف ومصدر السداد المالي (الطرف الدائن):*", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF334155))
+
+                    PaymentMethodSelector(
+                        selectedMethod = paymentMethod,
+                        onMethodSelected = { selectedM ->
+                            val defaultAcc = financialAccounts.filter { acc ->
+                                when (selectedM) {
+                                    PaymentMethod.BANK_TRANSFER, PaymentMethod.EXCHANGE_NETWORK -> acc.accountType == FinancialAccountType.BANK
+                                    PaymentMethod.E_WALLET -> acc.accountType == FinancialAccountType.E_WALLET
+                                    PaymentMethod.POS_CARD, PaymentMethod.MADA -> acc.accountType == FinancialAccountType.BANK || acc.accountType == FinancialAccountType.E_WALLET
+                                    else -> acc.accountType == FinancialAccountType.CASH_DRAWER || acc.code == "10101"
+                                }
+                            }.firstOrNull { it.isDefault } ?: financialAccounts.firstOrNull()
+
+                            onInputsChanged(type, amount, notes, selectedM, selectedEmployee, defaultAcc?.id)
+                        },
+                        financialAccounts = financialAccounts,
+                        selectedAccountId = paymentAccountId,
+                        onAccountSelected = { accId ->
+                            onInputsChanged(type, amount, notes, paymentMethod, selectedEmployee, accId)
+                        },
+                        allowCredit = false,
+                        allowMulti = false,
+                        hideEmptyAccounts = true,
+                        currencySymbol = currencySymbol,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 // 5. بطاقة تنبيه وشرح الأثر المحاسبي تلقائياً
                 Card(
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (paymentMethod == PaymentMethod.CASH && type != EmployeeTransactionType.PENALTY) 
-                            Color(0xFFEFF6FF) else Color(0xFFFFF7ED)
+                        containerColor = if (type == EmployeeTransactionType.PENALTY) Color(0xFFFFF7ED) else Color(0xFFEFF6FF)
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1309,28 +1399,25 @@ private fun HrTransactionDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = if (paymentMethod == PaymentMethod.CASH && type != EmployeeTransactionType.PENALTY) 
-                                Icons.Default.PointOfSale else Icons.Default.Info,
+                            imageVector = if (type == EmployeeTransactionType.PENALTY) Icons.Default.Info else Icons.Default.PointOfSale,
                             contentDescription = null,
-                            tint = if (paymentMethod == PaymentMethod.CASH && type != EmployeeTransactionType.PENALTY) 
-                                Color(0xFF1D4ED8) else Color(0xFFC2410C),
+                            tint = if (type == EmployeeTransactionType.PENALTY) Color(0xFFC2410C) else Color(0xFF1D4ED8),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = when {
-                                type == EmployeeTransactionType.PENALTY -> 
-                                    "📝 خصم إداري: سيتم قيده كبند استقطاع يُخصم تلقائياً عند إعداد كشف الرواتب الشهري القادم دون مساس بنقدية الخزينة الحالية."
-                                paymentMethod == PaymentMethod.CASH && type == EmployeeTransactionType.ADVANCE -> 
-                                    "⚡ صرف نقدي: سيتم تسليم المبلغ للموظف وقيده كمصروف درج فوراً في تقرير إغلاق الشفت (Z-Report) تحت 'سلف ومسحوبات عمال' وتخفيض النقدية المتوقعة بالصندوق."
-                                paymentMethod == PaymentMethod.CASH && type == EmployeeTransactionType.BONUS -> 
-                                    "⚡ صرف نقدي: سيتم تسليم المكافأة للموظف كاش وقيدها كمصروفات رواتب نقدية في شفت الخزينة الحالي."
-                                else -> 
-                                    "📝 قيد إداري مؤجل: سيتم تسجيل المبلغ كحق أو استقطاع مؤجل في ملف الموظف ليدرج في كشف مسير الرواتب دون التأثير على الدرج اليوم."
+                            text = when (type) {
+                                EmployeeTransactionType.PENALTY ->
+                                    "📝 خصم إداري: سيتم قيده كبند استقطاع يُخصم تلقائياً عند إعداد كشف الرواتب الشهري القادم دون مساس برصيد الخزينة."
+                                EmployeeTransactionType.ADVANCE ->
+                                    "⚡ سلفة مالية: سيتم الخصم مباشرة من رصيد الحساب المالي المحدد وقيدها في السجلات وسجل الموظف."
+                                EmployeeTransactionType.BONUS ->
+                                    "⚡ مكافأة/حافز: سيتم صرف المبلغ من الحساب المالي المحدد وقيدها كمصروف رواتب في السجلات المحاسبية."
+                                else ->
+                                    "📝 معاملة موظف: سيتم التأثير على الحساب المالي المحدد وتسجيل القيد المحاسبي المزدوج."
                             },
                             fontSize = 11.sp,
-                            color = if (paymentMethod == PaymentMethod.CASH && type != EmployeeTransactionType.PENALTY) 
-                                Color(0xFF1E40AF) else Color(0xFF9A3412)
+                            color = if (type == EmployeeTransactionType.PENALTY) Color(0xFF9A3412) else Color(0xFF1E40AF)
                         )
                     }
                 }
@@ -1338,7 +1425,7 @@ private fun HrTransactionDialog(
                 // 6. ملاحظات وسبب المعاملة
                 OutlinedTextField(
                     value = notes,
-                    onValueChange = { onInputsChanged(type, amount, it, paymentMethod, selectedEmployee) },
+                    onValueChange = { onInputsChanged(type, amount, it, paymentMethod, selectedEmployee, paymentAccountId) },
                     label = { Text("السبب والملاحظات (تأخير، عجز، سلفة طارئة...)") },
                     modifier = Modifier.fillMaxWidth()
                 )

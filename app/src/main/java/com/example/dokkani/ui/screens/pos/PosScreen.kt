@@ -75,6 +75,7 @@ fun PosScreen(
 
     var showCashBreakdownDialog by remember { mutableStateOf(false) }
     var showBankBreakdownDialog by remember { mutableStateOf(false) }
+    var showCreditBreakdownDialog by remember { mutableStateOf(false) }
 
     var showAddPartyDialog by remember { mutableStateOf(false) }
     var newPartyName by remember { mutableStateOf("") }
@@ -133,91 +134,28 @@ fun PosScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // محدد نوع العملية الحالية بدعم الألوان المتميزة للـ 6 عمليات
-                        var opMenuExpanded by remember { mutableStateOf(false) }
-                        Box {
-                            Surface(
-                                onClick = { opMenuExpanded = true },
-                                shape = RoundedCornerShape(8.dp),
-                                color = activeOpTheme.primary
+                        // تثبيت واجهة البيع المباشر الرسمية
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = activeOpTheme.primary
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = when (uiState.activeOperation) {
-                                            PosOperation.SALE -> Icons.Default.PointOfSale
-                                            PosOperation.PURCHASE -> Icons.Default.ShoppingBag
-                                            PosOperation.SALE_RETURN -> Icons.Default.AssignmentReturn
-                                            PosOperation.PURCHASE_RETURN -> Icons.Default.RemoveShoppingCart
-                                            PosOperation.RECEIPT -> Icons.Default.ArrowDownward
-                                            PosOperation.EXPENSE -> Icons.Default.ArrowUpward
-                                        },
-                                        contentDescription = null,
-                                        tint = activeOpTheme.onPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = uiState.activeOperation.titleArabic,
-                                        color = activeOpTheme.onPrimary,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = "تغيير نوع العملية",
-                                        tint = activeOpTheme.onPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = opMenuExpanded,
-                                onDismissRequest = { opMenuExpanded = false }
-                            ) {
-                                PosOperation.entries.forEach { op ->
-                                    val opTheme = PosOperationTheme.getColors(op)
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Surface(
-                                                    shape = CircleShape,
-                                                    color = opTheme.primary,
-                                                    modifier = Modifier.size(12.dp)
-                                                ) {}
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Icon(
-                                                    imageVector = when (op) {
-                                                        PosOperation.SALE -> Icons.Default.PointOfSale
-                                                        PosOperation.PURCHASE -> Icons.Default.ShoppingBag
-                                                        PosOperation.SALE_RETURN -> Icons.Default.AssignmentReturn
-                                                        PosOperation.PURCHASE_RETURN -> Icons.Default.RemoveShoppingCart
-                                                        PosOperation.RECEIPT -> Icons.Default.ArrowDownward
-                                                        PosOperation.EXPENSE -> Icons.Default.ArrowUpward
-                                                    },
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp),
-                                                    tint = opTheme.primary
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    op.titleArabic,
-                                                    fontWeight = if (uiState.activeOperation == op) FontWeight.Bold else FontWeight.Normal,
-                                                    fontSize = 13.sp,
-                                                    color = if (uiState.activeOperation == op) opTheme.primary else MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-                                        },
-                                        onClick = {
-                                            viewModel.selectOperation(op)
-                                            opMenuExpanded = false
-                                        }
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.PointOfSale,
+                                    contentDescription = null,
+                                    tint = activeOpTheme.onPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "واجهة البيع المباشر",
+                                    color = activeOpTheme.onPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
                             }
                         }
 
@@ -308,93 +246,6 @@ fun PosScreen(
                         }
                     }
 
-                    // مؤشر بصري علوي بارز ومستقل لتأكيد نوع المعاملة الحالية ومنع الأخطاء البشرية
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = activeOpTheme.primaryContainer,
-                        border = BorderStroke(1.dp, activeOpTheme.borderAccent.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = activeOpTheme.primary,
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = when (uiState.activeOperation) {
-                                                PosOperation.SALE -> Icons.Default.PointOfSale
-                                                PosOperation.PURCHASE -> Icons.Default.ShoppingBag
-                                                PosOperation.SALE_RETURN -> Icons.Default.AssignmentReturn
-                                                PosOperation.PURCHASE_RETURN -> Icons.Default.RemoveShoppingCart
-                                                PosOperation.RECEIPT -> Icons.Default.ArrowDownward
-                                                PosOperation.EXPENSE -> Icons.Default.ArrowUpward
-                                            },
-                                            contentDescription = null,
-                                            tint = activeOpTheme.onPrimary,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-                                }
-
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "العملية النشطة:",
-                                            fontSize = 10.sp,
-                                            color = activeOpTheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = uiState.activeOperation.titleArabic,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = activeOpTheme.onPrimaryContainer
-                                        )
-                                    }
-                                    Text(
-                                        text = when (uiState.activeOperation) {
-                                            PosOperation.SALE -> "فاتورة بيع وقبض مبيعات نقدية/آجلة (ثيم أخضر)"
-                                            PosOperation.PURCHASE -> "فاتورة توريد ومشتريات مخزنية (ثيم أزرق)"
-                                            PosOperation.SALE_RETURN -> "مرتجع مبيعات للعميل وإعادة للمخزن (ثيم أحمر داكن)"
-                                            PosOperation.PURCHASE_RETURN -> "مرتجع مشتريات للمورد وخصم من المخزن (ثيم برتقالي)"
-                                            PosOperation.RECEIPT -> "سند قبض نقدية وسداد ديون العملاء (ثيم تركواز/سماوي)"
-                                            PosOperation.EXPENSE -> "سند صرف نقدية ومصروفات/سداد الموردين (ثيم بنفسجي)"
-                                        },
-                                        fontSize = 10.sp,
-                                        color = activeOpTheme.onPrimaryContainer.copy(alpha = 0.85f)
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = activeOpTheme.badgeContainer
-                            ) {
-                                Text(
-                                    text = uiState.activeOperation.code,
-                                    color = activeOpTheme.onBadgeContainer,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-
                     // نافذة ملخص الشفت والتقرير
                     if (showShiftSummaryModal) {
                         PosShiftSummaryModal(
@@ -413,7 +264,7 @@ fun PosScreen(
                         currencySymbol = uiState.currencySymbol,
                         onOpenCashBreakdown = { showCashBreakdownDialog = true },
                         onOpenBankBreakdown = { showBankBreakdownDialog = true },
-                        onOpenShiftCloseDialog = { viewModel.openShiftCloseDialog() },
+                        onOpenCreditBreakdown = { showCreditBreakdownDialog = true },
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
 
@@ -782,6 +633,23 @@ fun PosScreen(
                 currencySymbol = uiState.currencySymbol,
                 onDismiss = { showBankBreakdownDialog = false },
                 onRefresh = { viewModel.refreshData() }
+            )
+        }
+
+        // نافذة تفاصيل حركة الآجل والذمم
+        if (showCreditBreakdownDialog) {
+            val totalCreditSales = uiState.currentShift?.totalCreditSales ?: 0.0
+            val totalCreditPurchases = remember(uiState.transactionRecords) {
+                uiState.transactionRecords
+                    .filter { it.operation == PosOperation.PURCHASE && it.paymentMethod == PaymentMethod.CREDIT }
+                    .sumOf { it.amount }
+            }
+            com.example.dokkani.ui.components.CreditBreakdownDialog(
+                currentShift = uiState.currentShift,
+                totalCreditSales = totalCreditSales,
+                totalCreditPurchases = totalCreditPurchases,
+                currencySymbol = uiState.currencySymbol,
+                onDismiss = { showCreditBreakdownDialog = false }
             )
         }
     }

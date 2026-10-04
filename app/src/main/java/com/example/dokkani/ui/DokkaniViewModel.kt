@@ -56,6 +56,7 @@ import com.example.dokkani.domain.reports.BalanceSheetReport
 import com.example.dokkani.domain.reports.ProfitAndLossReport
 import com.example.dokkani.domain.reports.TopProductsReport
 import com.example.dokkani.domain.reports.TrialBalanceReport
+import com.example.dokkani.domain.reports.TrialBalanceGuard
 import com.example.dokkani.domain.security.ActivationPlan
 import com.example.dokkani.domain.security.DeviceFingerprintManager
 import com.example.dokkani.domain.security.DokkaniKeyGenerator
@@ -164,6 +165,11 @@ data class DokkaniUiState(
     val expensePaidToInput: String = "",
     val expenseNotesInput: String = "",
     val expensePaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val expensePaymentAccountId: Long? = null,
+    val expenseTransactionRef: String = "",
+    val expenseReceiptImagePath: String? = null,
+    val expenseSecondaryMethod: PaymentMethod? = null,
+    val expenseSecondaryPaidAmount: Double = 0.0,
     val isSubmittingExpense: Boolean = false,
     val reconciliationResult: CashReconciliationResult? = null,
     val drawerOpeningCashInput: String = "200.0",
@@ -274,6 +280,8 @@ data class DokkaniUiState(
     val accountToDelete: FinancialAccountEntity? = null,
     val accountsSearchQuery: String = "",
     val accountsFilterType: FinancialAccountType? = null,
+    val showZeroAccountsInChart: Boolean = true,
+    val selectedChartAccountNode: FinancialAccountEntity? = null,
 
     // HR & Payroll (إدارة العمال والموظفين والرواتب)
     val employees: List<EmployeeEntity> = emptyList(),
@@ -302,6 +310,7 @@ data class DokkaniUiState(
     val hrTransAmountInput: String = "",
     val hrTransNotesInput: String = "",
     val hrTransPaymentMethod: PaymentMethod = PaymentMethod.CASH,
+    val hrTransPaymentAccountId: Long? = null,
     val showAdjustSalaryDialog: Boolean = false,
     val selectedEmployeeForSalaryAdjust: EmployeeEntity? = null,
     val newBasePayRateInput: String = "",
@@ -311,7 +320,8 @@ data class DokkaniUiState(
     val isSubmittingHrAction: Boolean = false,
     val selectedPayrollMonth: Int = Calendar.getInstance().get(Calendar.MONTH) + 1,
     val selectedPayrollYear: Int = Calendar.getInstance().get(Calendar.YEAR),
-    val hrActionErrorMessage: String? = null
+    val hrActionErrorMessage: String? = null,
+    val accountingErrorMessage: String? = null
 ) {
     val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.ي"
     val currencyName: String get() = baseCurrency?.name ?: "الريال اليمني"
@@ -505,6 +515,17 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(selectedTab = index) }
     }
 
+    fun selectTabByScreenKey(screenKey: String) {
+        val targetIndex = when (screenKey.lowercase()) {
+            "inventory", "products" -> 8
+            "shift", "cashier" -> 11
+            "reports", "analytics" -> 17
+            "backup", "settings" -> 23
+            else -> 0
+        }
+        selectTab(targetIndex)
+    }
+
     // --- Cash & Expenses Actions ---
     fun selectCashSubTab(index: Int) {
         _uiState.update { it.copy(cashSubTab = index) }
@@ -541,6 +562,30 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 expensePaymentMethod = method
             )
         }
+    }
+
+    fun updateExpensePaymentMethod(method: PaymentMethod) {
+        _uiState.update { it.copy(expensePaymentMethod = method) }
+    }
+
+    fun updateExpensePaymentAccountId(accountId: Long?) {
+        _uiState.update { it.copy(expensePaymentAccountId = accountId) }
+    }
+
+    fun updateExpenseTransactionRef(ref: String) {
+        _uiState.update { it.copy(expenseTransactionRef = ref) }
+    }
+
+    fun updateExpenseReceiptImagePath(path: String?) {
+        _uiState.update { it.copy(expenseReceiptImagePath = path) }
+    }
+
+    fun updateExpenseSecondaryMethod(method: PaymentMethod?) {
+        _uiState.update { it.copy(expenseSecondaryMethod = method) }
+    }
+
+    fun updateExpenseSecondaryPaidAmount(amount: Double) {
+        _uiState.update { it.copy(expenseSecondaryPaidAmount = amount) }
     }
 
     private suspend fun getOrCreateOpenShift(dao: CashShiftDao): CashShiftEntity {
@@ -585,17 +630,60 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 category = state.expenseCategoryInput,
                 amount = amount,
                 paymentMethod = state.expensePaymentMethod,
+                paymentAccountId = state.expensePaymentAccountId,
+                transactionRef = state.expenseTransactionRef,
+                date = System.currentTimeMillis(),
                 paidTo = state.expensePaidToInput,
                 notes = state.expenseNotesInput
             )
             db.expenseDao().insertExpense(exp)
 
-            // تحديث عهدة الصندوق للشفت المفتوح عند المصروف النقدي
+            // 1. تحديث عهدة الصندوق للشفت المفتوح عند المصروف النقدي
             if (state.expensePaymentMethod == PaymentMethod.CASH) {
                 val openShift = getOrCreateOpenShift(db.cashShiftDao())
                 val newExpenses = openShift.totalCashExpenses + amount
                 db.cashShiftDao().updateExpenses(openShift.id, newExpenses)
             }
+
+            // 2. تحديث رصيد الحساب المالي المحدد بالخصم
+            state.expensePaymentAccountId?.let { accId ->
+                db.financialAccountDao().updateBalance(accId, -amount)
+            }
+
+            // 3. ربط وتحديث حساب المصروف في شجرة الدليل المحاسبي (القسم 5 - المصروفات والتكاليف)
+            try {
+                val existingAccounts = db.financialAccountDao().getAllAccountsSync()
+                val targetParentCode = if (state.expenseCategoryInput.contains("رواتب") || state.expenseCategoryInput.contains("أجور")) "503" else "502"
+                val targetParentName = if (targetParentCode == "503") "503 - مصروفات الرواتب والأجور والمنافع" else "502 - المصروفات والنثريات التشغيلية والإدارية"
+
+                val matchingAcc = existingAccounts.firstOrNull { acc ->
+                    acc.name.contains(state.expenseCategoryInput) || acc.notes.contains(state.expenseCategoryInput) || acc.name == "مصروف ${state.expenseCategoryInput}"
+                }
+
+                if (matchingAcc != null) {
+                    db.financialAccountDao().updateBalance(matchingAcc.id, amount)
+                } else {
+                    val subCount = existingAccounts.count { it.parentAccountCode == targetParentCode } + 1
+                    val newCode = "${targetParentCode}${String.format(java.util.Locale.US, "%02d", subCount)}"
+                    db.financialAccountDao().insertAccount(
+                        com.example.dokkani.data.local.entities.FinancialAccountEntity(
+                            code = newCode,
+                            name = if (state.expenseCategoryInput.startsWith("مصروف")) state.expenseCategoryInput else "مصروف ${state.expenseCategoryInput}",
+                            accountType = com.example.dokkani.data.local.entities.FinancialAccountType.EXPENSE,
+                            parentAccountCode = targetParentCode,
+                            parentAccountName = targetParentName,
+                            isMainAccount = false,
+                            level = 3,
+                            finalAccountMapping = "PROFIT_LOSS",
+                            debitCreditNature = "DEBIT",
+                            currentBalance = amount,
+                            openingBalance = 0.0,
+                            isActive = true,
+                            notes = "حساب مصروف تشغيلي فئة ${state.expenseCategoryInput}"
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
 
             _uiState.update {
                 it.copy(
@@ -603,7 +691,12 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     showAddExpenseDialog = false,
                     expenseAmountInput = "",
                     expensePaidToInput = "",
-                    expenseNotesInput = ""
+                    expenseNotesInput = "",
+                    expensePaymentAccountId = null,
+                    expenseTransactionRef = "",
+                    expenseReceiptImagePath = null,
+                    expenseSecondaryMethod = null,
+                    expenseSecondaryPaidAmount = 0.0
                 )
             }
         }
@@ -909,6 +1002,21 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             val now = System.currentTimeMillis()
             val party = db.partyDao().getPartyById(partyId)
             val isSupplier = party?.type == PartyType.SUPPLIER
+
+            val guardCheck = TrialBalanceGuard.verifyDoubleEntryBalance(
+                debitAmount = amount,
+                creditAmount = amount,
+                operationName = if (isSupplier) "سند الصرف النقدي/البنكي للمورد" else "سند القبض النقدي/البنكي من العميل"
+            )
+            if (guardCheck.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isSubmittingVoucher = false,
+                        accountingErrorMessage = guardCheck.exceptionOrNull()?.message ?: "خطأ في قيد سند الدفع"
+                    )
+                }
+                return@launch
+            }
 
             val vType = if (isSupplier) VoucherType.PAYMENT else VoucherType.RECEIPT
             val prefix = if (isSupplier) "PAY-" else "RCV-"
@@ -1303,6 +1411,19 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         costCenterId: Long = 1L
     ) {
         if (productId <= 0 || quantity <= 0 || totalCost <= 0) return
+        val doubleEntryCheck = TrialBalanceGuard.verifyDoubleEntryBalance(
+            debitAmount = totalCost,
+            creditAmount = totalCost,
+            operationName = "تسجيل قيد التالف والهادر المخزني"
+        )
+        if (doubleEntryCheck.isFailure) {
+            _uiState.update {
+                it.copy(
+                    accountingErrorMessage = doubleEntryCheck.exceptionOrNull()?.message ?: "خطأ في قيد التالف والهادر المخزني"
+                )
+            }
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {
                 val now = System.currentTimeMillis()
@@ -2330,6 +2451,20 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             return
         }
 
+        val doubleEntryCheck = TrialBalanceGuard.verifyDoubleEntryBalance(
+            debitAmount = amount,
+            creditAmount = amount,
+            operationName = "تأسيس القيد الافتتاحي ورأس المال"
+        )
+        if (doubleEntryCheck.isFailure) {
+            _uiState.update {
+                it.copy(
+                    accountingErrorMessage = doubleEntryCheck.exceptionOrNull()?.message ?: "خطأ في القيد الافتتاحي"
+                )
+            }
+            return
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             db.withTransaction {
                 val now = System.currentTimeMillis()
@@ -2847,6 +2982,14 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(accountsFilterType = type) }
     }
 
+    fun toggleShowZeroAccountsInChart() {
+        _uiState.update { it.copy(showZeroAccountsInChart = !it.showZeroAccountsInChart) }
+    }
+
+    fun setSelectedChartAccountNode(account: FinancialAccountEntity?) {
+        _uiState.update { it.copy(selectedChartAccountNode = account) }
+    }
+
     fun openAddAccountDialog() {
         _uiState.update {
             it.copy(
@@ -2926,10 +3069,16 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             }
 
             val hasBalance = abs(account.currentBalance) > 0.001 || abs(account.openingBalance) > 0.001
-            val totalRecords = invCount + vouchCount + expCount + (if (hasBalance) 1 else 0)
+            val childAccountsCount = _uiState.value.financialAccounts.count { it.parentAccountCode == account.code }
+            val totalRecords = invCount + vouchCount + expCount + childAccountsCount + (if (hasBalance) 1 else 0)
 
             if (totalRecords > 0) {
                 // منع الحذف وتفعيل شرط الأمان المحاسبي
+                val errorMsg = if (childAccountsCount > 0) {
+                    "عذراً، لا يمكن حذف هذا الحساب الرئيسي لأنه يمتلك ($childAccountsCount) حسابات فرعية مقترنة به، يرجى حذف الحسابات الفرعية أولاً."
+                } else {
+                    "عذراً، لا يمكن حذف هذا الحساب لوجود حركات وسجلات مالية مرتبطة به، يمكنك تعطيله بدلاً من ذلك."
+                }
                 val result = AccountUsageCheckResult(
                     accountName = account.name,
                     accountCode = account.code,
@@ -2939,7 +3088,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     vouchersCount = vouchCount,
                     expensesCount = expCount,
                     currentBalance = account.currentBalance,
-                    message = "عذراً، لا يمكن حذف هذا الحساب لوجود حركات وسجلات مالية مرتبطة به، يمكنك تعطيله بدلاً من ذلك.",
+                    message = errorMsg,
                     isFinancialAccount = true,
                     financialAccount = account
                 )
@@ -3169,6 +3318,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun openHrTransactionDialog(employee: EmployeeEntity? = null, type: EmployeeTransactionType = EmployeeTransactionType.ADVANCE) {
         val defaultEmp = employee ?: _uiState.value.employees.firstOrNull { it.isActive }
+        val defaultAccId = _uiState.value.financialAccounts.firstOrNull { it.isActive && (it.accountType == FinancialAccountType.CASH_DRAWER || it.code == "10101") }?.id
         _uiState.update {
             it.copy(
                 showHrTransactionDialog = true,
@@ -3176,7 +3326,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 hrTransTypeInput = type,
                 hrTransAmountInput = "",
                 hrTransNotesInput = "",
-                hrTransPaymentMethod = PaymentMethod.CASH
+                hrTransPaymentMethod = PaymentMethod.CASH,
+                hrTransPaymentAccountId = defaultAccId
             )
         }
     }
@@ -3190,15 +3341,18 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         amount: String,
         notes: String,
         method: PaymentMethod,
-        employee: EmployeeEntity? = _uiState.value.selectedEmployeeForTrans
+        employee: EmployeeEntity? = _uiState.value.selectedEmployeeForTrans,
+        paymentAccountId: Long? = _uiState.value.hrTransPaymentAccountId
     ) {
+        val safeMethod = if (method == PaymentMethod.CREDIT) PaymentMethod.CASH else method
         _uiState.update {
             it.copy(
                 hrTransTypeInput = type,
                 hrTransAmountInput = amount,
                 hrTransNotesInput = notes,
-                hrTransPaymentMethod = method,
-                selectedEmployeeForTrans = employee
+                hrTransPaymentMethod = safeMethod,
+                selectedEmployeeForTrans = employee,
+                hrTransPaymentAccountId = paymentAccountId
             )
         }
     }
@@ -3281,6 +3435,30 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
 
+            // خصم القيمة وتحديد الحساب المالي المباشر في الدليل المحاسبي
+            val targetAccountId = state.hrTransPaymentAccountId ?: state.financialAccounts.firstOrNull {
+                if (state.hrTransPaymentMethod.isElectronic) it.accountType == FinancialAccountType.BANK || it.accountType == FinancialAccountType.E_WALLET
+                else it.accountType == FinancialAccountType.CASH_DRAWER || it.code == "10101"
+            }?.id
+
+            // التحقق من رصيد الحساب البنكي/المحفظة عند اختيار طريقة دفع إلكترونية
+            if (state.hrTransPaymentMethod.isElectronic && targetAccountId != null &&
+                (state.hrTransTypeInput == EmployeeTransactionType.ADVANCE || state.hrTransTypeInput == EmployeeTransactionType.BONUS)
+            ) {
+                val targetAcc = state.financialAccounts.find { it.id == targetAccountId }
+                if (targetAcc != null && targetAcc.currentBalance < amount) {
+                    _uiState.update {
+                        it.copy(
+                            isSubmittingHrAction = false,
+                            hrActionErrorMessage = "عذراً! رصيد الحساب المالي المختار (${targetAcc.name}) الحالي (%.2f %s) غير كافٍ لصرف المعاملة (%.2f %s).".format(
+                                targetAcc.currentBalance, symbol, amount, symbol
+                            )
+                        )
+                    }
+                    return@launch
+                }
+            }
+
             val trans = EmployeeTransactionEntity(
                 employeeId = emp.id,
                 type = state.hrTransTypeInput,
@@ -3293,10 +3471,22 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             )
             db.employeeTransactionDao().insertTransaction(trans)
 
-            // الخصم والسيطرة النقدية: تسجيل سلفة الموظف أو صرف الحافز النقدي كمصروف درج يؤثر على تقرير Z
-            if (state.hrTransPaymentMethod == PaymentMethod.CASH &&
-                (state.hrTransTypeInput == EmployeeTransactionType.ADVANCE || state.hrTransTypeInput == EmployeeTransactionType.BONUS)
-            ) {
+            if (state.hrTransTypeInput == EmployeeTransactionType.ADVANCE || state.hrTransTypeInput == EmployeeTransactionType.BONUS) {
+                targetAccountId?.let { accId ->
+                    db.financialAccountDao().updateBalance(accId, -amount)
+                }
+
+                if (state.hrTransPaymentMethod == PaymentMethod.CASH) {
+                    val openShift = db.cashShiftDao().getOpenShift()
+                    if (openShift != null) {
+                        if (state.hrTransTypeInput == EmployeeTransactionType.ADVANCE) {
+                            db.cashShiftDao().updateStaffAdvances(openShift.id, openShift.totalStaffAdvances + amount)
+                        } else if (state.hrTransTypeInput == EmployeeTransactionType.BONUS) {
+                            db.cashShiftDao().updateExpenses(openShift.id, openShift.totalCashExpenses + amount)
+                        }
+                    }
+                }
+
                 val cat = when (state.hrTransTypeInput) {
                     EmployeeTransactionType.ADVANCE -> ExpenseCategories.STAFF_ADVANCES
                     EmployeeTransactionType.BONUS -> ExpenseCategories.SALARIES
@@ -3306,7 +3496,8 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     expenseNumber = "HR-EXP-${System.currentTimeMillis() % 10000}",
                     category = cat,
                     amount = amount,
-                    paymentMethod = PaymentMethod.CASH,
+                    paymentMethod = state.hrTransPaymentMethod,
+                    paymentAccountId = targetAccountId,
                     paidTo = emp.name,
                     notes = trans.notes
                 )
@@ -3315,6 +3506,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
             val updatedTrans = db.employeeTransactionDao().getAllTransactionsSync()
             val updatedExpenses = db.expenseDao().getAllExpensesSync()
+            val updatedAccounts = db.financialAccountDao().getAllAccountsSync()
 
             _uiState.update {
                 it.copy(
@@ -3323,6 +3515,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     selectedEmployeeForTrans = null,
                     employeeTransactions = updatedTrans,
                     expenses = updatedExpenses,
+                    financialAccounts = updatedAccounts,
                     hrActionErrorMessage = null
                 )
             }
@@ -3353,7 +3546,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun payoutPayrollRecord(record: PayrollRecordEntity, method: PaymentMethod = PaymentMethod.CASH) {
+    fun payoutPayrollRecord(
+        record: PayrollRecordEntity,
+        method: PaymentMethod = PaymentMethod.CASH,
+        paymentAccountId: Long? = null
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isSubmittingHrAction = true, hrActionErrorMessage = null) }
             val amount = record.netPayableSalary
@@ -3366,7 +3563,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     _uiState.update {
                         it.copy(
                             isSubmittingHrAction = false,
-                            hrActionErrorMessage = "عذراً! الرصيد النقدي المتوفر بالدرج حالياً (%.2f %s) غير كافٍ لصرف صافي راتب الموظف (%.2f %s). يرجى تغذية الدرج بالسيولة أو اختيار طريقة صرف آجل/بنكي.".format(
+                            hrActionErrorMessage = "عذراً! الرصيد النقدي المتوفر بالدرج حالياً (%.2f %s) غير كافٍ لصرف صافي راتب الموظف (%.2f %s). يرجى تغذية الدرج بالسيولة أو اختيار طريقة صرف بنكية/محفظة.".format(
                                 availableCash, symbol, amount, symbol
                             )
                         )
@@ -3375,16 +3572,51 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
 
-            // 2. تحديث سجل مسير الرواتب إلى مدفوع
+            // 2. تحديد خصم الحساب المالي المباشر في الدليل المحاسبي (الطرف الدائن)
+            val targetAccountId = paymentAccountId ?: _uiState.value.financialAccounts.firstOrNull {
+                if (method.isElectronic) it.accountType == FinancialAccountType.BANK || it.accountType == FinancialAccountType.E_WALLET
+                else it.accountType == FinancialAccountType.CASH_DRAWER || it.code == "10101"
+            }?.id
+
+            // 3. التحقق من رصيد الحساب البنكي/المحفظة عند اختيار طريقة دفع إلكترونية
+            if (method.isElectronic && targetAccountId != null && amount > 0) {
+                val targetAcc = _uiState.value.financialAccounts.find { it.id == targetAccountId }
+                if (targetAcc != null && targetAcc.currentBalance < amount) {
+                    _uiState.update {
+                        it.copy(
+                            isSubmittingHrAction = false,
+                            hrActionErrorMessage = "عذراً! رصيد الحساب المالي المختار (${targetAcc.name}) الحالي (%.2f %s) غير كافٍ لصرف المبلغ (%.2f %s).".format(
+                                targetAcc.currentBalance, symbol, amount, symbol
+                            )
+                        )
+                    }
+                    return@launch
+                }
+            }
+
+            targetAccountId?.let { accId ->
+                db.financialAccountDao().updateBalance(accId, -amount)
+            }
+
+            // 4. تحديث مصروفات الشفت والدرج عند الصرف النقدي
+            if (method == PaymentMethod.CASH) {
+                val openShift = db.cashShiftDao().getOpenShift()
+                if (openShift != null) {
+                    db.cashShiftDao().updateExpenses(openShift.id, openShift.totalCashExpenses + amount)
+                }
+            }
+
+            // 5. تحديث سجل مسير الرواتب إلى مدفوع
             val updated = record.copy(
                 paidAmount = amount,
                 status = PayrollStatus.PAID,
                 paymentDate = System.currentTimeMillis(),
-                paymentMethod = method
+                paymentMethod = method,
+                paymentAccountId = targetAccountId
             )
             db.payrollRecordDao().updatePayrollRecord(updated)
 
-            // 3. تسجيل قيد الحركة المالية في سجل الموظف
+            // 6. تسجيل قيد الحركة المالية في سجل الموظف
             val trans = EmployeeTransactionEntity(
                 employeeId = record.employeeId,
                 type = EmployeeTransactionType.SALARY_PAYMENT,
@@ -3397,22 +3629,22 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
             )
             db.employeeTransactionDao().insertTransaction(trans)
 
-            // 4. الخصم اللحظي وإنشاء مصروف نقدي مؤرخ ينعكس مباشرة على تقرير Z وصافي النقدية بالدرج
-            if (method == PaymentMethod.CASH && amount > 0) {
-                val exp = ExpenseEntity(
-                    expenseNumber = "PAYROLL-${record.id}",
-                    category = ExpenseCategories.SALARIES,
-                    amount = amount,
-                    paymentMethod = PaymentMethod.CASH,
-                    paidTo = record.employeeName,
-                    notes = "صرف صافي راتب شهر ${record.periodMonth}/${record.periodYear}"
-                )
-                db.expenseDao().insertExpense(exp)
-            }
+            // 7. القيد المحاسبي المزدوج: خصم القيمة وإنشاء مصروف رواتب مؤرخ
+            val exp = ExpenseEntity(
+                expenseNumber = "PAYROLL-${record.id}",
+                category = ExpenseCategories.SALARIES,
+                amount = amount,
+                paymentMethod = method,
+                paymentAccountId = targetAccountId,
+                paidTo = record.employeeName,
+                notes = "صرف صافي راتب شهر ${record.periodMonth}/${record.periodYear}"
+            )
+            db.expenseDao().insertExpense(exp)
 
             val updatedRecords = db.payrollRecordDao().getPayrollRecordsForPeriodSync(record.periodMonth, record.periodYear)
             val updatedTrans = db.employeeTransactionDao().getAllTransactionsSync()
             val updatedExpenses = db.expenseDao().getAllExpensesSync()
+            val updatedAccounts = db.financialAccountDao().getAllAccountsSync()
 
             _uiState.update {
                 it.copy(
@@ -3420,6 +3652,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     payrollRecords = updatedRecords,
                     employeeTransactions = updatedTrans,
                     expenses = updatedExpenses,
+                    financialAccounts = updatedAccounts,
                     hrActionErrorMessage = null
                 )
             }
@@ -3441,16 +3674,37 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
 
-            // 2. إعادة حالة سجل مسير الرواتب إلى "غير مدفوع" (مستحق)
+            // 2. العكس المحاسبي لرصيد الحساب المالي الذي تم الصرف منه
+            if (record.paymentAccountId != null && record.paidAmount > 0) {
+                db.financialAccountDao().updateBalance(record.paymentAccountId, record.paidAmount)
+            } else if (record.paidAmount > 0) {
+                val defaultCashAcc = _uiState.value.financialAccounts.firstOrNull {
+                    it.accountType == FinancialAccountType.CASH_DRAWER || it.code == "10101"
+                }
+                defaultCashAcc?.let {
+                    db.financialAccountDao().updateBalance(it.id, record.paidAmount)
+                }
+            }
+
+            if (record.paymentMethod == PaymentMethod.CASH && record.paidAmount > 0) {
+                val openShift = db.cashShiftDao().getOpenShift()
+                if (openShift != null) {
+                    val newExp = (openShift.totalCashExpenses - record.paidAmount).coerceAtLeast(0.0)
+                    db.cashShiftDao().updateExpenses(openShift.id, newExp)
+                }
+            }
+
+            // 3. إعادة حالة سجل مسير الرواتب إلى "غير مدفوع" (مستحق)
             val resetRecord = record.copy(
                 paidAmount = 0.0,
                 status = PayrollStatus.UNPAID,
                 paymentDate = null,
-                paymentMethod = PaymentMethod.CASH
+                paymentMethod = PaymentMethod.CASH,
+                paymentAccountId = null
             )
             db.payrollRecordDao().updatePayrollRecord(resetRecord)
 
-            // 3. المنطق المحاسبي العكسي: حذف حركة المصروف الخاصة بالراتب لإعادة المبلغ النقدي تلقائياً إلى رصيد الدرج وتخفيض المصروفات في Z-Report
+            // 4. حذف حركة المصروف الخاصة بالراتب
             val relatedExpenses = db.expenseDao().getAllExpensesSync().filter {
                 it.expenseNumber == "PAYROLL-${record.id}" ||
                 (it.category == ExpenseCategories.SALARIES && it.paidTo == record.employeeName && it.amount == record.netPayableSalary)
@@ -3459,7 +3713,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 db.expenseDao().deleteExpense(exp)
             }
 
-            // 4. حذف سجل الحركة المالية من سجلات معاملات الموظف
+            // 5. حذف سجل الحركة المالية من سجلات معاملات الموظف
             val salaryTransactions = db.employeeTransactionDao()
                 .getTransactionsByPeriodSync(record.employeeId, record.periodMonth, record.periodYear)
                 .filter { it.type == EmployeeTransactionType.SALARY_PAYMENT }
@@ -3467,10 +3721,11 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 db.employeeTransactionDao().deleteTransaction(trans)
             }
 
-            // 5. تحديث الكشوفات والبيانات بالواجهة
+            // 6. تحديث الكشوفات والبيانات بالواجهة
             val updatedRecords = db.payrollRecordDao().getPayrollRecordsForPeriodSync(record.periodMonth, record.periodYear)
             val updatedTrans = db.employeeTransactionDao().getAllTransactionsSync()
             val updatedExpenses = db.expenseDao().getAllExpensesSync()
+            val updatedAccounts = db.financialAccountDao().getAllAccountsSync()
 
             _uiState.update {
                 it.copy(
@@ -3478,6 +3733,7 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                     payrollRecords = updatedRecords,
                     employeeTransactions = updatedTrans,
                     expenses = updatedExpenses,
+                    financialAccounts = updatedAccounts,
                     hrActionErrorMessage = null
                 )
             }
@@ -3600,5 +3856,9 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
                 state.copy(selectedEmployeeForDocuments = newSel)
             }
         }
+    }
+
+    fun dismissAccountingError() {
+        _uiState.update { it.copy(accountingErrorMessage = null) }
     }
 }

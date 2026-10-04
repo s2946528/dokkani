@@ -20,16 +20,40 @@ enum class FinancialAccountType(val labelArabic: String) {
  * قائمة الحسابات الرئيسية المعيارية في الدليل المحاسبي (Chart of Accounts Categories)
  */
 object ChartOfAccountsDefaults {
-    data class ParentAccount(val code: String, val name: String, val defaultType: FinancialAccountType)
+    data class ParentAccount(
+        val code: String,
+        val name: String,
+        val defaultType: FinancialAccountType,
+        val rootGroupCode: String = "1",
+        val defaultNature: String = "DEBIT",
+        val defaultFinalAccount: String = "BALANCE_SHEET"
+    )
 
     val PARENT_ACCOUNTS = listOf(
-        ParentAccount("101", "101 - النقدية وما في حكمها (الصناديق)", FinancialAccountType.CASH_DRAWER),
-        ParentAccount("102", "102 - البنوك والمصارف التجارية", FinancialAccountType.BANK),
-        ParentAccount("103", "103 - محافظ الدفع والتحصيل الإلكتروني", FinancialAccountType.E_WALLET),
-        ParentAccount("104", "104 - الأصول المتداولة الأخرى", FinancialAccountType.CHART_ACCOUNT),
-        ParentAccount("105", "105 - الأصول الثابتة غير الملموسة (خلو رجل / نقل قدم)", FinancialAccountType.CHART_ACCOUNT),
-        ParentAccount("201", "201 - الخصوم المتداولة والدائنون", FinancialAccountType.LIABILITY),
-        ParentAccount("501", "501 - المصروفات والنثريات التشغيلية", FinancialAccountType.EXPENSE)
+        // 1. الأصول (Assets) - كود المجموعة: 1 - مدين - الميزانية العمومية
+        ParentAccount("101", "101 - النقدية وما في حكمها (الصناديق والدرج)", FinancialAccountType.CASH_DRAWER, "1", "DEBIT", "BALANCE_SHEET"),
+        ParentAccount("102", "102 - البنوك والمصارف التجارية", FinancialAccountType.BANK, "1", "DEBIT", "BALANCE_SHEET"),
+        ParentAccount("103", "103 - محافظ الدفع والتحصيل الإلكتروني", FinancialAccountType.E_WALLET, "1", "DEBIT", "BALANCE_SHEET"),
+        ParentAccount("104", "104 - الأصول المتداولة (العملاء والذمم المدينة)", FinancialAccountType.CHART_ACCOUNT, "1", "DEBIT", "BALANCE_SHEET"),
+        ParentAccount("105", "105 - مخزون البضائع المتاحة للبيع", FinancialAccountType.CHART_ACCOUNT, "1", "DEBIT", "BALANCE_SHEET"),
+        ParentAccount("106", "106 - الأصول الثابتة وغير الملموسة", FinancialAccountType.CHART_ACCOUNT, "1", "DEBIT", "BALANCE_SHEET"),
+
+        // 2. الخصوم والالتزامات (Liabilities) - كود المجموعة: 2 - دائن - الميزانية العمومية
+        ParentAccount("201", "201 - الخصوم المتداولة والدائنون (الموردون)", FinancialAccountType.LIABILITY, "2", "CREDIT", "BALANCE_SHEET"),
+        ParentAccount("202", "202 - المستحقات والتزامات الموظفين والرواتب", FinancialAccountType.LIABILITY, "2", "CREDIT", "BALANCE_SHEET"),
+
+        // 3. حقوق الملكية (Equity) - كود المجموعة: 3 - دائن - الميزانية العمومية
+        ParentAccount("301", "301 - رأس المال الافتتاحي والحصص", FinancialAccountType.CHART_ACCOUNT, "3", "CREDIT", "BALANCE_SHEET"),
+        ParentAccount("302", "302 - الأرباح والخسائر المدورة والمبقاة", FinancialAccountType.CHART_ACCOUNT, "3", "CREDIT", "BALANCE_SHEET"),
+
+        // 4. الإيرادات والمبيعات (Revenues) - كود المجموعة: 4 - دائن - قائمة الدخل (الأرباح والخسائر)
+        ParentAccount("401", "401 - إيرادات مبيعات البضائع والخدمات", FinancialAccountType.CHART_ACCOUNT, "4", "CREDIT", "PROFIT_LOSS"),
+        ParentAccount("402", "402 - الإيرادات والأرباح المتنوعة والأخرى", FinancialAccountType.CHART_ACCOUNT, "4", "CREDIT", "PROFIT_LOSS"),
+
+        // 5. المصروفات والتكاليف (Expenses) - كود المجموعة: 5 - مدين - قائمة الدخل (الأرباح والخسائر)
+        ParentAccount("501", "501 - تكلفة البضاعة المباعة (المشتريات)", FinancialAccountType.EXPENSE, "5", "DEBIT", "PROFIT_LOSS"),
+        ParentAccount("502", "502 - المصروفات والنثريات التشغيلية والإدارية", FinancialAccountType.EXPENSE, "5", "DEBIT", "PROFIT_LOSS"),
+        ParentAccount("503", "503 - مصروفات الرواتب والأجور والمنافع", FinancialAccountType.EXPENSE, "5", "DEBIT", "PROFIT_LOSS")
     )
 }
 
@@ -47,11 +71,15 @@ object ChartOfAccountsDefaults {
 data class FinancialAccountEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val code: String,                      // كود الحساب الفرعي (مثل: 10201)
+    val code: String,                      // كود الحساب (مثل: 10201)
     val name: String,                      // اسم الحساب (مثل: مصرف الراجحي، محفظة STC Pay)
     val accountType: FinancialAccountType, // نوع الحساب المالي
-    val parentAccountCode: String,         // كود الحساب الرئيسي في الدليل
-    val parentAccountName: String,         // اسم الحساب الرئيسي في الدليل
+    val parentAccountCode: String,         // كود الحساب الرئيسي الأب
+    val parentAccountName: String,         // اسم الحساب الرئيسي الأب
+    val isMainAccount: Boolean = false,    // هل الحساب رئيسي تجميعي أم فرعي تنفيذي
+    val level: Int = 2,                    // المستوى الهرمي في الشجرة (1، 2، 3...)
+    val finalAccountMapping: String = "BALANCE_SHEET", // الحساب الختامي: BALANCE_SHEET (ميزانية عمومية) أو PROFIT_LOSS (أرباح وخسائر)
+    val debitCreditNature: String = "DEBIT",           // طبيعة الحساب: DEBIT (مدين) أو CREDIT (دائن)
     val accountNumber: String = "",        // رقم الحساب المصرفي / الآيبان IBAN / رقم المحفظة
     val openingBalance: Double = 0.0,      // الرصيد الافتتاحي
     val currentBalance: Double = 0.0,      // الرصيد الجاري الحالي

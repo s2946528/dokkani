@@ -3,10 +3,12 @@ package com.example.dokkani.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PointOfSale
@@ -40,6 +43,10 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -112,14 +119,20 @@ fun DokkaniApp(
     var showValueSellingManagementScreen by remember { mutableStateOf(false) }
 
     val allTabs = listOf(
-        NavTabItem("الفواتير والسندات", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
-        NavTabItem("فواتير الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("فاتورة بيع مباشر", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+        NavTabItem("فاتورة البيع", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+        NavTabItem("فاتورة الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("فاتورة مردود البيع", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+        NavTabItem("فاتورة مردود الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("سندات القبض", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("سندات الصرف", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("إدارة البيع بالقيمة", Icons.Default.MonetizationOn, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("المنتجات والأصناف", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("شاشة الجرد وقائمة الجرد", Icons.Default.FactCheck, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("إدارة الشفتات والدرج", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER)),
-        NavTabItem("دليل الحسابات والبنوك", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("الدليل المحاسبي", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+        NavTabItem("إدارة الصناديق والبنوك", Icons.Default.AccountBalance, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("العملاء والموردين", Icons.Default.People, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("شؤون العمال والرواتب", Icons.Default.Badge, setOf(UserRole.ADMIN)),
         NavTabItem("الأصول والملكية", Icons.Default.AccountBalance, setOf(UserRole.ADMIN)),
@@ -141,13 +154,30 @@ fun DokkaniApp(
     val allDepartments = remember {
         listOf(
             com.example.dokkani.ui.components.NavDepartmentGroup(
+                id = "operations",
+                titleArabic = "العمليات",
+                titleEnglish = "Operations",
+                icon = Icons.Default.ReceiptLong,
+                headerColor = Color(0xFF2E7D32),
+                items = listOf(
+                    com.example.dokkani.ui.components.NavTabItem("فاتورة بيع مباشر", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("فاتورة البيع", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("فاتورة الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("فاتورة مردود البيع", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("فاتورة مردود الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("سندات القبض", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+                    com.example.dokkani.ui.components.NavTabItem("سندات الصرف", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER))
+                )
+            ),
+            com.example.dokkani.ui.components.NavDepartmentGroup(
                 id = "general_ledger",
                 titleArabic = "الأستاذ العام والحسابات العامة",
                 titleEnglish = "General Ledger & Accounts",
                 icon = Icons.Default.AccountBalance,
                 headerColor = Color(0xFF1B5E20),
                 items = listOf(
-                    com.example.dokkani.ui.components.NavTabItem("دليل الحسابات والبنوك", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+                    com.example.dokkani.ui.components.NavTabItem("الدليل المحاسبي", Icons.Default.AccountTree, setOf(UserRole.ADMIN, UserRole.CASHIER)),
+                    com.example.dokkani.ui.components.NavTabItem("إدارة الصناديق والبنوك", Icons.Default.AccountBalance, setOf(UserRole.ADMIN, UserRole.CASHIER)),
                     com.example.dokkani.ui.components.NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
                     com.example.dokkani.ui.components.NavTabItem("إدارة الشفتات والدرج", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER)),
                     com.example.dokkani.ui.components.NavTabItem("إدارة مراكز التكلفة", Icons.Default.Business, setOf(UserRole.ADMIN)),
@@ -163,7 +193,6 @@ fun DokkaniApp(
                 icon = Icons.Default.PointOfSale,
                 headerColor = Color(0xFF0D47A1),
                 items = listOf(
-                    com.example.dokkani.ui.components.NavTabItem("الفواتير والسندات", Icons.Default.PointOfSale, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
                     com.example.dokkani.ui.components.NavTabItem("إدارة البيع بالقيمة", Icons.Default.MonetizationOn, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
                     com.example.dokkani.ui.components.NavTabItem("العملاء والموردين", Icons.Default.People, setOf(UserRole.ADMIN, UserRole.CASHIER))
                 )
@@ -176,7 +205,6 @@ fun DokkaniApp(
                 headerColor = Color(0xFFE65100),
                 items = listOf(
                     com.example.dokkani.ui.components.NavTabItem("المنتجات والأصناف", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
-                    com.example.dokkani.ui.components.NavTabItem("فواتير الشراء", Icons.Default.ShoppingBag, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
                     com.example.dokkani.ui.components.NavTabItem("شاشة الجرد وقائمة الجرد", Icons.Default.FactCheck, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
                     com.example.dokkani.ui.components.NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY))
                 )
@@ -208,13 +236,15 @@ fun DokkaniApp(
                 onSelectTabByTitle = { selectedTitle ->
                     showValueSellingManagementScreen = false
                     val index = allowedTabs.indexOfFirst {
-                        it.title == selectedTitle || (selectedTitle == "المنتجات والأصناف" && it.title == "المنتجات والوحدات")
+                        it.title == selectedTitle || 
+                        (selectedTitle == "المنتجات والأصناف" && it.title == "المنتجات والوحدات") ||
+                        (selectedTitle == "فواتير الشراء" && it.title == "فاتورة الشراء")
                     }
                     if (index >= 0) {
                         viewModel.selectTab(index)
                         if (selectedTitle == "إدارة الشفتات والدرج") {
                             viewModel.selectCashSubTab(1)
-                        } else if (selectedTitle == "الخزينة والمصروفات") {
+                        } else if (selectedTitle == "الخزينة والمصروفات" || selectedTitle == "سندات الصرف") {
                             viewModel.selectCashSubTab(0)
                         }
                     }
@@ -257,15 +287,41 @@ fun DokkaniApp(
                         }
                     },
                     actions = {
-                        if (currentUserRole == UserRole.ADMIN) {
-                            IconButton(onClick = onOpenOnboardingWizard) {
-                                Icon(
-                                    Icons.Default.AutoFixHigh,
-                                    contentDescription = "معالج التهيئة الأولى",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                        Button(
+                            onClick = {
+                                val shiftIndex = allowedTabs.indexOfFirst {
+                                    it.title == "إدارة الشفتات والدرج" || it.title == "الخزينة والمصروفات" || it.title == "فاتورة البيع المباشر"
+                                }
+                                if (shiftIndex >= 0) {
+                                    viewModel.selectTab(shiftIndex)
+                                    viewModel.selectCashSubTab(1)
+                                }
+                                val currentOrOpenShift = uiState.cashShifts.firstOrNull { it.status == "OPEN" }
+                                    ?: uiState.cashShifts.firstOrNull()
+                                    ?: com.example.dokkani.data.local.entities.CashShiftEntity(shiftNumber = "SHF-0001")
+                                viewModel.openShiftSettlementDialog(currentOrOpenShift)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFD32F2F),
+                                contentColor = Color.White
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "إغلاق الشفت",
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "إغلاق الشفت",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
+
                         IconButton(onClick = onLogout) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ExitToApp,
@@ -300,14 +356,37 @@ fun DokkaniApp(
                     Box(modifier = Modifier.fillMaxSize()) {
                         val activeTabTitle = allowedTabs.getOrNull(currentTabIndex)?.title ?: ""
                         when (activeTabTitle) {
-                            "الفواتير والسندات" -> {
+                            "فاتورة بيع مباشر", "البيع المباشر", "الفواتير والسندات", "فاتورة مردود البيع" -> {
                                 PosScreen(
                                     currentUserRole = currentUserRole,
                                     onNavigateToValueSellingManagement = { showValueSellingManagementScreen = true }
                                 )
                             }
-                            "فواتير الشراء" -> {
+                            "فاتورة البيع", "فواتير البيع" -> {
+                                com.example.dokkani.ui.screens.sales.SalesInvoiceScreen(
+                                    currentUserRole = currentUserRole
+                                )
+                            }
+                            "فاتورة الشراء", "فواتير الشراء" -> {
                                 PurchaseScreen(currentUserRole = currentUserRole)
+                            }
+                            "فاتورة مردود الشراء" -> {
+                                com.example.dokkani.ui.screens.purchasereturn.PurchaseReturnScreen(
+                                    onNavigateBack = {
+                                        val idx = allowedTabs.indexOfFirst { it.title == "فاتورة الشراء" || it.title == "فواتير الشراء" }
+                                        if (idx >= 0) viewModel.selectTab(idx)
+                                    }
+                                )
+                            }
+                            "سندات القبض", "سند قبض" -> {
+                                com.example.dokkani.ui.screens.vouchers.ReceiptVoucherScreen(
+                                    currentUserRole = currentUserRole
+                                )
+                            }
+                            "سندات الصرف", "سند صرف" -> {
+                                com.example.dokkani.ui.screens.vouchers.PaymentVoucherScreen(
+                                    currentUserRole = currentUserRole
+                                )
                             }
                             "إدارة البيع بالقيمة" -> {
                                 ValueSellingManagementScreen(
@@ -373,7 +452,13 @@ fun DokkaniApp(
                                     onRequestDeleteAccount = viewModel::requestDeleteFinancialAccount,
                                     onConfirmDeleteAccount = viewModel::confirmDeleteFinancialAccount,
                                     onDisableAccountInstead = viewModel::disableAccountInstead,
-                                    onDismissAccountDeleteDialogs = viewModel::dismissAccountDeleteDialogs
+                                    onDismissAccountDeleteDialogs = viewModel::dismissAccountDeleteDialogs,
+                                    onUpdateExpensePaymentMethod = viewModel::updateExpensePaymentMethod,
+                                    onUpdateExpensePaymentAccountId = viewModel::updateExpensePaymentAccountId,
+                                    onUpdateExpenseTransactionRef = viewModel::updateExpenseTransactionRef,
+                                    onUpdateExpenseReceiptImagePath = viewModel::updateExpenseReceiptImagePath,
+                                    onUpdateExpenseSecondaryMethod = viewModel::updateExpenseSecondaryMethod,
+                                    onUpdateExpenseSecondaryPaidAmount = viewModel::updateExpenseSecondaryPaidAmount
                                 )
                             }
                             "إدارة الشفتات والدرج" -> {
@@ -408,10 +493,16 @@ fun DokkaniApp(
                                     onRequestDeleteAccount = viewModel::requestDeleteFinancialAccount,
                                     onConfirmDeleteAccount = viewModel::confirmDeleteFinancialAccount,
                                     onDisableAccountInstead = viewModel::disableAccountInstead,
-                                    onDismissAccountDeleteDialogs = viewModel::dismissAccountDeleteDialogs
+                                    onDismissAccountDeleteDialogs = viewModel::dismissAccountDeleteDialogs,
+                                    onUpdateExpensePaymentMethod = viewModel::updateExpensePaymentMethod,
+                                    onUpdateExpensePaymentAccountId = viewModel::updateExpensePaymentAccountId,
+                                    onUpdateExpenseTransactionRef = viewModel::updateExpenseTransactionRef,
+                                    onUpdateExpenseReceiptImagePath = viewModel::updateExpenseReceiptImagePath,
+                                    onUpdateExpenseSecondaryMethod = viewModel::updateExpenseSecondaryMethod,
+                                    onUpdateExpenseSecondaryPaidAmount = viewModel::updateExpenseSecondaryPaidAmount
                                 )
                             }
-                            "دليل الحسابات والبنوك" -> {
+                            "الدليل المحاسبي", "دليل الحسابات والبنوك" -> {
                                 AccountsManagementScreen(
                                     uiState = uiState,
                                     onSearchChanged = viewModel::setAccountsSearchQuery,
@@ -425,6 +516,12 @@ fun DokkaniApp(
                                     onConfirmDeleteAccount = viewModel::confirmDeleteFinancialAccount,
                                     onDisableInstead = viewModel::disableAccountInstead,
                                     onDismissDeleteDialogs = viewModel::dismissAccountDeleteDialogs
+                                )
+                            }
+                            "إدارة الصناديق والبنوك" -> {
+                                com.example.dokkani.ui.screens.cash.CashAndBanksManagementScreen(
+                                    currentUserRole = currentUserRole,
+                                    onNavigateBack = { viewModel.selectTab(0) }
                                 )
                             }
                             "العملاء والموردين" -> {
@@ -656,10 +753,6 @@ fun DokkaniApp(
                     }
                 }
             }
-        }
-        }
-    }
-
     // نافذة تنبيه الأمان المحاسبي الشاملة (تظهر في حال محاولة حذف أي حساب أو عميل/مورد مرتبط بسجلات)
     uiState.accountDeletionBlockedDialog?.let { blockedResult ->
         AccountDeletionBlockedDialog(
@@ -668,5 +761,45 @@ fun DokkaniApp(
             onDisableInstead = { viewModel.disableAccountInstead(blockedResult) },
             onDismiss = viewModel::dismissAccountDeleteDialogs
         )
+    }
+
+    // نافذة منع إدخال قيد غير متوازن في ميزان المراجعة والقيد المزدوج
+    uiState.accountingErrorMessage?.let { errorMsg ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissAccountingError() },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "إيقاف حارم - القيد المزدوج غير متوازن",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Text(
+                    text = errorMsg,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.dismissAccountingError() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("موافق (تصحيح المبالغ)", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+        }
+        }
     }
 }

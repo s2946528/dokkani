@@ -40,6 +40,8 @@ import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.local.entities.UserRole
+import com.example.dokkani.ui.screens.backup.BackupRestoreCard
+import com.example.dokkani.ui.screens.notifications.NotificationManagementCard
 import com.example.dokkani.ui.screens.crud.AddEditCurrencyDialog
 import com.example.dokkani.ui.screens.crud.AddEditPartyDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
@@ -302,6 +304,16 @@ fun SystemSettingsScreen(
                         }
                     }
                 }
+            }
+
+            // بطاقة النسخ الاحتياطي والاستعادة الذكية لقاعدة البيانات (Backup & Restore SAF Card)
+            item {
+                BackupRestoreCard()
+            }
+
+            // بطاقة إدارة وتجربة نظام الإشعارات والتنبيهات (FCM & Local Notification Management)
+            item {
+                NotificationManagementCard()
             }
 
             // بطاقة التحكم في عرض الكسور العشرية (Decimal Places Control)

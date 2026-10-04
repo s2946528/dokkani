@@ -50,7 +50,7 @@ fun ShiftStatusBar(
     currencySymbol: String = "ر.س",
     onOpenCashBreakdown: () -> Unit,
     onOpenBankBreakdown: () -> Unit,
-    onOpenShiftCloseDialog: () -> Unit,
+    onOpenCreditBreakdown: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val shift = currentShift ?: CashShiftEntity(
@@ -67,6 +67,8 @@ fun ShiftStatusBar(
         val shiftDigitalSales = shift.totalMadaSales + shift.totalWalletSales + shift.totalTransferSales
         if (bankAndWalletAccountsSum > 0.0) bankAndWalletAccountsSum else shiftDigitalSales
     }
+
+    val totalCreditInShift = shift.totalCreditSales
 
     val scrollState = rememberScrollState()
 
@@ -87,7 +89,7 @@ fun ShiftStatusBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. عنصر إجمالي النقدية (مبسط بدون أيقونات أو بيانات فرعية)
+            // 1. عنصر إجمالي النقدية
             ShiftStatusCard(
                 title = "إجمالي النقدية",
                 amount = cashInDrawer,
@@ -99,7 +101,7 @@ fun ShiftStatusBar(
                 modifier = Modifier.widthIn(min = 135.dp)
             )
 
-            // 2. عنصر إجمالي البنوك (مبسط بدون أيقونات أو بيانات فرعية)
+            // 2. عنصر إجمالي البنوك
             ShiftStatusCard(
                 title = "إجمالي البنوك",
                 amount = totalDigitalInShift,
@@ -111,34 +113,17 @@ fun ShiftStatusBar(
                 modifier = Modifier.widthIn(min = 135.dp)
             )
 
-            // 3. زر إغلاق الشفت
-            Button(
-                onClick = onOpenShiftCloseDialog,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFD32F2F),
-                    contentColor = Color.White
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.height(44.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "إغلاق الشفت",
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "إغلاق الشفت",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                }
-            }
+            // 3. عنصر إجمالي الآجل
+            ShiftStatusCard(
+                title = "إجمالي الآجل",
+                amount = totalCreditInShift,
+                currencySymbol = currencySymbol,
+                containerColor = Color(0xFFFFF3E0),
+                contentColor = Color(0xFFE65100),
+                accentColor = Color(0xFFEF6C00),
+                onClick = onOpenCreditBreakdown,
+                modifier = Modifier.widthIn(min = 135.dp)
+            )
         }
     }
 }
@@ -151,7 +136,7 @@ fun ShiftBottomStatusBar(
     currencySymbol: String = "ر.س",
     onOpenCashBreakdown: () -> Unit,
     onOpenBankBreakdown: () -> Unit,
-    onOpenShiftCloseDialog: () -> Unit,
+    onOpenCreditBreakdown: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     ShiftStatusBar(
@@ -161,7 +146,7 @@ fun ShiftBottomStatusBar(
         currencySymbol = currencySymbol,
         onOpenCashBreakdown = onOpenCashBreakdown,
         onOpenBankBreakdown = onOpenBankBreakdown,
-        onOpenShiftCloseDialog = onOpenShiftCloseDialog,
+        onOpenCreditBreakdown = onOpenCreditBreakdown,
         modifier = modifier
     )
 }
@@ -718,4 +703,109 @@ private fun BreakdownRow(
             color = if (isPositive) Color(0xFF2E7D32) else Color(0xFFC62828)
         )
     }
+}
+
+/**
+ * نافذة تفاصيل ومكونات إجمالي حركات الآجل والذمم بالشفت
+ */
+@Composable
+fun CreditBreakdownDialog(
+    currentShift: CashShiftEntity?,
+    totalCreditSales: Double,
+    totalCreditPurchases: Double,
+    currencySymbol: String = "ر.س",
+    onDismiss: () -> Unit
+) {
+    val netCredit = totalCreditSales - totalCreditPurchases
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFEF6C00),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Column {
+                    Text("تفاصيل إجمالي الآجل والذمم", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("بيان المبيعات والمشتريات الآجلة بالشفت", fontSize = 11.sp, color = Color.Gray)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    border = BorderStroke(1.dp, Color(0xFFFFB74D)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "📊 ملخص حركات الآجل والذمم",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFFE65100)
+                        )
+                        HorizontalDivider(color = Color(0xFFFFCC80))
+
+                        BreakdownRow(
+                            "📈 إجمالي المبيعات الآجلة (ديون للعملاء):",
+                            totalCreditSales,
+                            currencySymbol,
+                            isPositive = true,
+                            labelColor = Color(0xFFE65100)
+                        )
+
+                        BreakdownRow(
+                            "📉 إجمالي المشتريات الآجلة (ديون للموردين):",
+                            totalCreditPurchases,
+                            currencySymbol,
+                            isPositive = false,
+                            labelColor = Color(0xFFE65100)
+                        )
+
+                        HorizontalDivider(color = Color(0xFFFFCC80))
+
+                        BreakdownRow(
+                            "⚖️ صافي الآجل والذمم:",
+                            kotlin.math.abs(netCredit),
+                            currencySymbol,
+                            isPositive = netCredit >= 0,
+                            isTotal = true,
+                            labelColor = Color(0xFFE65100)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF6C00))
+            ) {
+                Text("حسناً")
+            }
+        }
+    )
 }

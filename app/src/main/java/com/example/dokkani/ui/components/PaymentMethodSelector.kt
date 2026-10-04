@@ -58,13 +58,27 @@ fun PaymentMethodSelector(
     onReceiptImageChange: (String?) -> Unit = {},
     allowCredit: Boolean = true,
     allowMulti: Boolean = true,
+    hideEmptyAccounts: Boolean = true,
     currencySymbol: String = "ر.س",
     modifier: Modifier = Modifier
 ) {
     var accountDropdownExpanded by remember { mutableStateOf(false) }
 
-    // تعريف قائمة طرق السداد الأساسية للشريط الأفقي
-    val options = remember(allowCredit, allowMulti) {
+    val hasBankAccounts = remember(financialAccounts) {
+        financialAccounts.any { it.accountType == FinancialAccountType.BANK && it.isActive }
+    }
+    val hasWalletAccounts = remember(financialAccounts) {
+        financialAccounts.any { it.accountType == FinancialAccountType.E_WALLET && it.isActive }
+    }
+    val hasPosAccounts = remember(financialAccounts) {
+        financialAccounts.any { (it.accountType == FinancialAccountType.BANK || it.accountType == FinancialAccountType.E_WALLET) && it.isActive }
+    }
+    val hasNonCashAccounts = remember(financialAccounts) {
+        financialAccounts.any { it.accountType != FinancialAccountType.CASH_DRAWER && it.isActive }
+    }
+
+    // تعريف قائمة طرق السداد الأساسية للشريط الأفقي مع شرط إخفاء الخيارات الفارغة
+    val options = remember(allowCredit, allowMulti, hideEmptyAccounts, financialAccounts) {
         buildList {
             add(
                 PaymentMethodOption(
@@ -86,34 +100,40 @@ fun PaymentMethodSelector(
                     )
                 )
             }
-            add(
-                PaymentMethodOption(
-                    method = PaymentMethod.BANK_TRANSFER,
-                    title = "🏦 بنكي",
-                    icon = Icons.Default.AccountBalance,
-                    activeColor = Color(0xFF00838F),
-                    description = "إيداع أو تحويل لحساب بنكي"
+            if (!hideEmptyAccounts || hasBankAccounts) {
+                add(
+                    PaymentMethodOption(
+                        method = PaymentMethod.BANK_TRANSFER,
+                        title = "🏦 بنكي",
+                        icon = Icons.Default.AccountBalance,
+                        activeColor = Color(0xFF00838F),
+                        description = "إيداع أو تحويل لحساب بنكي"
+                    )
                 )
-            )
-            add(
-                PaymentMethodOption(
-                    method = PaymentMethod.E_WALLET,
-                    title = "📱 محفظة",
-                    icon = Icons.Default.Smartphone,
-                    activeColor = Color(0xFF6A1B9A),
-                    description = "تحصيل عبر المحافظ الإلكترونية"
+            }
+            if (!hideEmptyAccounts || hasWalletAccounts) {
+                add(
+                    PaymentMethodOption(
+                        method = PaymentMethod.E_WALLET,
+                        title = "📱 محفظة",
+                        icon = Icons.Default.Smartphone,
+                        activeColor = Color(0xFF6A1B9A),
+                        description = "تحصيل عبر المحافظ الإلكترونية"
+                    )
                 )
-            )
-            add(
-                PaymentMethodOption(
-                    method = PaymentMethod.POS_CARD,
-                    title = "💳 شبكة",
-                    icon = Icons.Default.CreditCard,
-                    activeColor = Color(0xFF1565C0),
-                    description = "دفع بطاقة أو جهاز نقاط بيع"
+            }
+            if (!hideEmptyAccounts || hasPosAccounts) {
+                add(
+                    PaymentMethodOption(
+                        method = PaymentMethod.POS_CARD,
+                        title = "💳 شبكة",
+                        icon = Icons.Default.CreditCard,
+                        activeColor = Color(0xFF1565C0),
+                        description = "دفع بطاقة أو جهاز نقاط بيع"
+                    )
                 )
-            )
-            if (allowMulti) {
+            }
+            if (allowMulti && (!hideEmptyAccounts || hasNonCashAccounts)) {
                 add(
                     PaymentMethodOption(
                         method = PaymentMethod.MULTI,

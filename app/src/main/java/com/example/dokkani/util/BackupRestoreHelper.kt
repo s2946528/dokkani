@@ -22,9 +22,9 @@ data class BackupMetadata(
             if (lastBackupSizeBytes <= 0) return "غ.م"
             val kb = lastBackupSizeBytes / 1024.0
             return if (kb > 1024) {
-                "%.2f ميجابايت".format(Locale.US, kb / 1024.0)
+                String.format(Locale.US, "%.2f ميجابايت", kb / 1024.0)
             } else {
-                "%.1f كيلوبايت".format(Locale.US, kb)
+                String.format(Locale.US, "%.1f كيلوبايت", kb)
             }
         }
 }

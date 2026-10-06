@@ -98,7 +98,7 @@ object BackupRestoreHelper {
     fun restoreDatabaseFromUri(context: Context, sourceUri: Uri): Boolean {
         return try {
             // 1. إغلاق اتصال قاعدة بيانات Room الحالية تماماً لتجنب تلف الملفات
-            DokkaniDatabase.closeDatabase()
+            DokkaniDatabase.closeAndResetInstance()
 
             val targetDbFile = context.getDatabasePath(DB_NAME)
             val walFile = File(targetDbFile.path + "-wal")

@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -520,6 +521,40 @@ fun CustomerDataCard(
                                 }
                             )
                         }
+                    }
+                }
+            }
+
+            // اختيار المخزن المستهدف للفاتورة
+            var warehouseExpanded by remember { mutableStateOf(false) }
+            val selectedWh = uiState.warehouses.find { it.id == uiState.selectedWarehouseId }
+            ExposedDropdownMenuBox(
+                expanded = warehouseExpanded,
+                onExpandedChange = { warehouseExpanded = !warehouseExpanded },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = selectedWh?.let { "${it.warehouseCode} - ${it.name}" } ?: "المخزن الرئيسي",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("المخزن المستهدف لخصم المبيعات *") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = warehouseExpanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth().testTag("sales_warehouse_select"),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                ExposedDropdownMenu(
+                    expanded = warehouseExpanded,
+                    onDismissRequest = { warehouseExpanded = false }
+                ) {
+                    uiState.warehouses.forEach { wh ->
+                        DropdownMenuItem(
+                            text = { Text("${wh.warehouseCode} - ${wh.name}") },
+                            onClick = {
+                                viewModel.selectWarehouse(wh.id)
+                                warehouseExpanded = false
+                            }
+                        )
                     }
                 }
             }

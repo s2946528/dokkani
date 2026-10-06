@@ -72,6 +72,18 @@ fun ZoomableBox(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        if (scale > 1.05f || scale < 0.95f) {
+                            scale = 1f
+                            offset = Offset.Zero
+                        } else {
+                            scale = 1.75f
+                        }
+                    }
+                )
+            }
             .transformable(state = transformableState)
     ) {
         Box(

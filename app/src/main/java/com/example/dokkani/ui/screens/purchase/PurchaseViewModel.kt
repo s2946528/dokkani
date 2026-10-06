@@ -82,6 +82,8 @@ data class WacCalculationSummary(
 data class PurchaseUiState(
     val suppliers: List<PartyEntity> = emptyList(),
     val selectedSupplier: PartyEntity? = null,
+    val warehouses: List<com.example.dokkani.data.local.entities.WarehouseEntity> = emptyList(),
+    val selectedWarehouseId: Long? = null,
     val costCenters: List<CostCenterEntity> = emptyList(),
     val selectedCostCenterId: Long = 1L,
     val supplierInvoiceNumber: String = "",
@@ -217,6 +219,18 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
         }
 
         viewModelScope.launch(Dispatchers.IO) {
+            db.warehouseDao().getAllWarehouses().collectLatest { whList ->
+                _uiState.update { state ->
+                    val defaultWh = whList.find { it.isDefault } ?: whList.firstOrNull()
+                    state.copy(
+                        warehouses = whList,
+                        selectedWarehouseId = state.selectedWarehouseId ?: defaultWh?.id
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
             db.costCenterDao().getAllActiveCostCenters().collectLatest { centers ->
                 _uiState.update { state ->
                     val defaultId = if (centers.any { it.centerId == state.selectedCostCenterId }) {
@@ -345,6 +359,10 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
 
     fun selectCostCenter(costCenterId: Long) {
         _uiState.update { it.copy(selectedCostCenterId = costCenterId) }
+    }
+
+    fun selectWarehouse(warehouseId: Long) {
+        _uiState.update { it.copy(selectedWarehouseId = warehouseId) }
     }
 
     fun setSupplierInvoiceNumber(number: String) {
@@ -566,7 +584,8 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                             paymentAccountId = state.selectedPaymentAccountId,
                             status = InvoiceStatus.COMPLETED,
                             notes = "فاتورة شراء مورد رقم: ${state.supplierInvoiceNumber.ifEmpty { "غير محدد" }} - ${state.notes}",
-                            costCenterId = state.selectedCostCenterId
+                            costCenterId = state.selectedCostCenterId,
+                            warehouseId = state.selectedWarehouseId
                         )
                     )
 
@@ -608,7 +627,8 @@ class PurchaseViewModel(application: Application) : AndroidViewModel(application
                                 unitCostPriceBase = unitCostBasePurchasedLocal,
                                 timestamp = timestamp,
                                 referenceNumber = invoiceNumber,
-                                costCenterId = state.selectedCostCenterId
+                                costCenterId = state.selectedCostCenterId,
+                                warehouseId = state.selectedWarehouseId
                             )
                         )
 

@@ -1,6 +1,9 @@
 package com.example.dokkani.ui
 
 import android.app.Application
+import android.content.Context
+import android.net.Uri
+import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
@@ -321,7 +324,24 @@ data class DokkaniUiState(
     val selectedPayrollMonth: Int = Calendar.getInstance().get(Calendar.MONTH) + 1,
     val selectedPayrollYear: Int = Calendar.getInstance().get(Calendar.YEAR),
     val hrActionErrorMessage: String? = null,
-    val accountingErrorMessage: String? = null
+    val accountingErrorMessage: String? = null,
+
+    // Notifications & Background Services (الإشعارات والخدمات الخلفية)
+    val notifications: List<com.example.dokkani.data.local.entities.NotificationEntity> = emptyList(),
+    val unreadNotificationCount: Int = 0,
+    val fcmToken: String? = null,
+    val hasNotificationPermission: Boolean = true,
+
+    // Backup & Restore (النسخ الاحتياطي والاستعادة)
+    val lastBackupTimestamp: Long? = null,
+    val lastBackupFileName: String? = null,
+    val isBackupRestoreInProgress: Boolean = false,
+    val backupRestoreStatusMessage: String? = null,
+    val isBackupRestoreSuccess: Boolean = true,
+
+    // Warehouses Directory & User Warehouses (دليل المخازن ومخازن المستخدمين)
+    val warehouses: List<com.example.dokkani.data.local.entities.WarehouseEntity> = emptyList(),
+    val userWarehouses: List<com.example.dokkani.data.local.entities.UserWarehouseEntity> = emptyList()
 ) {
     val currencySymbol: String get() = baseCurrency?.symbol ?: "ر.ي"
     val currencyName: String get() = baseCurrency?.name ?: "الريال اليمني"
@@ -345,17 +365,71 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
     init {
         val fingerprint = DeviceFingerprintManager.getDeviceFingerprint(application)
         val challenge = OfflineLicenseManager.generateChallengeCode(fingerprint, ActivationPlan.TRIAL_500)
+        
+        // تهيئة قنوات الإشعارات والجدولة عبر WorkManager
+        com.example.dokkani.notifications.NotificationHelper.createNotificationChannels(application)
+        com.example.dokkani.notifications.work.DokkaniWorkScheduler.schedulePeriodicTasks(application)
+
+        val hasPermission = com.example.dokkani.notifications.NotificationHelper.hasNotificationPermission(application)
+        val backupPrefs = application.getSharedPreferences("dokkani_backup_prefs", Context.MODE_PRIVATE)
+        val savedBackupTime = if (backupPrefs.contains("last_backup_time")) backupPrefs.getLong("last_backup_time", 0L) else null
+        val savedBackupFile = backupPrefs.getString("last_backup_file", null)
+
         _uiState.update {
             it.copy(
                 deviceFingerprint = fingerprint,
-                generatedChallengeCode = challenge
+                generatedChallengeCode = challenge,
+                hasNotificationPermission = hasPermission,
+                lastBackupTimestamp = savedBackupTime,
+                lastBackupFileName = savedBackupFile
             )
         }
 
+        refreshFcmToken()
         observeData()
     }
 
+    fun refreshFcmToken() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val token = com.example.dokkani.notifications.FcmTokenManager.fetchFcmToken(getApplication())
+            _uiState.update { it.copy(fcmToken = token) }
+        }
+    }
+
     private fun observeData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.warehouseDao().getAllWarehouses().collectLatest { list ->
+                if (list.isEmpty()) {
+                    db.warehouseDao().insertWarehouse(
+                        com.example.dokkani.data.local.entities.WarehouseEntity(
+                            warehouseCode = "WH-001",
+                            name = "المخزن الرئيسي",
+                            keeperName = "المدير العام",
+                            notes = "المخزن الرئيسي الافتراضي للنظام",
+                            isActive = true,
+                            isDefault = true
+                        )
+                    )
+                }
+                _uiState.update { it.copy(warehouses = list) }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.userWarehouseDao().getAllUserWarehouses().collectLatest { list ->
+                _uiState.update { it.copy(userWarehouses = list) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.notificationDao().getAllNotifications().collectLatest { list ->
+                _uiState.update { it.copy(notifications = list) }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.notificationDao().getUnreadCount().collectLatest { count ->
+                _uiState.update { it.copy(unreadNotificationCount = count) }
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             db.costCenterDao().getAllActiveCostCenters().collectLatest { centers ->
                 _uiState.update { state ->
@@ -513,17 +587,6 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun selectTab(index: Int) {
         _uiState.update { it.copy(selectedTab = index) }
-    }
-
-    fun selectTabByScreenKey(screenKey: String) {
-        val targetIndex = when (screenKey.lowercase()) {
-            "inventory", "products" -> 8
-            "shift", "cashier" -> 11
-            "reports", "analytics" -> 17
-            "backup", "settings" -> 23
-            else -> 0
-        }
-        selectTab(targetIndex)
     }
 
     // --- Cash & Expenses Actions ---
@@ -3860,5 +3923,261 @@ class DokkaniViewModel(application: Application) : AndroidViewModel(application)
 
     fun dismissAccountingError() {
         _uiState.update { it.copy(accountingErrorMessage = null) }
+    }
+
+    // --- Notifications & WorkManager Actions (إدارة الإشعارات والمهام الخلفية) ---
+    fun markNotificationAsRead(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.notificationDao().markAsRead(id)
+        }
+    }
+
+    fun markAllNotificationsAsRead() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.notificationDao().markAllAsRead()
+        }
+    }
+
+    fun clearAllNotifications() {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.notificationDao().clearAll()
+        }
+    }
+
+    fun deleteNotification(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.notificationDao().deleteNotification(id)
+        }
+    }
+
+    fun updateNotificationPermissionState(granted: Boolean) {
+        _uiState.update { it.copy(hasNotificationPermission = granted) }
+    }
+
+    fun sendTestNotification(title: String, body: String, type: com.example.dokkani.data.local.entities.NotificationType) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.notificationDao().insertNotification(
+                com.example.dokkani.data.local.entities.NotificationEntity(
+                    title = title,
+                    message = body,
+                    type = type,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+            com.example.dokkani.notifications.NotificationHelper.showNotification(
+                context = getApplication(),
+                title = title,
+                body = body,
+                channelId = when (type) {
+                    com.example.dokkani.data.local.entities.NotificationType.DEBT_DUE,
+                    com.example.dokkani.data.local.entities.NotificationType.LOW_STOCK -> com.example.dokkani.notifications.NotificationHelper.CHANNEL_DEBTS
+                    com.example.dokkani.data.local.entities.NotificationType.SYNC -> com.example.dokkani.notifications.NotificationHelper.CHANNEL_SYNC
+                    else -> com.example.dokkani.notifications.NotificationHelper.CHANNEL_ALERTS
+                }
+            )
+        }
+    }
+
+    fun triggerWorkBackupNow() {
+        com.example.dokkani.notifications.work.DokkaniWorkScheduler.runBackupNow(getApplication())
+    }
+
+    fun triggerWorkStockCheckNow() {
+        com.example.dokkani.notifications.work.DokkaniWorkScheduler.runStockCheckNow(getApplication())
+    }
+
+    fun triggerWorkDebtCheckNow() {
+        com.example.dokkani.notifications.work.DokkaniWorkScheduler.runDebtCheckNow(getApplication())
+    }
+
+    // --- Backup & Restore Actions (إدارة النسخ الاحتياطي والاستعادة الآمنة) ---
+    fun exportDatabaseToUri(destinationUri: Uri) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { 
+                it.copy(
+                    isBackupRestoreInProgress = true, 
+                    backupRestoreStatusMessage = "جاري تحضير وتصدير النسخة الاحتياطية..."
+                ) 
+            }
+            try {
+                // 1. إجراء WAL Checkpoint لتجميع كافة السجلات في ملف قاعدة البيانات الرئيسي
+                com.example.dokkani.data.local.DokkaniDatabase.checkpointWal(app, viewModelScope)
+
+                // 2. قراءة ملف قاعدة البيانات الرئيسي
+                val dbFile = app.getDatabasePath("dokkani_pos_database")
+                if (!dbFile.exists()) {
+                    throw IllegalStateException("ملف قاعدة البيانات غير موجود بعد!")
+                }
+
+                // 3. كتابة ملف قاعدة البيانات إلى الـ Uri المحدد عبر ContentResolver
+                app.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+                    dbFile.inputStream().use { inputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                } ?: throw IllegalStateException("تعذر فتح مسار حفظ النسخة الاحتياطية")
+
+                val now = System.currentTimeMillis()
+                val prefs = app.getSharedPreferences("dokkani_backup_prefs", Context.MODE_PRIVATE)
+                val fileName = destinationUri.lastPathSegment ?: "dokkani_backup.db"
+                prefs.edit()
+                    .putLong("last_backup_time", now)
+                    .putString("last_backup_file", fileName)
+                    .apply()
+
+                _uiState.update {
+                    it.copy(
+                        isBackupRestoreInProgress = false,
+                        lastBackupTimestamp = now,
+                        lastBackupFileName = fileName,
+                        backupRestoreStatusMessage = "تم إنشاء وتصدير النسخة الاحتياطية بنجاح! 💾",
+                        isBackupRestoreSuccess = true
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update {
+                    it.copy(
+                        isBackupRestoreInProgress = false,
+                        backupRestoreStatusMessage = "فشل تصدير النسخة الاحتياطية: ${e.message}",
+                        isBackupRestoreSuccess = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun restoreDatabaseFromUri(sourceUri: Uri) {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { 
+                it.copy(
+                    isBackupRestoreInProgress = true, 
+                    backupRestoreStatusMessage = "جاري استعادة قاعدة البيانات واسترجاع كافة البيانات..."
+                ) 
+            }
+            try {
+                // 1. إغلاق اتصال قاعدة البيانات الحالي بأمان لمنع Lock أو SQLiteException
+                com.example.dokkani.data.local.DokkaniDatabase.closeAndResetInstance()
+
+                // 2. تحديد مسارات ملفات قاعدة البيانات المعتمدة
+                val dbFile = app.getDatabasePath("dokkani_pos_database")
+                val walFile = File(dbFile.path + "-wal")
+                val shmFile = File(dbFile.path + "-shm")
+
+                // 3. مسح ملفات الـ WAL و SHM القديمة تجنباً لتضارب السجلات
+                if (walFile.exists()) walFile.delete()
+                if (shmFile.exists()) shmFile.delete()
+
+                // 4. استبدال ملف قاعدة البيانات بالملف المستورد
+                app.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
+                    dbFile.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                } ?: throw IllegalStateException("تعذر قراءة ملف النسخة الاحتياطية المختار")
+
+                // 5. إعادة فتح قاعدة البيانات وتحديث الـ State
+                com.example.dokkani.data.local.DokkaniDatabase.getDatabase(app, viewModelScope)
+
+                // 6. مراقبة وجلب كافة البيانات من جديد
+                observeData()
+
+                _uiState.update {
+                    it.copy(
+                        isBackupRestoreInProgress = false,
+                        backupRestoreStatusMessage = "تم استعادة قاعدة البيانات واسترجاع كافة البيانات بنجاح! 🎉",
+                        isBackupRestoreSuccess = true
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update {
+                    it.copy(
+                        isBackupRestoreInProgress = false,
+                        backupRestoreStatusMessage = "فشل استعادة النسخة الاحتياطية: ${e.message}",
+                        isBackupRestoreSuccess = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissBackupRestoreStatus() {
+        _uiState.update { it.copy(backupRestoreStatusMessage = null) }
+    }
+
+    // --- Warehouses Actions (إدارة دليل المخازن) ---
+    fun saveWarehouse(warehouse: com.example.dokkani.data.local.entities.WarehouseEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (warehouse.isDefault) {
+                    db.warehouseDao().clearAllDefaults()
+                }
+                if (warehouse.id == 0L) {
+                    db.warehouseDao().insertWarehouse(warehouse)
+                } else {
+                    db.warehouseDao().updateWarehouse(warehouse)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun deleteWarehouse(warehouse: com.example.dokkani.data.local.entities.WarehouseEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (!warehouse.isDefault) {
+                    db.warehouseDao().deleteWarehouse(warehouse)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun setDefaultWarehouse(warehouseId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.warehouseDao().setDefaultWarehouse(warehouseId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun setWarehouseActive(warehouseId: Long, isActive: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.warehouseDao().setWarehouseActive(warehouseId, isActive)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // --- User Warehouses Actions (ربط مخازن المستخدمين) ---
+    fun saveUserWarehouse(userWarehouse: com.example.dokkani.data.local.entities.UserWarehouseEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (userWarehouse.id == 0L) {
+                    db.userWarehouseDao().insertUserWarehouse(userWarehouse)
+                } else {
+                    db.userWarehouseDao().updateUserWarehouse(userWarehouse)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun deleteUserWarehouse(userWarehouse: com.example.dokkani.data.local.entities.UserWarehouseEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                db.userWarehouseDao().deleteUserWarehouse(userWarehouse)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }

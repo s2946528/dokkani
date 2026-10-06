@@ -77,11 +77,12 @@ import com.example.dokkani.data.local.dao.CostCenterDao
 import com.example.dokkani.data.local.entities.CostCenterEntity
 import com.example.dokkani.data.local.dao.GlobalGroupDao
 import com.example.dokkani.data.local.entities.GlobalGroupEntity
-import com.example.dokkani.data.local.dao.ItemAssemblyDao
 import com.example.dokkani.data.local.dao.ShortageSettlementDao
-import com.example.dokkani.data.local.entities.ItemAssemblyComponentEntity
-import com.example.dokkani.data.local.entities.ItemAssemblyEntity
 import com.example.dokkani.data.local.entities.ShortageSettlementEntity
+import com.example.dokkani.data.local.dao.NotificationDao
+import com.example.dokkani.data.local.entities.NotificationEntity
+import com.example.dokkani.data.local.dao.WarehouseDao
+import com.example.dokkani.data.local.entities.WarehouseEntity
 
 /**
  * قاعدة البيانات الرئيسية لنظام دكاني (Dokkani Database)
@@ -122,10 +123,13 @@ import com.example.dokkani.data.local.entities.ShortageSettlementEntity
         ShortageSettlementEntity::class,
         GlobalGroupEntity::class,
         com.example.dokkani.data.local.entities.InventoryAuditSheetEntity::class,
-        ItemAssemblyEntity::class,
-        ItemAssemblyComponentEntity::class
+        NotificationEntity::class,
+        WarehouseEntity::class,
+        com.example.dokkani.data.local.entities.ItemAssemblyEntity::class,
+        com.example.dokkani.data.local.entities.ItemAssemblyComponentEntity::class,
+        com.example.dokkani.data.local.entities.UserWarehouseEntity::class
     ],
-    version = 25,
+    version = 28,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -160,7 +164,10 @@ abstract class DokkaniDatabase : RoomDatabase() {
     abstract fun shortageSettlementDao(): ShortageSettlementDao
     abstract fun globalGroupDao(): GlobalGroupDao
     abstract fun inventoryAuditSheetDao(): com.example.dokkani.data.local.dao.InventoryAuditSheetDao
-    abstract fun itemAssemblyDao(): ItemAssemblyDao
+    abstract fun notificationDao(): NotificationDao
+    abstract fun warehouseDao(): WarehouseDao
+    abstract fun itemAssemblyDao(): com.example.dokkani.data.local.dao.ItemAssemblyDao
+    abstract fun userWarehouseDao(): com.example.dokkani.data.local.dao.UserWarehouseDao
 
     companion object {
         @Volatile
@@ -182,14 +189,30 @@ abstract class DokkaniDatabase : RoomDatabase() {
             }
         }
 
-        fun closeDatabase() {
+        fun closeAndResetInstance() {
             synchronized(this) {
-                try {
-                    if (INSTANCE?.isOpen == true) {
-                        INSTANCE?.close()
+                INSTANCE?.let {
+                    try {
+                        if (it.isOpen) {
+                            it.close()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
-                } catch (_: Exception) {}
+                }
                 INSTANCE = null
+            }
+        }
+
+        fun checkpointWal(context: Context, scope: CoroutineScope) {
+            try {
+                val db = getDatabase(context, scope)
+                if (db.isOpen) {
+                    val cursor = db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL);")
+                    cursor.close()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
@@ -202,15 +225,11 @@ abstract class DokkaniDatabase : RoomDatabase() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             scope.launch(Dispatchers.IO) {
-                try {
-                    provider()?.let { database ->
-                        database.withTransaction {
-                            // البذر النظيف فقط عند إنشاء قاعدة البيانات
-                            populateInitialGroceryData(database)
-                        }
+                provider()?.let { database ->
+                    database.withTransaction {
+                        // البذر النظيف فقط عند إنشاء قاعدة البيانات
+                        populateInitialGroceryData(database)
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("DokkaniDatabase", "Error populating initial grocery data safely: ${e.message}", e)
                 }
             }
         }
@@ -281,6 +300,19 @@ abstract class DokkaniDatabase : RoomDatabase() {
                     enableProduceShrinkageTracking = false,
                     enableNegativeStock = false,
                     invoiceFooterText = "شكراً لزيارتكم دكاني - تسوقكم يسعدنا!"
+                )
+            )
+
+            // 4. المخزن الرئيسي الافتراضي
+            val warehouseDao = db.warehouseDao()
+            warehouseDao.insertWarehouse(
+                WarehouseEntity(
+                    warehouseCode = "WH-001",
+                    name = "المخزن الرئيسي",
+                    keeperName = "المدير العام",
+                    notes = "المخزن الرئيسي الافتراضي للنظام",
+                    isActive = true,
+                    isDefault = true
                 )
             )
 

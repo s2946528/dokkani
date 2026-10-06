@@ -52,5 +52,7 @@ data class StockMovementEntity(
     val referenceNumber: String? = null,  // رقم السند أو الدفعة المرجعية
     val notes: String = "",                // ملاحظات
     @ColumnInfo(name = "cost_center_id")
-    val costCenterId: Long = 1            // معرف مركز التكلفة المرتبط (1: العام افتراضياً)
+    val costCenterId: Long = 1,           // معرف مركز التكلفة المرتبط (1: العام افتراضياً)
+    @ColumnInfo(name = "warehouse_id")
+    val warehouseId: Long? = null          // معرف المخزن المرتبط بحركة التوريد/الخصم
 )

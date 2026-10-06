@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CreditCard
@@ -91,12 +92,19 @@ import com.example.dokkani.ui.screens.hr.HrAndPayrollScreen
 import kotlinx.coroutines.launch
 
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Store
 import com.example.dokkani.ui.screens.costcenters.CostCentersManagementScreen
 import com.example.dokkani.ui.screens.ValueSellingManagementScreen
+import com.example.dokkani.ui.screens.notifications.NotificationsScreen
+import com.example.dokkani.ui.screens.backup.BackupRestoreScreen
+import com.example.dokkani.ui.screens.inventory.WarehousesManagementScreen
 import com.example.dokkani.ui.components.ZoomableBox
 
 data class NavTabItem(
@@ -128,6 +136,8 @@ fun DokkaniApp(
         NavTabItem("سندات الصرف", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("إدارة البيع بالقيمة", Icons.Default.MonetizationOn, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("المنتجات والأصناف", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("دليل المخازن", Icons.Default.Store, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+        NavTabItem("مخازن المستخدمين", Icons.Default.Storefront, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("شاشة الجرد وقائمة الجرد", Icons.Default.FactCheck, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
         NavTabItem("الخزينة والمصروفات", Icons.Default.AccountBalanceWallet, setOf(UserRole.ADMIN, UserRole.CASHIER)),
         NavTabItem("إدارة الشفتات والدرج", Icons.Default.ReceiptLong, setOf(UserRole.ADMIN, UserRole.CASHIER)),
@@ -143,6 +153,8 @@ fun DokkaniApp(
         NavTabItem("إدارة مراكز التكلفة", Icons.Default.Business, setOf(UserRole.ADMIN)),
         NavTabItem("إدارة المجموعات والتصنيفات", Icons.Default.Category, setOf(UserRole.ADMIN, UserRole.INVENTORY, UserRole.CASHIER)),
         NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
+        NavTabItem("النسخ الاحتياطي والاستعادة", Icons.Default.Backup, setOf(UserRole.ADMIN)),
+        NavTabItem("المهام والإشعارات", Icons.Default.Notifications, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
         NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN))
     )
 
@@ -205,6 +217,8 @@ fun DokkaniApp(
                 headerColor = Color(0xFFE65100),
                 items = listOf(
                     com.example.dokkani.ui.components.NavTabItem("المنتجات والأصناف", Icons.Default.Inventory, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("دليل المخازن", Icons.Default.Store, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
+                    com.example.dokkani.ui.components.NavTabItem("مخازن المستخدمين", Icons.Default.Storefront, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
                     com.example.dokkani.ui.components.NavTabItem("شاشة الجرد وقائمة الجرد", Icons.Default.FactCheck, setOf(UserRole.ADMIN, UserRole.INVENTORY)),
                     com.example.dokkani.ui.components.NavTabItem("طباعة الباركود", Icons.Default.QrCode, setOf(UserRole.ADMIN, UserRole.INVENTORY))
                 )
@@ -218,6 +232,8 @@ fun DokkaniApp(
                 items = listOf(
                     com.example.dokkani.ui.components.NavTabItem("إدارة المجموعات والتصنيفات", Icons.Default.Category, setOf(UserRole.ADMIN, UserRole.INVENTORY, UserRole.CASHIER)),
                     com.example.dokkani.ui.components.NavTabItem("إعدادات النظام", Icons.Default.Settings, setOf(UserRole.ADMIN)),
+                    com.example.dokkani.ui.components.NavTabItem("النسخ الاحتياطي والاستعادة", Icons.Default.Backup, setOf(UserRole.ADMIN)),
+                    com.example.dokkani.ui.components.NavTabItem("المهام والإشعارات", Icons.Default.Notifications, setOf(UserRole.ADMIN, UserRole.CASHIER, UserRole.INVENTORY)),
                     com.example.dokkani.ui.components.NavTabItem("المستخدمين والصلاحيات", Icons.Default.People, setOf(UserRole.ADMIN)),
                     com.example.dokkani.ui.components.NavTabItem("شؤون العمال والرواتب", Icons.Default.Badge, setOf(UserRole.ADMIN)),
                     com.example.dokkani.ui.components.NavTabItem("الترخيص والحماية", Icons.Default.Security, setOf(UserRole.ADMIN))
@@ -322,6 +338,35 @@ fun DokkaniApp(
                             )
                         }
 
+                        IconButton(
+                            onClick = {
+                                val idx = allowedTabs.indexOfFirst { it.title == "المهام والإشعارات" }
+                                if (idx >= 0) viewModel.selectTab(idx)
+                            }
+                        ) {
+                            if (uiState.unreadNotificationCount > 0) {
+                                BadgedBox(
+                                    badge = {
+                                        Badge {
+                                            Text("${uiState.unreadNotificationCount}")
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        contentDescription = "الإشعارات والمهام",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    Icons.Default.Notifications,
+                                    contentDescription = "الإشعارات والمهام",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
                         IconButton(onClick = onLogout) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ExitToApp,
@@ -410,6 +455,26 @@ fun DokkaniApp(
                                     onDeleteCategory = viewModel::deleteCategory,
                                     onSaveWasteRecord = viewModel::saveWasteRecord,
                                     onDeleteWasteRecord = viewModel::deleteWasteRecord
+                                )
+                            }
+                            "دليل المخازن" -> {
+                                WarehousesManagementScreen(
+                                    uiState = uiState,
+                                    currentUserRole = currentUserRole,
+                                    onSaveWarehouse = viewModel::saveWarehouse,
+                                    onDeleteWarehouse = viewModel::deleteWarehouse,
+                                    onSetDefaultWarehouse = viewModel::setDefaultWarehouse,
+                                    onSetWarehouseActive = viewModel::setWarehouseActive,
+                                    onNavigateBack = { viewModel.selectTab(0) }
+                                )
+                            }
+                            "مخازن المستخدمين" -> {
+                                com.example.dokkani.ui.screens.inventory.UserWarehousesScreen(
+                                    uiState = uiState,
+                                    currentUserRole = currentUserRole,
+                                    onSaveUserWarehouse = viewModel::saveUserWarehouse,
+                                    onDeleteUserWarehouse = viewModel::deleteUserWarehouse,
+                                    onNavigateBack = { viewModel.selectTab(0) }
                                 )
                             }
                             "شاشة الجرد وقائمة الجرد" -> {
@@ -728,6 +793,8 @@ fun DokkaniApp(
                                     invoices = uiState.invoices,
                                     financialAccounts = uiState.financialAccounts,
                                     currentUserRole = currentUserRole,
+                                    fcmToken = uiState.fcmToken,
+                                    onRefreshFcmToken = viewModel::refreshFcmToken,
                                     onUpdateValuationMethod = viewModel::selectValuationMethod,
                                     onUpdateEnableNegativeStock = viewModel::updateEnableNegativeStock,
                                     onUpdateTaxSettings = viewModel::updateTaxSettings,
@@ -748,6 +815,18 @@ fun DokkaniApp(
                             }
                             "المستخدمين والصلاحيات" -> {
                                 UserManagementScreen()
+                            }
+                            "المهام والإشعارات" -> {
+                                NotificationsScreen(
+                                    viewModel = viewModel,
+                                    uiState = uiState
+                                )
+                            }
+                            "النسخ الاحتياطي والاستعادة" -> {
+                                BackupRestoreScreen(
+                                    viewModel = viewModel,
+                                    uiState = uiState
+                                )
                             }
                         }
                     }

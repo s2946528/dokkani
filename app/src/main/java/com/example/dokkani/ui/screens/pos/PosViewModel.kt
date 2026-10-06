@@ -96,6 +96,11 @@ data class PosUiState(
     // فحص المخزون والضبط
     val systemSettings: SystemSettingsEntity? = null,
     val productStockMap: Map<Long, Double> = emptyMap(),
+    val warehouses: List<com.example.dokkani.data.local.entities.WarehouseEntity> = emptyList(),
+    val selectedWarehouseId: Long? = null,
+    val userWarehouses: List<com.example.dokkani.data.local.entities.UserWarehouseEntity> = emptyList(),
+    val showStockValidationDialog: Boolean = false,
+    val stockValidationMessage: String? = null,
     val currencySymbol: String = "ر.ي",
     val currencyName: String = "الريال اليمني",
 
@@ -288,6 +293,33 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                     state.copy(
                         costCenters = centers,
                         selectedCostCenterId = defaultId
+                    )
+                }
+            }
+        }
+
+        // 0.3 مراقبة دليل المخازن ومخازن المستخدمين وتعيين المخزن الفعلي للعملية
+        viewModelScope.launch(Dispatchers.IO) {
+            db.warehouseDao().getAllWarehouses().collectLatest { whList ->
+                _uiState.update { state ->
+                    val userAssignedWh = state.userWarehouses.firstOrNull()?.warehouseId
+                    val assignedWh = whList.find { it.id == userAssignedWh } ?: whList.find { it.isDefault } ?: whList.firstOrNull()
+                    state.copy(
+                        warehouses = whList,
+                        selectedWarehouseId = state.selectedWarehouseId ?: assignedWh?.id
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.userWarehouseDao().getAllUserWarehouses().collectLatest { uwList ->
+                _uiState.update { state ->
+                    val assignedWhId = uwList.firstOrNull()?.warehouseId
+                    val targetWhId = state.selectedWarehouseId ?: assignedWhId ?: state.warehouses.find { it.isDefault }?.id
+                    state.copy(
+                        userWarehouses = uwList,
+                        selectedWarehouseId = targetWhId
                     )
                 }
             }
@@ -1130,6 +1162,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPaymentMethod(method: PaymentMethod) {
         _uiState.update { it.copy(paymentMethod = method) }
+    }
+
+    fun selectWarehouse(warehouseId: Long) {
+        _uiState.update { it.copy(selectedWarehouseId = warehouseId) }
+    }
+
+    fun dismissStockValidationDialog() {
+        _uiState.update { it.copy(showStockValidationDialog = false, stockValidationMessage = null) }
     }
 
     fun setPaidAmountInput(input: String) {

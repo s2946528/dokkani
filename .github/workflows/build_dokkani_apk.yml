@@ -12,10 +12,15 @@ on:
       - master
   workflow_dispatch: # يتيح تشغيل البناء يدوياً من واجهة GitHub Actions في أي وقت
 
+# إيقاف أية عمليات بناء سابقة معلقة في طابور الانتظار وتجهيز الخادم فوراً لأحدث دفع
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build Android APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 25
 
     steps:

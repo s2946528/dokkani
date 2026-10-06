@@ -142,10 +142,11 @@ interface StockMovementDao {
         SELECT COALESCE(SUM(quantityBaseUnit), 0.0) 
         FROM stock_movements 
         WHERE productId = :productId
-          AND (:costCenterId IS NULL OR cost_center_id = :costCenterId)
+          AND (:costCenterId IS NULL OR :costCenterId = 0 OR cost_center_id = :costCenterId)
+          AND (:warehouseId IS NULL OR :warehouseId = 0 OR warehouse_id = :warehouseId)
         """
     )
-    suspend fun getTotalStockQuantity(productId: Long, costCenterId: Long? = null): Double
+    suspend fun getTotalStockQuantity(productId: Long, costCenterId: Long? = null, warehouseId: Long? = null): Double
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMovement(movement: StockMovementEntity): Long

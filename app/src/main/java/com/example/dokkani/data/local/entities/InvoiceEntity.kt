@@ -61,7 +61,9 @@ data class InvoiceEntity(
     val status: InvoiceStatus = InvoiceStatus.COMPLETED,   // حالة الفاتورة
     val notes: String = "",               // ملاحظات
     @ColumnInfo(name = "cost_center_id")
-    val costCenterId: Long = 1            // معرف مركز التكلفة (1: مركز التكلفة العام افتراضياً)
+    val costCenterId: Long = 1,           // معرف مركز التكلفة (1: مركز التكلفة العام افتراضياً)
+    @ColumnInfo(name = "warehouse_id")
+    val warehouseId: Long? = null          // معرف المخزن المرتبط بالفاتورة إن وجد
 )
 
 /**

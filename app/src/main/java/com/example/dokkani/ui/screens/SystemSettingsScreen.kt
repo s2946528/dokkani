@@ -1,6 +1,11 @@
 package com.example.dokkani.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -16,6 +23,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
@@ -26,9 +34,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dokkani.data.local.entities.CostValuationMethod
@@ -40,8 +50,6 @@ import com.example.dokkani.data.local.entities.PartyEntity
 import com.example.dokkani.data.local.entities.PaymentMethod
 import com.example.dokkani.data.local.entities.SystemSettingsEntity
 import com.example.dokkani.data.local.entities.UserRole
-import com.example.dokkani.ui.screens.backup.BackupRestoreCard
-import com.example.dokkani.ui.screens.notifications.NotificationManagementCard
 import com.example.dokkani.ui.screens.crud.AddEditCurrencyDialog
 import com.example.dokkani.ui.screens.crud.AddEditPartyDialog
 import com.example.dokkani.ui.screens.crud.ConfirmDeleteDialog
@@ -59,6 +67,8 @@ fun SystemSettingsScreen(
     invoices: List<InvoiceEntity> = emptyList(),
     financialAccounts: List<FinancialAccountEntity> = emptyList(),
     currentUserRole: UserRole = UserRole.ADMIN,
+    fcmToken: String? = null,
+    onRefreshFcmToken: () -> Unit = {},
     onUpdateValuationMethod: (CostValuationMethod) -> Unit = {},
     onUpdateEnableNegativeStock: (Boolean) -> Unit = {},
     onUpdateTaxSettings: (Boolean, Double) -> Unit = { _, _ -> },
@@ -306,14 +316,86 @@ fun SystemSettingsScreen(
                 }
             }
 
-            // بطاقة النسخ الاحتياطي والاستعادة الذكية لقاعدة البيانات (Backup & Restore SAF Card)
+            // بطاقة جلب وعرض رمز الجهاز الخاص باختبار فايربيس (FCM Token) مع زر النسخ لسهولة الاختبار
             item {
-                BackupRestoreCard()
-            }
+                val context = LocalContext.current
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth().testTag("fcm_token_settings_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDone,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "رمز فايربيس للإشعارات السحابية (FCM Token):",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "استخدم هذا الرمز لإرسال إشعارات واختبارها مباشرة من لوحة تحكم فايربيس (Firebase Console)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = onRefreshFcmToken,
+                                modifier = Modifier.size(32.dp).testTag("refresh_fcm_token_button")
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = "تحديث الرمز", modifier = Modifier.size(20.dp))
+                            }
+                        }
 
-            // بطاقة إدارة وتجربة نظام الإشعارات والتنبيهات (FCM & Local Notification Management)
-            item {
-                NotificationManagementCard()
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        val displayToken = fcmToken ?: "جاري جلب رمز FCM من خوادم فايربيس..."
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = displayToken,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).testTag("fcm_token_text"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
+                            )
+                            if (fcmToken != null) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("FCM Token", fcmToken)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "تم نسخ رمز FCM بنجاح إلى الحافظة!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.testTag("copy_fcm_token_button"),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "نسخ الرمز", modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("نسخ الرمز", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // بطاقة التحكم في عرض الكسور العشرية (Decimal Places Control)
@@ -500,7 +582,7 @@ fun SystemSettingsScreen(
                         val currentRate = settings?.defaultTaxRate ?: 0.0
                         val pctValue = if (currentRate <= 1.0) currentRate * 100.0 else currentRate
                         var taxRateText by remember(settings?.defaultTaxRate) {
-                            mutableStateOf(if (pctValue % 1.0 == 0.0) pctValue.toInt().toString() else String.format(Locale.US, "%.1f", pctValue))
+                            mutableStateOf(if (pctValue % 1.0 == 0.0) pctValue.toInt().toString() else "%.1f".format(pctValue))
                         }
 
                         Row(
@@ -638,7 +720,7 @@ fun SystemSettingsScreen(
                         val currentPurRate = settings?.purchaseTaxRate ?: 0.0
                         val pctPurValue = if (currentPurRate <= 1.0) currentPurRate * 100.0 else currentPurRate
                         var purTaxRateText by remember(settings?.purchaseTaxRate) {
-                            mutableStateOf(if (pctPurValue % 1.0 == 0.0) pctPurValue.toInt().toString() else String.format(Locale.US, "%.1f", pctPurValue))
+                            mutableStateOf(if (pctPurValue % 1.0 == 0.0) pctPurValue.toInt().toString() else "%.1f".format(pctPurValue))
                         }
 
                         Row(
@@ -1354,8 +1436,7 @@ fun SystemSettingsScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        val recentParties = parties.take(25)
-                        for (p in recentParties) {
+                        for (p in parties) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1378,7 +1459,7 @@ fun SystemSettingsScreen(
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "الرصيد: ${String.format(Locale.US, "%.2f", p.currentBalance)} ${baseCurr?.symbol ?: "ر.ي"}",
+                                        text = "الرصيد: %.2f %s".format(p.currentBalance, baseCurr?.symbol ?: "ر.ي"),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                         color = if (p.currentBalance >= 0) Color(0xFF0F5132) else Color(0xFFDC3545)
@@ -1449,8 +1530,7 @@ fun SystemSettingsScreen(
                                 color = MaterialTheme.colorScheme.outline
                             )
                         } else {
-                            val recentInvoices = invoices.take(20)
-                            for (i in recentInvoices) {
+                            for (i in invoices) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1465,7 +1545,7 @@ fun SystemSettingsScreen(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = try { dateFormat.format(Date(i.date)) } catch (_: Exception) { "" },
+                                            text = "${dateFormat.format(Date(i.date))}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.outline
                                         )
@@ -1473,7 +1553,7 @@ fun SystemSettingsScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text(
-                                                text = "${String.format(Locale.US, "%.2f", i.total)} ${baseCurr?.symbol ?: "ر.ي"}",
+                                                text = "%.2f %s".format(i.total, baseCurr?.symbol ?: "ر.ي"),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF0F5132)
@@ -1513,14 +1593,6 @@ fun SystemSettingsScreen(
                                         }
                                     }
                                 }
-                            }
-                            if (invoices.size > 20) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "تم عرض أحدث 20 فاتورة من إجمالي ${invoices.size} فاتورة مسجلة.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
                             }
                         }
                     }
@@ -1591,17 +1663,14 @@ fun SystemSettingsScreen(
     }
 
     if (deletingCurrency != null) {
-        val currToDelete = deletingCurrency
-        if (currToDelete != null) {
-            ConfirmDeleteDialog(
-                message = "هل أنت ألكيد من حذف العملة '${currToDelete.name}'؟",
-                onConfirm = {
-                    onDeleteCurrency(currToDelete)
-                    deletingCurrency = null
-                },
-                onDismiss = { deletingCurrency = null }
-            )
-        }
+        ConfirmDeleteDialog(
+            message = "هل أنت ألكيد من حذف العملة '${deletingCurrency?.name}'؟",
+            onConfirm = {
+                onDeleteCurrency(deletingCurrency!!)
+                deletingCurrency = null
+            },
+            onDismiss = { deletingCurrency = null }
+        )
     }
 
     if (showAddPartyDialog || editingParty != null) {
@@ -1620,29 +1689,23 @@ fun SystemSettingsScreen(
     }
 
     if (deletingParty != null) {
-        val partyToDelete = deletingParty
-        if (partyToDelete != null) {
-            ConfirmDeleteDialog(
-                message = "هل أنت ألكيد من حذف الحساب '${partyToDelete.name}'؟",
-                onConfirm = {
-                    onDeleteParty(partyToDelete)
-                    deletingParty = null
-                },
-                onDismiss = { deletingParty = null }
-            )
-        }
+        ConfirmDeleteDialog(
+            message = "هل أنت ألكيد من حذف الحساب '${deletingParty?.name}'؟",
+            onConfirm = {
+                onDeleteParty(deletingParty!!)
+                deletingParty = null
+            },
+            onDismiss = { deletingParty = null }
+        )
     }
 
     if (deletingInvoiceId != null) {
-        val targetId = deletingInvoiceId
-        val inv = invoices.find { it.id == targetId }
+        val inv = invoices.find { it.id == deletingInvoiceId }
         ConfirmDeleteTransactionDialog(
             title = "تأكيد حذف الفاتورة",
-            message = "هل أنت متأكد من حذف الفاتورة رقم #${inv?.invoiceNumber ?: targetId} بقيمة ${String.format(Locale.US, "%.2f", inv?.total ?: 0.0)}؟",
+            message = "هل أنت متأكد من حذف الفاتورة رقم #${inv?.invoiceNumber ?: deletingInvoiceId} بقيمة ${"%.2f".format(inv?.total ?: 0.0)}؟",
             onConfirm = {
-                if (targetId != null) {
-                    onDeleteInvoice(targetId)
-                }
+                onDeleteInvoice(deletingInvoiceId!!)
                 deletingInvoiceId = null
             },
             onDismiss = { deletingInvoiceId = null }

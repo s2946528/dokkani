@@ -54,6 +54,8 @@ data class SalesLineItem(
 data class SalesInvoiceUiState(
     val customers: List<PartyEntity> = emptyList(),
     val selectedCustomer: PartyEntity? = null,
+    val warehouses: List<com.example.dokkani.data.local.entities.WarehouseEntity> = emptyList(),
+    val selectedWarehouseId: Long? = null,
     val costCenters: List<CostCenterEntity> = emptyList(),
     val selectedCostCenterId: Long = 1L,
     val customerInvoiceNumber: String = "",
@@ -136,6 +138,18 @@ class SalesInvoiceViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch(Dispatchers.IO) {
             costCenterDao.getAllCostCenters().collectLatest { centers ->
                 _uiState.update { it.copy(costCenters = centers) }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.warehouseDao().getAllWarehouses().collectLatest { whList ->
+                _uiState.update { state ->
+                    val defaultWh = whList.find { it.isDefault } ?: whList.firstOrNull()
+                    state.copy(
+                        warehouses = whList,
+                        selectedWarehouseId = state.selectedWarehouseId ?: defaultWh?.id
+                    )
+                }
             }
         }
 
@@ -250,6 +264,10 @@ class SalesInvoiceViewModel(application: Application) : AndroidViewModel(applica
 
     fun selectCostCenter(costCenterId: Long) {
         _uiState.update { it.copy(selectedCostCenterId = costCenterId) }
+    }
+
+    fun selectWarehouse(warehouseId: Long) {
+        _uiState.update { it.copy(selectedWarehouseId = warehouseId) }
     }
 
     fun setCustomerInvoiceNumber(number: String) {
@@ -407,7 +425,8 @@ class SalesInvoiceViewModel(application: Application) : AndroidViewModel(applica
                         paymentAccountId = state.selectedPaymentAccountId,
                         status = InvoiceStatus.COMPLETED,
                         notes = if (state.customerInvoiceNumber.isNotBlank()) "مرجع العميل: ${state.customerInvoiceNumber} | ${state.notes}" else state.notes,
-                        costCenterId = state.selectedCostCenterId
+                        costCenterId = state.selectedCostCenterId,
+                        warehouseId = state.selectedWarehouseId
                     )
 
                     val savedInvoiceId = invoiceDao.insertInvoice(invoiceEntity)
@@ -440,7 +459,8 @@ class SalesInvoiceViewModel(application: Application) : AndroidViewModel(applica
                             timestamp = System.currentTimeMillis(),
                             referenceNumber = invoiceNumber,
                             notes = "مبيعات بموجب فاتورة $invoiceNumber",
-                            costCenterId = state.selectedCostCenterId
+                            costCenterId = state.selectedCostCenterId,
+                            warehouseId = state.selectedWarehouseId
                         )
                         stockMovementDao.insertMovement(stockMove)
                     }

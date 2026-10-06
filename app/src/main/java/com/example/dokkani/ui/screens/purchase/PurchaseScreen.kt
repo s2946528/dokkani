@@ -20,9 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -741,6 +738,45 @@ private fun SupplierDataCard(
                             onClick = {
                                 viewModel.selectCostCenter(cc.centerId)
                                 costCenterDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // اختيار المخزن المستهدف للتوريد
+            var warehouseDropdownExpanded by remember { mutableStateOf(false) }
+            val selectedWh = uiState.warehouses.find { it.id == uiState.selectedWarehouseId }
+
+            ExposedDropdownMenuBox(
+                expanded = warehouseDropdownExpanded,
+                onExpandedChange = { warehouseDropdownExpanded = !warehouseDropdownExpanded },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = selectedWh?.let { "${it.warehouseCode} - ${it.name}" } ?: "المخزن الرئيسي",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("المخزن المستهدف لإضافة المشتريات *") },
+                    leadingIcon = { Icon(Icons.Default.Storefront, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = warehouseDropdownExpanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                        .testTag("purchase_warehouse_dropdown"),
+                    singleLine = true
+                )
+
+                ExposedDropdownMenu(
+                    expanded = warehouseDropdownExpanded,
+                    onDismissRequest = { warehouseDropdownExpanded = false }
+                ) {
+                    uiState.warehouses.forEach { wh ->
+                        DropdownMenuItem(
+                            text = { Text("${wh.warehouseCode} - ${wh.name}", fontWeight = FontWeight.SemiBold) },
+                            onClick = {
+                                viewModel.selectWarehouse(wh.id)
+                                warehouseDropdownExpanded = false
                             }
                         )
                     }
@@ -2031,14 +2067,6 @@ fun QuickAddProductDialog(
     var quantityText by remember { mutableStateOf("1") }
     var nameError by remember { mutableStateOf(false) }
 
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboardController?.show()
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
@@ -2082,9 +2110,7 @@ fun QuickAddProductDialog(
                     supportingText = if (nameError) {
                         { Text("اسم الصنف مطلوب", color = MaterialTheme.colorScheme.error) }
                     } else null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     leadingIcon = { Icon(Icons.Default.ShoppingBag, contentDescription = null) }
                 )
